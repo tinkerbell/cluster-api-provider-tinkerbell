@@ -34,6 +34,24 @@ spec:
           spec:
             description: TinkerbellClusterSpec defines the desired state of TinkerbellCluster
             properties:
+              hardwareDiscoveryStrategy:
+                description: Currently there is only one strategy implemented
+                  and it is the default one. Discovery uses the two list of
+                  hardware IDs specified. Other way will come in the future
+                  like 'all' will get random hardware IDs from all Tinkerbell
+                type: string
+              controlPlaneHardwareIDs:
+                description: A list of hardware ID from tinkerbell that will be
+                  used to deploy Kubernetes control planes to
+                type: array
+                items:
+                  type: string
+              machineHardwareIDs:
+                description: A list of hardware ID from tinkerbell that will be
+                  used to deploy Kubernetes data plane
+                type: array
+                items:
+                  type: string
             type: object
           status:
             description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster

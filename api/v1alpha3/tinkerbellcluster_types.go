@@ -24,9 +24,19 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster
+// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+// Important: Run "make" to regenerate code after modifying this file
 type TinkerbellClusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// HardwareDiscoveryStrategy is a switch we have to implement more advacned
+	// discovery strategy. The unique one we have today is the default one
+	// obviously and it uses the two lists of hardware IDs specified down here
+	HardwareDiscoveryStrategy string `json:"hardwareDiscoveryStrategy,omitempty"`
+	// ControlPlaneHardwareIDs contains a list of hardware IDs used as pool for
+	// control plane kubernetes instances.
+	ControlPlaneHardwareIDs []string `json:"controlPlaneHardwareIDs,omitempty"`
+	// MachineHardwareIDs contains a list of hardware IDs used as pool for data
+	// plane kubernetes instances.
+	MachineHardwareIDs []string `json:"machineHardwareIDs,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster

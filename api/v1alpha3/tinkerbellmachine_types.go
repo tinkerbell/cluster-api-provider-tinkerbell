@@ -33,6 +33,7 @@ const (
 
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine
 type TinkerbellMachineSpec struct {
+	HardwareID string `json:"hardwareReservationID,omitempty"`
 }
 
 // TinkerbellMachineStatus defines the observed state of TinkerbellMachine
