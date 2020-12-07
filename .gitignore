@@ -4,12 +4,45 @@
 *.dll
 *.so
 *.dylib
+<<<<<<< HEAD
 
 # Test binary, built with `go test -c`
+=======
+bin
+
+# Test binary, build with `go test -c`
+>>>>>>> 6256f66 (bootstrap project)
 *.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+*.swp
+*.swo
+*~
+
+tmp/
+out/
+
+# debugging
+__debug_bin
+
+kubeconfig
+
+# from the sed we run
+config/default/manager_image_patch.yaml-e
+
+# test results
+_artifacts
+
+# Goreleaser
+dist
+
+# Tilt
+.tiltbuild/
+
+>>>>>>> 6256f66 (bootstrap project)

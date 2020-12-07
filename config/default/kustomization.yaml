@@ -1,0 +1,9 @@
+namespace: cluster-api-provider-tinkerbell-system
+resources:
+- namespace.yaml
+- credentials.yaml
+bases:
+- ../rbac
+- ../manager
+patchesStrategicMerge:
+- manager_credentials_patch.yaml

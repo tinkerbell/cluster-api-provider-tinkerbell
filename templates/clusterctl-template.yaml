@@ -1,0 +1,4 @@
+providers:
+- name: packet
+  url: URL
+  type: InfrastructureProvider

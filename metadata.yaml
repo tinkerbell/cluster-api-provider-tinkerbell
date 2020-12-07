@@ -1,0 +1,9 @@
+# maps release series of major.minor to cluster-api contract version
+# the contract version may change between minor or major versions, but *not*
+# between patch versions.
+#
+# update this file only when a new major or minor version is released
+releaseSeries:
+- major: 0
+  minor: 3
+  contract: v1alpha3
