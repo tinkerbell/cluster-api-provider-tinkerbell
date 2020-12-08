@@ -25,11 +25,11 @@ import (
 
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster
 // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-// Important: Run "make" to regenerate code after modifying this file
+// Important: Run "make" to regenerate code after modifying this file.
 type TinkerbellClusterSpec struct {
 	// HardwareDiscoveryStrategy is a switch we have to implement more advacned
 	// discovery strategy. The unique one we have today is the default one
-	// obviously and it uses the two lists of hardware IDs specified down here
+	// obviously and it uses the two lists of hardware IDs specified down here.
 	HardwareDiscoveryStrategy string `json:"hardwareDiscoveryStrategy,omitempty"`
 	// ControlPlaneHardwareIDs contains a list of hardware IDs used as pool for
 	// control plane kubernetes instances.
@@ -39,10 +39,10 @@ type TinkerbellClusterSpec struct {
 	MachineHardwareIDs []string `json:"machineHardwareIDs,omitempty"`
 }
 
-// TinkerbellClusterStatus defines the observed state of TinkerbellCluster
+// TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
 type TinkerbellClusterStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Important: Run "make" to regenerate code after modifying this file.
 
 	// Ready denotes that the cluster (infrastructure) is ready.
 	// +optional
@@ -52,7 +52,7 @@ type TinkerbellClusterStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 
-// TinkerbellCluster is the Schema for the tinkerbellclusters API
+// TinkerbellCluster is the Schema for the tinkerbellclusters API.
 type TinkerbellCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -63,7 +63,7 @@ type TinkerbellCluster struct {
 
 // +kubebuilder:object:root=true
 
-// TinkerbellClusterList contains a list of TinkerbellCluster
+// TinkerbellClusterList contains a list of TinkerbellCluster.
 type TinkerbellClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

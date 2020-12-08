@@ -128,7 +128,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	//TODO: get a tinkerell client
+	// TODO: Get a Tinkerbell client.
 
 	if webhookPort == 0 {
 		if err = (&controllers.TinkerbellClusterReconciler{
