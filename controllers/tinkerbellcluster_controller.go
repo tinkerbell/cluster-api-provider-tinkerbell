@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 )
 
@@ -89,7 +88,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	return r.reconcileNormal(tcluster)
 }
 
-func (r *TinkerbellClusterReconciler) reconcileNormal(tcluster *v1alpha3.TinkerbellCluster) (ctrl.Result, error) {
+func (r *TinkerbellClusterReconciler) reconcileNormal(tcluster *infrastructurev1alpha3.TinkerbellCluster) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
