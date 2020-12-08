@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controllers contains Cluster API controllers for Tinkerbell.
 package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -31,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 )
 
@@ -50,13 +51,14 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	ctx := context.Background()
 	logger := r.Log.WithValues("tinkerbellcluster", req.NamespacedName)
 
-	// your logic here
+	// Your logic here.
 	tcluster := &infrastructurev1alpha3.TinkerbellCluster{}
 	if err := r.Get(ctx, req.NamespacedName, tcluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("getting cluster: %w", err)
 	}
 
 	logger = logger.WithName(tcluster.APIVersion)
@@ -64,11 +66,12 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	// Fetch the Machine.
 	cluster, err := util.GetOwnerCluster(ctx, r.Client, tcluster.ObjectMeta)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting owner cluster: %w", err)
 	}
 
 	if cluster == nil {
 		logger.Info("OwnerCluster is not set yet. Requeuing...")
+
 		return ctrl.Result{
 			Requeue:      true,
 			RequeueAfter: 2 * time.Second,
@@ -77,10 +80,11 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 
 	if util.IsPaused(cluster, tcluster) {
 		logger.Info("TinkerbellCluster or linked Cluster is marked as paused. Won't reconcile")
+
 		return ctrl.Result{}, nil
 	}
 
-	// Handle deleted clusters
+	// Handle deleted clusters.
 	if !cluster.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete()
 	}
@@ -88,7 +92,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	return r.reconcileNormal(tcluster)
 }
 
-func (r *TinkerbellClusterReconciler) reconcileNormal(tcluster *v1alpha3.TinkerbellCluster) (ctrl.Result, error) {
+func (r *TinkerbellClusterReconciler) reconcileNormal(tcluster *infrastructurev1alpha3.TinkerbellCluster) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
@@ -96,7 +100,7 @@ func (r *TinkerbellClusterReconciler) reconcileDelete() (ctrl.Result, error) {
 	// Initially I created this handler to remove an elastic IP when a cluster
 	// gets delete, but it does not sound like a good idea.  It is better to
 	// leave to the users the ability to decide if they want to keep and resign
-	// the IP or if they do not need it anymore
+	// the IP or if they do not need it anymore.
 	return ctrl.Result{}, nil
 }
 
@@ -112,7 +116,7 @@ func (r *TinkerbellClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// MachineNotFound error representing that the requested device was not yet found
+// MachineNotFound error representing that the requested device was not yet found.
 type MachineNotFound struct {
 	err string
 }
@@ -121,7 +125,7 @@ func (e *MachineNotFound) Error() string {
 	return e.err
 }
 
-// MachineNoIP error representing that the requested device does not have an IP yet assigned
+// MachineNoIP error representing that the requested device does not have an IP yet assigned.
 type MachineNoIP struct {
 	err string
 }

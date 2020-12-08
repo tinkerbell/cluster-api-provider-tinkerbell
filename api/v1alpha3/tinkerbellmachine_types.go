@@ -31,12 +31,12 @@ const (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// TinkerbellMachineSpec defines the desired state of TinkerbellMachine
+// TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
 type TinkerbellMachineSpec struct {
 	HardwareID string `json:"hardwareReservationID,omitempty"`
 }
 
-// TinkerbellMachineStatus defines the observed state of TinkerbellMachine
+// TinkerbellMachineStatus defines the observed state of TinkerbellMachine.
 type TinkerbellMachineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -88,7 +88,7 @@ type TinkerbellMachineStatus struct {
 // +kubebuilder:printcolumn:name="InstanceID",type="string",JSONPath=".spec.providerID",description="Tinkerbell instance ID"
 // +kubebuilder:printcolumn:name="Machine",type="string",JSONPath=".metadata.ownerReferences[?(@.kind==\"Machine\")].name",description="Machine object which owns with this TinkerbellMachine"
 
-// TinkerbellMachine is the Schema for the tinkerbellmachines API
+// TinkerbellMachine is the Schema for the tinkerbellmachines API.
 type TinkerbellMachine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -99,7 +99,7 @@ type TinkerbellMachine struct {
 
 // +kubebuilder:object:root=true
 
-// TinkerbellMachineList contains a list of TinkerbellMachine
+// TinkerbellMachineList contains a list of TinkerbellMachine.
 type TinkerbellMachineList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -27,7 +27,7 @@ var (
 	TinkerbellResourceStatusSuccess = TinkerbellResourceStatus(4)
 )
 
-// TinkerbellMachineTemplateResource describes the data needed to create am TinkerbellMachine from a template
+// TinkerbellMachineTemplateResource describes the data needed to create am TinkerbellMachine from a template.
 type TinkerbellMachineTemplateResource struct {
 	// Spec is the specification of the desired behavior of the machine.
 	Spec TinkerbellMachineSpec `json:"spec"`

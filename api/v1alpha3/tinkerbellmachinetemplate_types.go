@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TinkerbellMachineTemplateSpec defines the desired state of TinkerbellMachineTemplate
+// TinkerbellMachineTemplateSpec defines the desired state of TinkerbellMachineTemplate.
 type TinkerbellMachineTemplateSpec struct {
 	Template TinkerbellMachineTemplateResource `json:"template"`
 }
@@ -29,7 +29,7 @@ type TinkerbellMachineTemplateSpec struct {
 // +kubebuilder:resource:path=tinkerbellmachinetemplates,scope=Namespaced,categories=cluster-api
 // +kubebuilder:storageversion
 
-// TinkerbellMachineTemplate is the Schema for the tinkerbellmachinetemplates API
+// TinkerbellMachineTemplate is the Schema for the tinkerbellmachinetemplates API.
 type TinkerbellMachineTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -39,7 +39,7 @@ type TinkerbellMachineTemplate struct {
 
 // +kubebuilder:object:root=true
 
-// TinkerbellMachineTemplateList contains a list of TinkerbellMachineTemplate
+// TinkerbellMachineTemplateList contains a list of TinkerbellMachineTemplate.
 type TinkerbellMachineTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
