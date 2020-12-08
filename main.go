@@ -48,7 +48,6 @@ func init() {
 }
 
 func main() {
-
 	var (
 		enableLeaderElection    bool
 		leaderElectionNamespace string
@@ -140,6 +139,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
 			os.Exit(1)
 		}
+
 		if err = (&controllers.TinkerbellMachineReconciler{
 			Client:   mgr.GetClient(),
 			Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
@@ -167,6 +167,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
+
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

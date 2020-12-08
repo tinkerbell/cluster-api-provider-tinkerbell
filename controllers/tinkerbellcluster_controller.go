@@ -80,6 +80,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 
 	if util.IsPaused(cluster, tcluster) {
 		logger.Info("TinkerbellCluster or linked Cluster is marked as paused. Won't reconcile")
+
 		return ctrl.Result{}, nil
 	}
 
