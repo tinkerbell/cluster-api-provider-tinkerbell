@@ -19,6 +19,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -56,7 +57,8 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("getting cluster: %w", err)
 	}
 
 	logger = logger.WithName(tcluster.APIVersion)
@@ -64,11 +66,12 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	// Fetch the Machine.
 	cluster, err := util.GetOwnerCluster(ctx, r.Client, tcluster.ObjectMeta)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("getting owner cluster: %w", err)
 	}
 
 	if cluster == nil {
 		logger.Info("OwnerCluster is not set yet. Requeuing...")
+
 		return ctrl.Result{
 			Requeue:      true,
 			RequeueAfter: 2 * time.Second,
