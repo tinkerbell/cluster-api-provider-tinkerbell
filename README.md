@@ -38,5 +38,5 @@ requests and conversation ongoing in the [bi-weekly community
 meeting]()https://github.com/tinkerbell/.github/blob/master/COMMUNICATION.md#contributors-mailing-list.
 Feel free to join if you are curious or if you have any question.
 
-There is a milleston called `v0.1.0 tech preview`. Have a look at issues
+There is a milestone called `v0.1.0 tech preview`. Have a look at issues
 assigned to that label to know more about what it will contain.
