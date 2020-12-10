@@ -46,6 +46,7 @@ type TinkerbellMachineTemplateList struct {
 	Items           []TinkerbellMachineTemplate `json:"items"`
 }
 
+//nolint:gochecknoinits
 func init() {
 	SchemeBuilder.Register(&TinkerbellMachineTemplate{}, &TinkerbellMachineTemplateList{})
 }
