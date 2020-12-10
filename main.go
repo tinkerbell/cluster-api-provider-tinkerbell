@@ -35,11 +35,13 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+//nolint:gochecknoglobals
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+//nolint:wsl,gochecknoinits
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1alpha3.AddToScheme(scheme)
@@ -47,6 +49,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+//nolint:funlen,gomnd
 func main() {
 	var (
 		enableLeaderElection    bool
