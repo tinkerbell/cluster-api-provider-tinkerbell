@@ -20,9 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// WorkflowIDAnnotation is used by the controller to store the
-// ID assigned to the workflow by Tinkerbell.
-const WorkflowIDAnnotation = "workflow.tinkerbell.org/id"
+const (
+	// WorkflowIDAnnotation is used by the controller to store the
+	// ID assigned to the workflow by Tinkerbell.
+	WorkflowIDAnnotation = "workflow.tinkerbell.org/id"
+
+	WorkflowFinalizer = "workflow.tinkerbell.org"
+)
 
 // WorkflowSpec defines the desired state of Workflow.
 type WorkflowSpec struct {

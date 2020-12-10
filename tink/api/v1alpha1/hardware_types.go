@@ -20,9 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// HardwareIDAnnotation is used by the controller to store the
-// ID assigned to the workflow by Tinkerbell.
-const HardwareIDAnnotation = "hardware.tinkerbell.org/id"
+const (
+	// HardwareIDAnnotation is used by the controller to store the
+	// ID assigned to the workflow by Tinkerbell.
+	HardwareIDAnnotation = "hardware.tinkerbell.org/id"
+
+	HardwareFinalizer = "hardware.tinkerbell.org"
+)
 
 // HardwareSpec defines the desired state of Hardware.
 type HardwareSpec struct {

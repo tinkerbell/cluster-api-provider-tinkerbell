@@ -23,9 +23,10 @@ import (
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	"github.com/tinkerbell/tink/protos/template"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -33,14 +34,24 @@ import (
 
 var ErrNotImplemented = fmt.Errorf("not implemented")
 
+// TemplateReconciler implements Reconciler interface by managing Tinkerbell templates.
 type TemplateReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Recorder record.EventRecorder
-	Scheme   *runtime.Scheme
+	TemplateClient template.TemplateServiceClient
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=tinkerbell.org,resources=templates,verbs=get;list;watch;create;update;patch;delete
+// SetupWithManager configures reconciler with a given manager.
+func (r *TemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&tinkv1alpha1.Template{}).
+		Complete(r)
+}
+
+// +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
+
+// Reconcile ensures state of Tinkerbell templates.
 func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	logger := r.Log.WithValues("template", req.NamespacedName.Name)
@@ -69,36 +80,119 @@ func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	// Handle deleted clusters.
+	// Handle deleted templates.
 	if !template.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(template)
+		return r.reconcileDelete(ctx, template)
 	}
 
-	return r.reconcileNormal(template)
+	return r.reconcileNormal(ctx, template)
 }
 
-func (r *TemplateReconciler) reconcileNormal(template *tinkv1alpha1.Template) (ctrl.Result, error) {
-	logger := r.Log.WithValues("template", template.Name)
-	err := ErrNotImplemented
+func (r *TemplateReconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
+	// Create a patch for use later
+	patch := client.MergeFrom(t.DeepCopy())
 
-	logger.Error(err, "Not yet implemented")
+	logger := r.Log.WithValues("template", t.Name)
 
-	return ctrl.Result{}, err
+	templateRequest := &template.GetRequest{}
+
+	if t.Annotations == nil {
+		t.Annotations = map[string]string{}
+	}
+
+	if id, ok := t.Annotations[tinkv1alpha1.TemplateIDAnnotation]; ok && id != "" {
+		// We've already recorded the ID, so we should prefer to use that.
+		templateRequest.GetBy = &template.GetRequest_Id{Id: id}
+	} else {
+		// We don't have an ID, so try to get the template by name.
+		// TODO: this will need to be improved for multitenancy support.
+		templateRequest.GetBy = &template.GetRequest_Name{Name: t.Name}
+	}
+
+	tinkTemplate, err := r.TemplateClient.GetTemplate(ctx, templateRequest)
+	if err != nil {
+		// TODO: Tinkerbell should return some type of status that is easier to handle
+		// than parsing for this specific error message.
+		if err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
+			logger.Error(err, "Failed to get template from Tinkerbell")
+			return ctrl.Result{}, err
+		}
+
+		// We should create the template
+		tinkTemplate = &template.WorkflowTemplate{
+			Name: t.Name,
+			Data: pointer.StringPtrDerefOr(t.Spec.Data, ""),
+		}
+		resp, err := r.TemplateClient.CreateTemplate(ctx, tinkTemplate)
+		if err != nil {
+			logger.Error(err, "Failed to create template in Tinkerbell")
+			return ctrl.Result{}, err
+		}
+		tinkTemplate.Id = resp.GetId()
+	}
+
+	// If the data is specified and different than what is stored in Tinkerbell,
+	// update the template in Tinkerbell
+	if t.Spec.Data != nil && *t.Spec.Data != tinkTemplate.GetData() {
+		tinkTemplate.Data = *t.Spec.Data
+		if _, err := r.TemplateClient.UpdateTemplate(ctx, tinkTemplate); err != nil {
+			logger.Error(err, "Failed to update template in Tinkerbell")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Ensure that we populate the ID
+	t.Annotations[tinkv1alpha1.TemplateIDAnnotation] = tinkTemplate.Id
+
+	// If data was not specified, we are importing a pre-existing resource and should
+	// populate it from Tinkerbell
+	if t.Spec.Data == nil {
+		t.Spec.Data = pointer.StringPtr(tinkTemplate.GetData())
+	}
+
+	if err := r.Client.Patch(ctx, t, patch); err != nil {
+		logger.Error(err, "Failed to patch template")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
 
-func (r *TemplateReconciler) reconcileDelete(template *tinkv1alpha1.Template) (ctrl.Result, error) {
-	logger := r.Log.WithValues("template", template.Name)
-	err := ErrNotImplemented
+func (r *TemplateReconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
+	// Create a patch for use later
+	patch := client.MergeFrom(t.DeepCopy())
 
-	logger.Error(err, "Not yet implemented")
+	logger := r.Log.WithValues("template", t.Name)
 
-	// controllerutil.RemoveFinalizer(template, tinkv1alpha1.TemplateFinalizer)
+	if t.Annotations == nil {
+		t.Annotations = map[string]string{}
+	}
 
-	return ctrl.Result{}, err
-}
+	templateRequest := &template.GetRequest{}
 
-func (r *TemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&tinkv1alpha1.Template{}).
-		Complete(r)
+	if id, ok := t.Annotations[tinkv1alpha1.TemplateIDAnnotation]; ok && id != "" {
+		// We've already recorded the ID, so we should prefer to use that.
+		templateRequest.GetBy = &template.GetRequest_Id{Id: id}
+	} else {
+		// We don't have an ID, so try to get the template by name.
+		// TODO: this will need to be improved for multitenancy support.
+		templateRequest.GetBy = &template.GetRequest_Name{Name: t.Name}
+	}
+
+	_, err := r.TemplateClient.DeleteTemplate(ctx, templateRequest)
+	// TODO: Tinkerbell should return some type of status that is easier to handle
+	// than parsing for this specific error message.
+	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
+		// If it doesn't exist, then return without an error
+		logger.Error(err, "Failed to delete template from Tinkerbell")
+		return ctrl.Result{}, err
+	}
+
+	controllerutil.RemoveFinalizer(t, tinkv1alpha1.TemplateFinalizer)
+	if err := r.Client.Patch(ctx, t, patch); err != nil {
+		logger.Error(err, "Failed to patch template")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }

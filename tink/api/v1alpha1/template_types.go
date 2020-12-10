@@ -30,7 +30,8 @@ const (
 
 // TemplateSpec defines the desired state of Template.
 type TemplateSpec struct {
-	Data string `json:"data,omitempty"`
+	// +optional
+	Data *string `json:"data,omitempty"`
 }
 
 // TemplateStatus defines the observed state of Template.
