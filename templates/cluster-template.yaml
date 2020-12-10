@@ -11,20 +11,8 @@ spec:
     name: "${CLUSTER_NAME}-control-plane"
   kubeadmConfigSpec:
     initConfiguration:
-      nodeRegistration:
-        kubeletExtraArgs:
-          cloud-provider: external
     clusterConfiguration:
-      apiServer:
-        extraArgs:
-          cloud-provider: external
-      controllerManager:
-        extraArgs:
-          cloud-provider: external
     joinConfiguration:
-      nodeRegistration:
-        kubeletExtraArgs:
-          cloud-provider: external
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
 kind: TinkerbellMachineTemplate
@@ -109,6 +97,3 @@ spec:
   template:
     spec:
       joinConfiguration:
-        nodeRegistration:
-          kubeletExtraArgs:
-            cloud-provider: external

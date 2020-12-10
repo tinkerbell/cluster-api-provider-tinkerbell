@@ -21,18 +21,25 @@ import (
 	"os"
 	"time"
 
+	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
+	tinktemplate "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/template"
+	tinkworkflow "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/workflow"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
+	tinkclient "github.com/tinkerbell/tink/client"
+	tinkevents "github.com/tinkerbell/tink/protos/events"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"k8s.io/klog/klogr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-
-	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -44,9 +51,12 @@ var (
 
 //nolint:wsl,gochecknoinits
 func init() {
+	klog.InitFlags(nil)
+
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1alpha3.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
+	_ = tinkv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -130,12 +140,82 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Get a Tinkerbell client.
+	if err := tinkclient.Setup(); err != nil {
+		setupLog.Error(err, "unable to create tinkerbell client")
+		os.Exit(1)
+	}
+
+	hwClient := client.NewHardwareClient(tinkclient.HardwareClient)
+	templateClient := client.NewTemplateClient(tinkclient.TemplateClient)
+	workflowClient := client.NewWorkflowClient(tinkclient.WorkflowClient, hwClient)
+
+	stopCh := ctrl.SetupSignalHandler()
+
+	hwChan := make(chan event.GenericEvent)
+	templateChan := make(chan event.GenericEvent)
+	workflowChan := make(chan event.GenericEvent)
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      hwChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
+	}); err != nil {
+		setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Hardware")
+		os.Exit(1)
+	}
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      templateChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
+	}); err != nil {
+		setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Template")
+		os.Exit(1)
+	}
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      workflowChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
+	}); err != nil {
+		setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Workflow")
+		os.Exit(1)
+	}
+
+	if err = (&tinkhardware.Reconciler{
+		Client:         mgr.GetClient(),
+		HardwareClient: hwClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Hardware"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, hwChan); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Hardware")
+		os.Exit(1)
+	}
+
+	if err = (&tinktemplate.Reconciler{
+		Client:         mgr.GetClient(),
+		TemplateClient: templateClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Template"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, templateChan); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Template")
+		os.Exit(1)
+	}
+
+	if err = (&tinkworkflow.Reconciler{
+		Client:         mgr.GetClient(),
+		WorkflowClient: workflowClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Workflow"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, workflowChan); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Workflow")
+		os.Exit(1)
+	}
 
 	if err = (&controllers.TinkerbellClusterReconciler{
 		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("TinerellCluster"),
-		Recorder: mgr.GetEventRecorderFor("tinerellcluster-controller"),
+		Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
+		Recorder: mgr.GetEventRecorderFor("tinkerbellcluster-controller"),
 		Scheme:   mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
@@ -165,7 +245,7 @@ func main() {
 
 	setupLog.Info("starting manager")
 
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(stopCh); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
