@@ -1,8 +1,10 @@
+
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.9
+    controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
   name: tinkerbellclusters.infrastructure.cluster.x-k8s.io
 spec:
@@ -17,44 +19,35 @@ spec:
   - name: v1alpha3
     schema:
       openAPIV3Schema:
-        description: TinkerbellCluster is the Schema for the tinkerbellclusters API
+        description: TinkerbellCluster is the Schema for the tinkerbellclusters API.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
           spec:
-            description: TinkerbellClusterSpec defines the desired state of TinkerbellCluster
+            description: 'TinkerbellClusterSpec defines the desired state of TinkerbellCluster INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run "make" to regenerate code after modifying this file.'
             properties:
-              hardwareDiscoveryStrategy:
-                description: Currently there is only one strategy implemented
-                  and it is the default one. Discovery uses the two list of
-                  hardware IDs specified. Other way will come in the future
-                  like 'all' will get random hardware IDs from all Tinkerbell
-                type: string
               controlPlaneHardwareIDs:
-                description: A list of hardware ID from tinkerbell that will be
-                  used to deploy Kubernetes control planes to
-                type: array
+                description: ControlPlaneHardwareIDs contains a list of hardware IDs used as pool for control plane kubernetes instances.
                 items:
                   type: string
+                type: array
+              hardwareDiscoveryStrategy:
+                description: HardwareDiscoveryStrategy is a switch we have to implement more advacned discovery strategy. The unique one we have today is the default one obviously and it uses the two lists of hardware IDs specified down here.
+                type: string
               machineHardwareIDs:
-                description: A list of hardware ID from tinkerbell that will be
-                  used to deploy Kubernetes data plane
-                type: array
+                description: MachineHardwareIDs contains a list of hardware IDs used as pool for data plane kubernetes instances.
                 items:
                   type: string
+                type: array
             type: object
           status:
-            description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster
+            description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
             properties:
               ready:
                 description: Ready denotes that the cluster (infrastructure) is ready.

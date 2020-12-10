@@ -1,3 +1,5 @@
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -33,7 +35,7 @@ rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
-  - packetclusters
+  - tinkerbellclusters
   verbs:
   - create
   - delete
@@ -45,7 +47,7 @@ rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
-  - packetclusters/status
+  - tinkerbellclusters/status
   verbs:
   - get
   - patch
@@ -53,7 +55,7 @@ rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
-  - packetmachines
+  - tinkerbellmachines
   verbs:
   - create
   - delete
@@ -65,7 +67,7 @@ rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
-  - packetmachines/status
+  - tinkerbellmachines/status
   verbs:
   - get
   - patch

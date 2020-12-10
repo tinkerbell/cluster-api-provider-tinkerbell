@@ -1,4 +1,4 @@
-namespace: cluster-api-provider-tinkerbell-system
+namespace: capt-system
 resources:
 - namespace.yaml
 - credentials.yaml
