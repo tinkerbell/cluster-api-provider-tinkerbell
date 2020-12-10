@@ -409,3 +409,6 @@ modules: ## Runs go mod to ensure modules are up to date.
 	go mod tidy
 	cd $(TOOLS_DIR); go mod tidy
 
+.PHONY: lint
+lint:
+	golangci-lint run

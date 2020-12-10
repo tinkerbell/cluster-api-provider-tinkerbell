@@ -1,0 +1,75 @@
+output:
+  sort-results: true
+
+issues:
+  exclude-use-default: false
+  max-same-issues: 0
+  max-issues-per-linter: 0
+  exclude-rules:
+    # Ignore long kubebuilder lines as there is no way to break them down.
+    - linters:
+        - lll
+      source: "kubebuilder"
+
+linters-settings:
+  exhaustive:
+    default-signifies-exhaustive: true
+
+# List for enabled linters can be generated for updates using the following command.
+# golangci-lint linters | grep -E '^\S+:' | cut -d: -f1 | sort | sed 's/^/    - /g' | grep -v -E "($(grep '^  disable:' -A 100 .golangci.yml  | grep -E '    - \S+$' | awk '{print $2}' | tr \\n '|' | sed 's/|$//g'))"
+linters:
+  disable-all: false
+  enable:
+    - asciicheck
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - funlen
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - golint
+    - gomnd
+    - gomodguard
+    - goprintffuncname
+    - ineffassign
+    - interfacer
+    - lll
+    - misspell
+    - nakedret
+    - nestif
+    - nlreturn
+    - noctx
+    - nolintlint
+    - prealloc
+    - rowserrcheck
+    - scopelint
+    - sqlclosecheck
+    - structcheck
+    - stylecheck
+    - testpackage
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - varcheck
+    - whitespace
+    - wrapcheck
+    - wsl
+  disable:
+    - gci
+    - godox
+    - goerr113

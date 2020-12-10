@@ -17,6 +17,9 @@ limitations under the License.
 package v1alpha3
 
 const (
+	// ControlPlaneTag is a tag marking device as control plane node.
 	ControlPlaneTag = "kubernetes.io/role:master"
-	WorkerTag       = "kubernetes.io/role:node"
+
+	// WorkerTag is a tag marking device as a worker node.
+	WorkerTag = "kubernetes.io/role:node"
 )

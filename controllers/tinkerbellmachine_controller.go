@@ -31,6 +31,7 @@ import (
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 )
 
+// TinkerbellMachineReconciler implements Reconciler interface by managing Tinkerbell machines.
 type TinkerbellMachineReconciler struct {
 	client.Client
 	Log      logr.Logger
@@ -43,10 +44,12 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines;machines/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets;,verbs=get;list;watch
 
+// Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
 func (r *TinkerbellMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	return ctrl.Result{}, nil
 }
 
+// SetupWithManager configures reconciler with a given manager.
 func (r *TinkerbellMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrastructurev1alpha3.TinkerbellMachine{}).

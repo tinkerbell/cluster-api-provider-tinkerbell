@@ -36,6 +36,7 @@ import (
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 )
 
+// TinkerbellClusterReconciler implements Reconciler interface.
 type TinkerbellClusterReconciler struct {
 	client.Client
 	Log      logr.Logger
@@ -47,6 +48,7 @@ type TinkerbellClusterReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
 
+// Reconcile ensures state of Tinkerbell clusters.
 func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.Background()
 	logger := r.Log.WithValues("tinkerbellcluster", req.NamespacedName)
@@ -74,7 +76,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 
 		return ctrl.Result{
 			Requeue:      true,
-			RequeueAfter: 2 * time.Second,
+			RequeueAfter: 2 * time.Second, //nolint:gomnd
 		}, nil
 	}
 
@@ -92,6 +94,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	return r.reconcileNormal(tcluster)
 }
 
+//nolint:lll
 func (r *TinkerbellClusterReconciler) reconcileNormal(tcluster *infrastructurev1alpha3.TinkerbellCluster) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
@@ -104,6 +107,7 @@ func (r *TinkerbellClusterReconciler) reconcileDelete() (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+// SetupWithManager configures reconciler with a given manager.
 func (r *TinkerbellClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrastructurev1alpha3.TinkerbellCluster{}).

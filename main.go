@@ -35,11 +35,13 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+//nolint:gochecknoglobals
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+//nolint:wsl,gochecknoinits
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1alpha3.AddToScheme(scheme)
@@ -47,6 +49,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+//nolint:funlen,gomnd
 func main() {
 	var (
 		enableLeaderElection    bool
@@ -66,7 +69,8 @@ func main() {
 		&leaderElectionNamespace,
 		"leader-election-namespace",
 		"",
-		"Namespace that the controller performs leader election in. If unspecified, the controller will discover which namespace it is running in.",
+		"Namespace that the controller performs leader election in. "+
+			"If unspecified, the controller will discover which namespace it is running in.",
 	)
 
 	flag.StringVar(&healthAddr,
@@ -87,13 +91,15 @@ func main() {
 		&watchNamespace,
 		"namespace",
 		"",
-		"Namespace that the controller watches to reconcile cluster-api objects. If unspecified, the controller watches for cluster-api objects across all namespaces.",
+		"Namespace that the controller watches to reconcile cluster-api objects. "+
+			"If unspecified, the controller watches for cluster-api objects across all namespaces.",
 	)
 
 	flag.IntVar(&webhookPort,
 		"webhook-port",
 		0,
-		"Webhook Server port, disabled by default. When enabled, the manager will only work as webhook server, no reconcilers are installed.",
+		"Webhook Server port, disabled by default. When enabled, the manager will only "+
+			"work as webhook server, no reconcilers are installed.",
 	)
 
 	flag.Parse()
