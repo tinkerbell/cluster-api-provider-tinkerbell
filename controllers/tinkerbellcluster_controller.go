@@ -76,7 +76,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 
 		return ctrl.Result{
 			Requeue:      true,
-			RequeueAfter: 2 * time.Second,
+			RequeueAfter: 2 * time.Second, //nolint:gomnd
 		}, nil
 	}
 
@@ -94,6 +94,7 @@ func (r *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result
 	return r.reconcileNormal(tcluster)
 }
 
+//nolint:lll
 func (r *TinkerbellClusterReconciler) reconcileNormal(tcluster *infrastructurev1alpha3.TinkerbellCluster) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
