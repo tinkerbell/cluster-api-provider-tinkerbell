@@ -34,11 +34,14 @@ spec:
           spec:
             description: WorkflowSpec defines the desired state of Workflow.
             properties:
-              hardware:
+              hardwareRef:
                 description: Name of the Hardware associated with this workflow.
                 type: string
-              template:
-                description: Name of the Template associated with this Workflow.
+              hardwareTemplate:
+                description: HardwareTemplate is the template used for creating the workflow.
+                type: string
+              templateRef:
+                description: Name of the Template associated with this workflow.
                 type: string
             type: object
           status:

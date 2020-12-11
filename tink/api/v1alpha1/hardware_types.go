@@ -22,7 +22,7 @@ import (
 
 const (
 	// HardwareIDAnnotation is used by the controller to store the
-	// ID assigned to the workflow by Tinkerbell.
+	// ID assigned to the hardware by Tinkerbell.
 	HardwareIDAnnotation = "hardware.tinkerbell.org/id"
 
 	HardwareFinalizer = "hardware.tinkerbell.org"
@@ -38,7 +38,7 @@ type HardwareStatus struct {
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:path=hardware,scope=Cluster,categories=tinkerbell
+// +kubebuilder:resource:path=hardware,scope=Cluster,categories=tinkerbell,singular=hardware
 // +kubebuilder:storageversion
 
 // Hardware is the Schema for the Hardware API.

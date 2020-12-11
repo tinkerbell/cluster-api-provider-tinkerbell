@@ -63,21 +63,14 @@ func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, nil
 		}
 
-		return ctrl.Result{}, fmt.Errorf("getting template: %w", err)
+		logger.Error(err, "Failed to get template")
+		return ctrl.Result{}, err
 	}
 
-	// Add finalizer first if not exist to avoid the race condition between init and delete
-	if !controllerutil.ContainsFinalizer(template, tinkv1alpha1.TemplateFinalizer) {
-		before := template.DeepCopy()
-		controllerutil.AddFinalizer(template, tinkv1alpha1.TemplateFinalizer)
-
-		if err := r.Client.Patch(ctx, template, client.MergeFrom(before)); err != nil {
-			logger.Error(err, "Failed to add finalizer to template")
-
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
-
-		return ctrl.Result{}, nil
+	// Ensure that we add the finalizer to the resource
+	err := ensureFinalizer(ctx, r.Client, logger, template, tinkv1alpha1.TemplateFinalizer)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Handle deleted templates.
@@ -183,7 +176,6 @@ func (r *TemplateReconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha
 	// TODO: Tinkerbell should return some type of status that is easier to handle
 	// than parsing for this specific error message.
 	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
-		// If it doesn't exist, then return without an error
 		logger.Error(err, "Failed to delete template from Tinkerbell")
 		return ctrl.Result{}, err
 	}

@@ -30,11 +30,14 @@ const (
 
 // WorkflowSpec defines the desired state of Workflow.
 type WorkflowSpec struct {
-	// Name of the Template associated with this Workflow.
-	Template string `json:"template,omitempty"`
+	// Name of the Template associated with this workflow.
+	TemplateRef string `json:"templateRef,omitempty"`
 
 	// Name of the Hardware associated with this workflow.
-	Hardware string `json:"hardware,omitempty"`
+	HardwareRef string `json:"hardwareRef,omitempty"`
+
+	// HardwareTemplate is the template used for creating the workflow.
+	HardwareTemplate string `json:"hardwareTemplate,omitempty"`
 }
 
 // WorkflowStatus defines the observed state of Workflow.

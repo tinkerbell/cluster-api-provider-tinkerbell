@@ -22,7 +22,7 @@ import (
 
 const (
 	// TemplateIDAnnotation is used by the controller to store the
-	// ID assigned to the workflow by Tinkerbell.
+	// ID assigned to the template by Tinkerbell.
 	TemplateIDAnnotation = "template.tinkerbell.org/id"
 
 	TemplateFinalizer = "template.tinkerbell.org"

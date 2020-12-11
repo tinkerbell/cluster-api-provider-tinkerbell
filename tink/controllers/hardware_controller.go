@@ -62,26 +62,19 @@ func (r *HardwareReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, nil
 		}
 
+		logger.Error(err, "Failed to get hardware")
 		return ctrl.Result{}, fmt.Errorf("getting hardware: %w", err)
 	}
 
-	// Add finalizer first if not exist to avoid the race condition between init and delete
-	if !controllerutil.ContainsFinalizer(hardware, tinkv1alpha1.HardwareFinalizer) {
-		before := hardware.DeepCopy()
-		controllerutil.AddFinalizer(hardware, tinkv1alpha1.HardwareFinalizer)
-
-		if err := r.Client.Patch(ctx, hardware, client.MergeFrom(before)); err != nil {
-			logger.Error(err, "Failed to add finalizer to hardware")
-
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
-
-		return ctrl.Result{}, nil
+	// Ensure that we add the finalizer to the resource
+	err := ensureFinalizer(ctx, r.Client, logger, hardware, tinkv1alpha1.HardwareFinalizer)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Handle deleted hardware.
 	if !hardware.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(hardware)
+		return r.reconcileDelete(ctx, hardware)
 	}
 
 	return r.reconcileNormal(hardware)
@@ -96,13 +89,40 @@ func (r *HardwareReconciler) reconcileNormal(hardware *tinkv1alpha1.Hardware) (c
 	return ctrl.Result{}, err
 }
 
-func (r *HardwareReconciler) reconcileDelete(hardware *tinkv1alpha1.Hardware) (ctrl.Result, error) {
-	logger := r.Log.WithValues("hardware", hardware.Name)
-	err := ErrNotImplemented
+func (r *HardwareReconciler) reconcileDelete(ctx context.Context, h *tinkv1alpha1.Hardware) (ctrl.Result, error) {
+	// Create a patch for use later
+	patch := client.MergeFrom(h.DeepCopy())
 
-	logger.Error(err, "Not yet implemented")
+	logger := r.Log.WithValues("hardware", h.Name)
 
-	// controllerutil.RemoveFinalizer(hardware, tinkv1alpha1.HardwareFinalizer)
+	if h.Annotations == nil {
+		h.Annotations = map[string]string{}
+	}
 
-	return ctrl.Result{}, err
+	id, ok := h.Annotations[tinkv1alpha1.HardwareIDAnnotation]
+	if !ok {
+		// TODO: figure out how to lookup a hardware without an ID
+		logger.Error(ErrNotImplemented, "Unable to delete a hardware without having recorded the ID")
+		return ctrl.Result{}, ErrNotImplemented
+	}
+
+	hardwareRequest := &hardware.DeleteRequest{
+		Id: id,
+	}
+
+	_, err := r.HardwareClient.Delete(ctx, hardwareRequest)
+	// TODO: Tinkerbell should return some type of status that is easier to handle
+	// than parsing for this specific error message.
+	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
+		logger.Error(err, "Failed to delete hardware from Tinkerbell")
+		return ctrl.Result{}, err
+	}
+
+	controllerutil.RemoveFinalizer(h, tinkv1alpha1.HardwareFinalizer)
+	if err := r.Client.Patch(ctx, h, patch); err != nil {
+		logger.Error(err, "Failed to patch hardware")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
