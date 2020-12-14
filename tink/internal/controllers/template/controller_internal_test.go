@@ -15,17 +15,16 @@ limitations under the License.
 */
 
 // Package controllers contains controllers for Tinkerbell.
-package controllers
+package template
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	tinkfake "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client/fake"
 	"github.com/tinkerbell/tink/protos/template"
-	"google.golang.org/grpc"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
@@ -45,93 +44,6 @@ tasks:
       - name: "hello_world"
         image: hello-world
         timeout: 60`
-
-type fakeTemplateServiceClient struct {
-	objs map[string]*template.WorkflowTemplate
-}
-
-func newFakeTemplateServiceClient(objs ...*template.WorkflowTemplate) *fakeTemplateServiceClient {
-	f := &fakeTemplateServiceClient{objs: map[string]*template.WorkflowTemplate{}}
-
-	for i, obj := range objs {
-		id := obj.GetId()
-
-		if id == "" {
-			obj.Id = obj.GetName()
-		}
-
-		f.objs[id] = objs[i]
-	}
-
-	return f
-}
-
-func (f *fakeTemplateServiceClient) CreateTemplate(ctx context.Context, in *template.WorkflowTemplate, opts ...grpc.CallOption) (*template.CreateResponse, error) {
-	id := in.GetId()
-
-	if id == "" {
-		id = in.GetName()
-
-	}
-
-	if _, ok := f.objs[id]; ok {
-		return nil, errors.New("duplicate")
-	}
-
-	f.objs[id] = &template.WorkflowTemplate{
-		Id:   id,
-		Name: in.GetName(),
-		Data: in.GetData(),
-	}
-
-	return &template.CreateResponse{Id: id}, nil
-}
-
-func (f *fakeTemplateServiceClient) GetTemplate(ctx context.Context, in *template.GetRequest, opts ...grpc.CallOption) (*template.WorkflowTemplate, error) {
-	id := in.GetId()
-	if id == "" {
-		id = in.GetName()
-	}
-
-	if _, ok := f.objs[id]; ok {
-		return f.objs[id], nil
-	}
-
-	return nil, errors.New("rpc error: code = Unknown desc = sql: no rows in result set")
-}
-
-func (f *fakeTemplateServiceClient) DeleteTemplate(ctx context.Context, in *template.GetRequest, opts ...grpc.CallOption) (*template.Empty, error) {
-	id := in.GetId()
-	if id == "" {
-		id = in.GetName()
-	}
-
-	if _, ok := f.objs[id]; ok {
-		delete(f.objs, id)
-		return &template.Empty{}, nil
-	}
-
-	return nil, errors.New("rpc error: code = Unknown desc = sql: no rows in result set")
-}
-
-func (f *fakeTemplateServiceClient) ListTemplates(ctx context.Context, in *template.ListRequest, opts ...grpc.CallOption) (template.TemplateService_ListTemplatesClient, error) {
-	return nil, errors.New("nobody home")
-}
-
-func (f *fakeTemplateServiceClient) UpdateTemplate(ctx context.Context, in *template.WorkflowTemplate, opts ...grpc.CallOption) (*template.Empty, error) {
-	id := in.GetId()
-
-	if id == "" {
-		in.Id = in.GetName()
-	}
-
-	if _, ok := f.objs[id]; ok {
-		f.objs[id].Data = in.GetData()
-		return &template.Empty{}, nil
-	}
-
-	return nil, errors.New("nobody home")
-}
 
 func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
@@ -203,13 +115,14 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 			wantErr:  false,
 		},
 	}
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			fakeTemplateClient := newFakeTemplateServiceClient(tt.tinkObjs...)
+			fakeTemplateClient := tinkfake.NewFakeTemplateClient(tt.tinkObjs...)
 
-			r := &TemplateReconciler{
+			r := &Reconciler{
 				Client:         fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopy()),
 				TemplateClient: fakeTemplateClient,
 				Log:            log.Log,
@@ -219,6 +132,7 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 			got, err := r.reconcileDelete(context.Background(), tt.in)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
+
 				return
 			}
 			g.Expect(err).NotTo(HaveOccurred())
@@ -226,13 +140,13 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 			g.Expect(got).To(BeEquivalentTo(tt.want))
 
 			// Verify that the deletion happened in the fakeTemplateServiceClient
-			g.Expect(fakeTemplateClient.objs).NotTo(HaveKey(tt.in.Name))
+			g.Expect(fakeTemplateClient.Objs).NotTo(HaveKey(tt.in.Name))
 
 			// Check for absence of a finalizer since the fake client doesn't
 			// do automatic deletion
 			key := client.ObjectKey{Name: tt.in.Name}
 			after := &tinkv1alpha1.Template{}
-			err = r.Client.Get(context.Background(), key, after)
+			g.Expect(r.Client.Get(context.Background(), key, after)).To(Succeed())
 			g.Expect(after.Finalizers).NotTo(ContainElement(tinkv1alpha1.TemplateFinalizer))
 		})
 	}
@@ -302,13 +216,14 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 			wantErr: false,
 		},
 	}
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			fakeTemplateClient := newFakeTemplateServiceClient(tt.tinkObjs...)
+			fakeTemplateClient := tinkfake.NewFakeTemplateClient(tt.tinkObjs...)
 
-			r := &TemplateReconciler{
+			r := &Reconciler{
 				Client:         fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopy()),
 				TemplateClient: fakeTemplateClient,
 				Log:            log.Log,
@@ -318,6 +233,7 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 			got, err := r.reconcileNormal(context.Background(), tt.in)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
+
 				return
 			}
 			g.Expect(err).NotTo(HaveOccurred())
@@ -338,10 +254,10 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 			g.Expect(id).NotTo(BeEmpty())
 
 			// Verify that the resource exists in the fakeTemplateServiceClient
-			g.Expect(fakeTemplateClient.objs).To(HaveKey(id))
+			g.Expect(fakeTemplateClient.Objs).To(HaveKey(id))
 
 			// get the tink resource from the fake client
-			tinkTemplate := fakeTemplateClient.objs[id]
+			tinkTemplate := fakeTemplateClient.Objs[id]
 
 			// Verify the IDs match
 			g.Expect(tinkTemplate.Id, k8sTemplate.Annotations[tinkv1alpha1.TemplateIDAnnotation])

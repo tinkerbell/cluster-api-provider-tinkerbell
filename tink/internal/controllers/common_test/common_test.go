@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controllers contains controllers for Tinkerbell.
-package controllers
+package common_test
 
 import (
 	"context"
@@ -23,6 +22,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func Test_ensureFinalizer(t *testing.T) {
+func Test_EnsureFinalizer(t *testing.T) {
 	g := NewWithT(t)
 	scheme := runtime.NewScheme()
 
@@ -38,7 +38,7 @@ func Test_ensureFinalizer(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		in        Object
+		in        common.Object
 		finalizer string
 		wantErr   bool
 	}{
@@ -66,22 +66,89 @@ func Test_ensureFinalizer(t *testing.T) {
 			wantErr:   false,
 		},
 	}
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			ctx := context.Background()
 			fakeClient := fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopyObject())
 
-			err := ensureFinalizer(context.Background(), fakeClient, log.Log, tt.in, tt.finalizer)
+			err := common.EnsureFinalizer(ctx, fakeClient, log.Log, tt.in, tt.finalizer)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
+
 				return
 			}
 			g.Expect(err).NotTo(HaveOccurred())
 
 			actual := &tinkv1alpha1.Template{}
 			key := client.ObjectKey{Name: tt.in.GetName()}
-			g.Expect(fakeClient.Get(context.Background(), key, actual)).To(Succeed())
+			g.Expect(fakeClient.Get(ctx, key, actual)).To(Succeed())
 			g.Expect(actual.Finalizers).To(ContainElement(tt.finalizer))
+		})
+	}
+}
+
+func Test_EnsureAnnotation(t *testing.T) {
+	g := NewWithT(t)
+	scheme := runtime.NewScheme()
+
+	g.Expect(tinkv1alpha1.AddToScheme(scheme)).To(Succeed())
+
+	tests := []struct {
+		name            string
+		in              common.Object
+		annotationKey   string
+		annotationValue string
+		wantErr         bool
+	}{
+		{
+			name: "Adds annotation when not present",
+			in: &tinkv1alpha1.Template{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+				},
+				Spec: tinkv1alpha1.TemplateSpec{},
+			},
+			annotationKey:   "key",
+			annotationValue: "value",
+			wantErr:         false,
+		},
+		{
+			name: "Annotation already exists",
+			in: &tinkv1alpha1.Template{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+					Annotations: map[string]string{
+						"color": "green",
+					},
+				},
+				Spec: tinkv1alpha1.TemplateSpec{},
+			},
+			annotationKey:   "color",
+			annotationValue: "blue",
+			wantErr:         false,
+		},
+	}
+	for i := range tests {
+		tt := tests[i]
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			ctx := context.Background()
+			fakeClient := fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopyObject())
+
+			err := common.EnsureAnnotation(ctx, fakeClient, log.Log, tt.in, tt.annotationKey, tt.annotationValue)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+
+			actual := &tinkv1alpha1.Template{}
+			key := client.ObjectKey{Name: tt.in.GetName()}
+			g.Expect(fakeClient.Get(ctx, key, actual)).To(Succeed())
+			g.Expect(actual.Annotations).To(HaveKeyWithValue(tt.annotationKey, tt.annotationValue))
 		})
 	}
 }

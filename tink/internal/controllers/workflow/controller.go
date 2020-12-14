@@ -19,9 +19,11 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
 	"github.com/tinkerbell/tink/protos/workflow"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,13 +64,14 @@ func (r *WorkflowReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		logger.Error(err, "Failed to get workflow")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to get workflow: %w", err)
 	}
 
 	// Ensure that we add the finalizer to the resource
-	err := ensureFinalizer(ctx, r.Client, logger, workflow, tinkv1alpha1.WorkflowFinalizer)
+	err := common.EnsureFinalizer(ctx, r.Client, logger, workflow, tinkv1alpha1.WorkflowFinalizer)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer on workflow: %w", err)
 	}
 
 	// Handle deleted wokflows.
@@ -81,7 +84,7 @@ func (r *WorkflowReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (r *WorkflowReconciler) reconcileNormal(workflow *tinkv1alpha1.Workflow) (ctrl.Result, error) {
 	logger := r.Log.WithValues("workflow", workflow.Name)
-	err := ErrNotImplemented
+	err := common.ErrNotImplemented
 
 	logger.Error(err, "Not yet implemented")
 
@@ -101,8 +104,9 @@ func (r *WorkflowReconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha
 	id, ok := w.Annotations[tinkv1alpha1.WorkflowIDAnnotation]
 	if !ok {
 		// TODO: figure out how to lookup a workflow without an ID
-		logger.Error(ErrNotImplemented, "Unable to delete a workflow without having recorded the ID")
-		return ctrl.Result{}, ErrNotImplemented
+		logger.Error(common.ErrNotImplemented, "Unable to delete a workflow without having recorded the ID")
+
+		return ctrl.Result{}, common.ErrNotImplemented
 	}
 
 	workflowRequest := &workflow.GetRequest{
@@ -114,13 +118,16 @@ func (r *WorkflowReconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha
 	// than parsing for this specific error message.
 	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
 		logger.Error(err, "Failed to delete workflow from Tinkerbell")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to delete workflow from Tinkerbell: %w", err)
 	}
 
 	controllerutil.RemoveFinalizer(w, tinkv1alpha1.WorkflowFinalizer)
+
 	if err := r.Client.Patch(ctx, w, patch); err != nil {
 		logger.Error(err, "Failed to patch workflow")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch workflow: %w", err)
 	}
 
 	return ctrl.Result{}, nil

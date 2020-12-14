@@ -14,15 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controllers contains controllers for Tinkerbell.
-package controllers
+// Package template contains controller for Tinkerbell Templates.
+package template
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
 	"github.com/tinkerbell/tink/protos/template"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,18 +35,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-var ErrNotImplemented = fmt.Errorf("not implemented")
+type TemplateClient interface {
+	Get(ctx context.Context, id, name string) (*template.WorkflowTemplate, error)
+	Create(ctx context.Context, template *template.WorkflowTemplate) error
+	Update(ctx context.Context, template *template.WorkflowTemplate) error
+	Delete(ctx context.Context, id, name string) error
+}
 
-// TemplateReconciler implements Reconciler interface by managing Tinkerbell templates.
-type TemplateReconciler struct {
+// Reconciler implements the Reconciler interface for managing Tinkerbell templates.
+type Reconciler struct {
 	client.Client
-	TemplateClient template.TemplateServiceClient
+	TemplateClient TemplateClient
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *TemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tinkv1alpha1.Template{}).
 		Complete(r)
@@ -52,7 +60,7 @@ func (r *TemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile ensures state of Tinkerbell templates.
-func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	logger := r.Log.WithValues("template", req.NamespacedName.Name)
 
@@ -64,13 +72,13 @@ func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		logger.Error(err, "Failed to get template")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to get template: %w", err)
 	}
 
 	// Ensure that we add the finalizer to the resource
-	err := ensureFinalizer(ctx, r.Client, logger, template, tinkv1alpha1.TemplateFinalizer)
-	if err != nil {
-		return ctrl.Result{}, err
+	if err := common.EnsureFinalizer(ctx, r.Client, logger, template, tinkv1alpha1.TemplateFinalizer); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer on template: %w", err)
 	}
 
 	// Handle deleted templates.
@@ -81,61 +89,41 @@ func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return r.reconcileNormal(ctx, template)
 }
 
-func (r *TemplateReconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
+func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
 	// Create a patch for use later
 	patch := client.MergeFrom(t.DeepCopy())
 
 	logger := r.Log.WithValues("template", t.Name)
 
-	templateRequest := &template.GetRequest{}
+	tinkTemplate, err := r.getTemplate(ctx, t)
 
-	if t.Annotations == nil {
-		t.Annotations = map[string]string{}
-	}
-
-	if id, ok := t.Annotations[tinkv1alpha1.TemplateIDAnnotation]; ok && id != "" {
-		// We've already recorded the ID, so we should prefer to use that.
-		templateRequest.GetBy = &template.GetRequest_Id{Id: id}
-	} else {
-		// We don't have an ID, so try to get the template by name.
-		// TODO: this will need to be improved for multitenancy support.
-		templateRequest.GetBy = &template.GetRequest_Name{Name: t.Name}
-	}
-
-	tinkTemplate, err := r.TemplateClient.GetTemplate(ctx, templateRequest)
-	if err != nil {
-		// TODO: Tinkerbell should return some type of status that is easier to handle
-		// than parsing for this specific error message.
-		if err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
-			logger.Error(err, "Failed to get template from Tinkerbell")
-			return ctrl.Result{}, err
-		}
-
-		// We should create the template
-		tinkTemplate = &template.WorkflowTemplate{
-			Name: t.Name,
-			Data: pointer.StringPtrDerefOr(t.Spec.Data, ""),
-		}
-		resp, err := r.TemplateClient.CreateTemplate(ctx, tinkTemplate)
+	switch {
+	case errors.Is(err, tinkclient.ErrNotFound):
+		result, err := r.createTemplate(ctx, t)
 		if err != nil {
-			logger.Error(err, "Failed to create template in Tinkerbell")
 			return ctrl.Result{}, err
 		}
-		tinkTemplate.Id = resp.GetId()
+
+		tinkTemplate = result
+	case err != nil:
+		return ctrl.Result{}, err
 	}
 
 	// If the data is specified and different than what is stored in Tinkerbell,
 	// update the template in Tinkerbell
 	if t.Spec.Data != nil && *t.Spec.Data != tinkTemplate.GetData() {
 		tinkTemplate.Data = *t.Spec.Data
-		if _, err := r.TemplateClient.UpdateTemplate(ctx, tinkTemplate); err != nil {
+		if err := r.TemplateClient.Update(ctx, tinkTemplate); err != nil {
 			logger.Error(err, "Failed to update template in Tinkerbell")
-			return ctrl.Result{}, err
+
+			return ctrl.Result{}, fmt.Errorf("failed to update template in Tinkerbell: %w", err)
 		}
 	}
 
-	// Ensure that we populate the ID
-	t.Annotations[tinkv1alpha1.TemplateIDAnnotation] = tinkTemplate.Id
+	if err := common.EnsureAnnotation(ctx, r.Client, logger, t, tinkv1alpha1.TemplateIDAnnotation,
+		tinkTemplate.Id); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to ensure id annotation on template: %w", err)
+	}
 
 	// If data was not specified, we are importing a pre-existing resource and should
 	// populate it from Tinkerbell
@@ -145,45 +133,66 @@ func (r *TemplateReconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha
 
 	if err := r.Client.Patch(ctx, t, patch); err != nil {
 		logger.Error(err, "Failed to patch template")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *TemplateReconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
+func (r *Reconciler) createTemplate(ctx context.Context, t *tinkv1alpha1.Template) (*template.WorkflowTemplate, error) {
+	logger := r.Log.WithValues("template", t.Name)
+
+	tinkTemplate := &template.WorkflowTemplate{
+		Name: t.Name,
+		Data: pointer.StringPtrDerefOr(t.Spec.Data, ""),
+	}
+
+	if err := r.TemplateClient.Create(ctx, tinkTemplate); err != nil {
+		logger.Error(err, "Failed to create template in Tinkerbell")
+
+		return nil, fmt.Errorf("failed to create template in Tinkerbell: %w", err)
+	}
+
+	return tinkTemplate, nil
+}
+
+func (r *Reconciler) getTemplate(ctx context.Context, t *tinkv1alpha1.Template) (*template.WorkflowTemplate, error) {
+	annotations := t.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+
+	return r.TemplateClient.Get(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation], t.Name)
+}
+
+func (r *Reconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
 	// Create a patch for use later
 	patch := client.MergeFrom(t.DeepCopy())
 
 	logger := r.Log.WithValues("template", t.Name)
 
-	if t.Annotations == nil {
-		t.Annotations = map[string]string{}
+	annotations := t.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
 	}
 
-	templateRequest := &template.GetRequest{}
+	err := r.TemplateClient.Delete(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation], t.Name)
 
-	if id, ok := t.Annotations[tinkv1alpha1.TemplateIDAnnotation]; ok && id != "" {
-		// We've already recorded the ID, so we should prefer to use that.
-		templateRequest.GetBy = &template.GetRequest_Id{Id: id}
-	} else {
-		// We don't have an ID, so try to get the template by name.
-		// TODO: this will need to be improved for multitenancy support.
-		templateRequest.GetBy = &template.GetRequest_Name{Name: t.Name}
-	}
-
-	_, err := r.TemplateClient.DeleteTemplate(ctx, templateRequest)
 	// TODO: Tinkerbell should return some type of status that is easier to handle
 	// than parsing for this specific error message.
-	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
+	if err != nil && !errors.Is(err, tinkclient.ErrNotFound) {
 		logger.Error(err, "Failed to delete template from Tinkerbell")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to delete template from Tinkerbell: %w", err)
 	}
 
 	controllerutil.RemoveFinalizer(t, tinkv1alpha1.TemplateFinalizer)
+
 	if err := r.Client.Patch(ctx, t, patch); err != nil {
 		logger.Error(err, "Failed to patch template")
-		return ctrl.Result{}, err
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
 	}
 
 	return ctrl.Result{}, nil
