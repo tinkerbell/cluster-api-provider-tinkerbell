@@ -4,14 +4,8 @@
 *.dll
 *.so
 *.dylib
-<<<<<<< HEAD
 
 # Test binary, built with `go test -c`
-=======
-bin
-
-# Test binary, build with `go test -c`
->>>>>>> 6256f66 (bootstrap project)
 *.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
@@ -45,4 +39,6 @@ dist
 # Tilt
 .tiltbuild/
 
->>>>>>> 6256f66 (bootstrap project)
+# development / test / lints
+bin/
+hack/tools

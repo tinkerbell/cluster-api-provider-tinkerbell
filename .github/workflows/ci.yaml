@@ -6,11 +6,11 @@ on:
       - master
 
 jobs:
-  lint:
-    name: Lint
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
-    container: golangci/golangci-lint:v1.32.2
-    timeout-minutes: 10
+    container: gcr.io/k8s-staging-releng/releng-ci:latest
+    timeout-minutes: 20
     steps:
 
       - uses: actions/checkout@v2
@@ -18,8 +18,8 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Run lint
-        run: make lint
+      - name: Run verify
+        run: make verify
 
   codespell:
     name: Codespell
