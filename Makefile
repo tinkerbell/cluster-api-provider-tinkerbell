@@ -61,29 +61,11 @@ E2E_FOCUS := "functional tests"
 
 # Directories.
 TOOLS_DIR := hack/tools
-TOOLS_BIN_DIR := $(TOOLS_DIR)/bin
+TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
 BIN_DIR := bin
 TEST_DIR := test
 TEST_E2E_DIR := $(TEST_DIR)/e2e
-ENVSUBST_BIN := bin/envsubst
-ENVSUBST := $(TOOLS_DIR)/$(ENVSUBST_BIN)
-
-# Binaries.
-KUSTOMIZE := $(abspath $(TOOLS_BIN_DIR)/kustomize)
-CONTROLLER_GEN := $(abspath $(TOOLS_BIN_DIR)/controller-gen)
-ENVSUBST := $(abspath $(TOOLS_BIN_DIR)/envsubst)
-
-envsubst: $(ENVSUBST) ## Build a local copy of envsubst.
-$(ENVSUBST): $(TOOLS_DIR)/go.mod
-	cd $(TOOLS_DIR) && go build -tags=tools -o $(ENVSUBST_BIN) github.com/drone/envsubst/cmd/envsubst
-
-controller-gen: $(CONTROLLER_GEN) ## Build a local copy of controller-gen.
-$(CONTROLLER_GEN): $(TOOLS_DIR)/go.mod
-	cd $(TOOLS_DIR) && go build -tags=tools -o $(BIN_DIR)/controller-gen sigs.k8s.io/controller-tools/cmd/controller-gen
-
-kustomize: $(KUSTOMIZE)
-$(KUSTOMIZE): $(TOOLS_DIR)/go.mod # Build kustomize from tools folder.
-	cd $(TOOLS_DIR); go build -tags=tools -o $(BIN_DIR)/kustomize sigs.k8s.io/kustomize/kustomize/v3
+GO_INSTALL = ./scripts/go_install.sh
 
 # canonicalized names for host architecture
 ifeq ($(BUILDARCH),aarch64)
@@ -179,6 +161,35 @@ MANAGERLESS_CLUSTERCTLYAML := $(MANAGERLESS_BASE)/clusterctl-$(MANAGERLESS_VERSI
 CLUSTERCTL_TEMPLATE ?= templates/clusterctl-template.yaml
 CLUSTER_TEMPLATE ?= templates/cluster-template.yaml
 
+# Binaries.
+KUSTOMIZE_VER := v3.8.8
+KUSTOMIZE_BIN := kustomize
+KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
+
+CONTROLLER_GEN_VER := v0.4.1
+CONTROLLER_GEN_BIN := controller-gen
+CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
+
+ENVSUBST_BIN := envsubst
+ENVSUBST := $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)-drone
+
+## --------------------------------------
+## Tooling Binaries
+## --------------------------------------
+
+$(KUSTOMIZE): ## Build kustomize from tools folder.
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/kustomize/kustomize/v3 $(KUSTOMIZE_BIN) $(KUSTOMIZE_VER)
+
+$(CONTROLLER_GEN): ## Build controller-gen from tools folder.
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/controller-tools/cmd/controller-gen $(CONTROLLER_GEN_BIN) $(CONTROLLER_GEN_VER)
+
+$(ENVSUBST): ## Build envsubst from tools folder.
+	rm -f $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)*
+	mkdir -p $(TOOLS_DIR) && cd $(TOOLS_DIR) && go build -tags=tools -o $(ENVSUBST) github.com/drone/envsubst/cmd/envsubst
+	ln -sf $(ENVSUBST) $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)
+
+.PHONY: $(ENVSUBST_BIN)
+$(ENVSUBST_BIN): $(ENVSUBST) ## Build envsubst from tools folder.
 
 all: manager
 
@@ -247,15 +258,15 @@ run: generate fmt vet crds
 	go run ./main.go
 
 # Install CRDs into a cluster
-install: crds
+install: $(KUSTOMIZE) crds
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
 # Uninstall CRDs from a cluster
-uninstall: crds
+uninstall: $(KUSTOMIZE) crds
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: crds
+deploy: $(KUSTOMIZE) crds
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/release | kubectl apply -f -
 
@@ -338,13 +349,13 @@ endif
 	@echo "release version $(VERSION)"
 
 
-manifest: kustomize semver release-manifests release-clusterctl release-cluster-template
+manifest: $(KUSTOMIZE) semver release-manifests release-clusterctl release-cluster-template
 
-release-manifests: semver $(RELEASE_MANIFEST) $(RELEASE_METADATA) $(RELEASE_CLUSTER_TEMPLATE)
+release-manifests: $(KUSTOMIZE) semver $(RELEASE_MANIFEST) $(RELEASE_METADATA) $(RELEASE_CLUSTER_TEMPLATE)
 release-version:
 	KUSTOMIZE_ENABLE_ALPHA_COMMANDS=true $(KUSTOMIZE) cfg set config image-tag $(VERSION)
 
-$(RELEASE_MANIFEST): $(RELEASE_DIR) release-version ## Builds the manifests to publish with a release
+$(RELEASE_MANIFEST): $(KUSTOMIZE) $(RELEASE_DIR) release-version ## Builds the manifests to publish with a release
 	$(KUSTOMIZE) build config > $@
 
 $(RELEASE_METADATA): semver $(RELEASE_DIR)
@@ -363,7 +374,7 @@ $(FULL_RELEASE_CLUSTERCTLYAML): $(RELEASE_DIR)
 
 .PHONY: managerless-clusterctl managerless-manifests managerless $(MANAGERLESS_CLUSTERCTLYAML) $(MANAGERLESS_MANIFEST) $(MANAGERLESS_METADATA) $(MANAGERLESS_CLUSTER_TEMPLATE)
 managerless: semver managerless-manifests managerless-clusterctl managerless-cluster-template
-managerless-manifests: semver $(MANAGERLESS_MANIFEST) $(MANAGERLESS_METADATA)
+managerless-manifests: $(KUSTOMIZE) semver $(MANAGERLESS_MANIFEST) $(MANAGERLESS_METADATA)
 $(MANAGERLESS_MANIFEST): $(MANAGERLESS_DIR)
 	$(KUSTOMIZE) build config/managerless > $@
 
@@ -407,7 +418,6 @@ cluster-init-manual: core managerless release
 .PHONY: modules
 modules: ## Runs go mod to ensure modules are up to date.
 	go mod tidy
-	cd $(TOOLS_DIR); go mod tidy
 
 .PHONY: lint
 lint:
