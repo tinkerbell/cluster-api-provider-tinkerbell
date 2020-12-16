@@ -84,11 +84,7 @@ func (f *Template) Get(ctx context.Context, id, name string) (*template.Workflow
 }
 
 // Delete deletes a Template from Tinkerbell.
-func (f *Template) Delete(ctx context.Context, id, name string) error {
-	if id == "" {
-		id = name
-	}
-
+func (f *Template) Delete(ctx context.Context, id string) error {
 	if _, ok := f.Objs[id]; ok {
 		delete(f.Objs, id)
 

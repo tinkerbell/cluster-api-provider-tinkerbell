@@ -14,29 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package client contains a client wrapper for Tinkerbell.
 package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/tinkerbell/tink/protos/template"
 )
-
-// ErrNotFound is returned if a requested resource is not found.
-var ErrNotFound = errors.New("resource not found")
 
 // Template client for Tinkerbell.
 type Template struct {
 	client template.TemplateServiceClient
 }
 
+// NewTemplateClient returns a Template client.
+func NewTemplateClient(client template.TemplateServiceClient) Template {
+	return Template{client: client}
+}
+
 // Get returns a Tinkerbell Template.
 func (t *Template) Get(ctx context.Context, id, name string) (*template.WorkflowTemplate, error) {
 	req := &template.GetRequest{}
-	if id == "" {
+	if id != "" {
 		req.GetBy = &template.GetRequest_Id{Id: id}
 	} else {
 		req.GetBy = &template.GetRequest_Name{Name: name}
@@ -44,9 +44,7 @@ func (t *Template) Get(ctx context.Context, id, name string) (*template.Workflow
 
 	tinkTemplate, err := t.client.GetTemplate(ctx, req)
 	if err != nil {
-		// TODO: Tinkerbell should return some type of status that is easier to handle
-		// than parsing for this specific error message.
-		if err.Error() == "rpc error: code = Unknown desc = sql: no rows in result set" {
+		if err.Error() == sqlErrorString {
 			return nil, fmt.Errorf("template %w", ErrNotFound)
 		}
 
@@ -78,18 +76,12 @@ func (t *Template) Create(ctx context.Context, template *template.WorkflowTempla
 }
 
 // Delete a Tinkerbell Template.
-func (t *Template) Delete(ctx context.Context, id, name string) error {
-	req := &template.GetRequest{}
-	if id == "" {
-		req.GetBy = &template.GetRequest_Id{Id: id}
-	} else {
-		req.GetBy = &template.GetRequest_Name{Name: name}
+func (t *Template) Delete(ctx context.Context, id string) error {
+	req := &template.GetRequest{
+		GetBy: &template.GetRequest_Id{Id: id},
 	}
-
 	if _, err := t.client.DeleteTemplate(ctx, req); err != nil {
-		// TODO: Tinkerbell should return some type of status that is easier to handle
-		// than parsing for this specific error message.
-		if err.Error() == "rpc error: code = Unknown desc = sql: no rows in result set" {
+		if err.Error() == sqlErrorString {
 			return fmt.Errorf("template %w", ErrNotFound)
 		}
 
