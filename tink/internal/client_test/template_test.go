@@ -26,16 +26,6 @@ import (
 )
 
 const (
-	helloWorldTemplate = `version: "0.1"
-name: hello_world_workflow
-global_timeout: 600
-tasks:
-  - name: "hello world"
-    worker: "{{.device_1}}"
-    actions:
-      - name: "hello_world"
-        image: hello-world
-        timeout: 60`
 	sampleTemplate = `
 version: '0.1'
 name: sample_workflow

@@ -23,22 +23,25 @@ import (
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
 	"github.com/tinkerbell/tink/protos/hardware"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+type hardwareClient interface {
+	// Create(ctx context.Context, h *hardware.Hardware) error
+	// Update(ctx context.Context, h *hardware.Hardware) error
+	Get(ctx context.Context, id, ip, mac string) (*hardware.Hardware, error)
+	// Delete(ctx context.Context, id string) error
+}
 
 // Reconciler implements Reconciler interface by managing Tinkerbell hardware.
 type Reconciler struct {
 	client.Client
-	HardwareClient hardware.HardwareServiceClient
+	HardwareClient hardwareClient
 	Log            logr.Logger
-	Recorder       record.EventRecorder
 	Scheme         *runtime.Scheme
 }
 
@@ -68,67 +71,25 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, fmt.Errorf("failed to get hardware: %w", err)
 	}
 
-	// Ensure that we add the finalizer to the resource
-	err := common.EnsureFinalizer(ctx, r.Client, logger, hardware, tinkv1alpha1.HardwareFinalizer)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer on hardware: %w", err)
-	}
-
-	// Handle deleted hardware.
+	// Deletion is a noop.
 	if !hardware.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, hardware)
+		return ctrl.Result{}, nil
 	}
 
-	return r.reconcileNormal(hardware)
+	return r.reconcileNormal(ctx, hardware)
 }
 
-func (r *Reconciler) reconcileNormal(hardware *tinkv1alpha1.Hardware) (ctrl.Result, error) {
-	logger := r.Log.WithValues("hardware", hardware.Name)
-	err := common.ErrNotImplemented
-
-	logger.Error(err, "Not yet implemented")
-
-	return ctrl.Result{}, err
-}
-
-func (r *Reconciler) reconcileDelete(ctx context.Context, h *tinkv1alpha1.Hardware) (ctrl.Result, error) {
-	// Create a patch for use later
-	patch := client.MergeFrom(h.DeepCopy())
-
+func (r *Reconciler) reconcileNormal(ctx context.Context, h *tinkv1alpha1.Hardware) (ctrl.Result, error) {
 	logger := r.Log.WithValues("hardware", h.Name)
 
-	if h.Annotations == nil {
-		h.Annotations = map[string]string{}
+	tinkHardware, err := r.HardwareClient.Get(ctx, h.Spec.ID, "", "")
+	if err != nil {
+		logger.Error(err, "Failed to get hardware from Tinkerbell")
+
+		return ctrl.Result{}, fmt.Errorf("failed to get hardware from Tinkerbell: %w", err)
 	}
 
-	id, ok := h.Annotations[tinkv1alpha1.HardwareIDAnnotation]
-	if !ok {
-		// TODO: figure out how to lookup a hardware without an ID
-		logger.Error(common.ErrNotImplemented, "Unable to delete a hardware without having recorded the ID")
-
-		return ctrl.Result{}, common.ErrNotImplemented
-	}
-
-	hardwareRequest := &hardware.DeleteRequest{
-		Id: id,
-	}
-
-	_, err := r.HardwareClient.Delete(ctx, hardwareRequest)
-	// TODO: Tinkerbell should return some type of status that is easier to handle
-	// than parsing for this specific error message.
-	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
-		logger.Error(err, "Failed to delete hardware from Tinkerbell")
-
-		return ctrl.Result{}, fmt.Errorf("failed to delete hardware from Tinkerbell: %w", err)
-	}
-
-	controllerutil.RemoveFinalizer(h, tinkv1alpha1.HardwareFinalizer)
-
-	if err := r.Client.Patch(ctx, h, patch); err != nil {
-		logger.Error(err, "Failed to patch hardware")
-
-		return ctrl.Result{}, fmt.Errorf("failed to patch hardware: %w", err)
-	}
+	logger.Info("Found hardware in tinkerbell", "tinkHardware", tinkHardware)
 
 	return ctrl.Result{}, nil
 }

@@ -18,8 +18,10 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/tinkerbell/tink/protos/hardware"
 	"google.golang.org/grpc"
 )
@@ -32,6 +34,32 @@ type Hardware struct {
 // NewHardwareClient returns a Hardware client.
 func NewHardwareClient(client hardware.HardwareServiceClient) Hardware {
 	return Hardware{client: client}
+}
+
+// Create Tinkerbell Hardware.
+func (t *Hardware) Create(ctx context.Context, h *hardware.Hardware) error {
+	if h == nil {
+		return errors.New("hardware should not be nil")
+	}
+
+	if h.GetId() == "" {
+		h.Id = uuid.New().String()
+	}
+
+	if _, err := t.client.Push(ctx, &hardware.PushRequest{Data: h}); err != nil {
+		return fmt.Errorf("failed to create hardware in Tinkerbell: %w", err)
+	}
+
+	return nil
+}
+
+// Update Tinkerbell Hardware.
+func (t *Hardware) Update(ctx context.Context, h *hardware.Hardware) error {
+	if _, err := t.client.Push(ctx, &hardware.PushRequest{Data: h}); err != nil {
+		return fmt.Errorf("failed to update template in Tinkerbell: %w", err)
+	}
+
+	return nil
 }
 
 // Get returns a Tinkerbell Hardware.
@@ -54,7 +82,7 @@ func (t *Hardware) Get(ctx context.Context, id, ip, mac string) (*hardware.Hardw
 
 	tinkHardware, err := method(ctx, req)
 	if err != nil {
-		if err.Error() == sqlErrorString {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
 			return nil, fmt.Errorf("hardware %w", ErrNotFound)
 		}
 
@@ -67,7 +95,7 @@ func (t *Hardware) Get(ctx context.Context, id, ip, mac string) (*hardware.Hardw
 // Delete a Tinkerbell Hardware.
 func (t *Hardware) Delete(ctx context.Context, id string) error {
 	if _, err := t.client.Delete(ctx, &hardware.DeleteRequest{Id: id}); err != nil {
-		if err.Error() == sqlErrorString {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
 			return fmt.Errorf("hardware %w", ErrNotFound)
 		}
 

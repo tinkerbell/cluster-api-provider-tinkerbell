@@ -19,9 +19,12 @@ package fake
 
 import (
 	"context"
+	"errors"
 
+	"github.com/google/uuid"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
 	"github.com/tinkerbell/tink/protos/hardware"
+	"google.golang.org/protobuf/proto"
 )
 
 // Hardware is a fake client for Tinkerbell Hardwares.
@@ -33,18 +36,65 @@ type Hardware struct {
 func NewFakeHardwareClient(objs ...*hardware.Hardware) *Hardware {
 	f := &Hardware{Objs: map[string]*hardware.Hardware{}}
 
-	for i, obj := range objs {
-		f.Objs[obj.GetId()] = objs[i]
+	for _, obj := range objs {
+		if obj.GetId() == "" {
+			obj.Id = uuid.New().String()
+		}
+
+		f.Objs[obj.Id] = proto.Clone(obj).(*hardware.Hardware)
 	}
 
 	return f
 }
 
+// Create creates a new Hardware.
+func (f *Hardware) Create(ctx context.Context, in *hardware.Hardware) error {
+	if in.GetId() == "" {
+		in.Id = uuid.New().String()
+	}
+
+	if _, ok := f.Objs[in.Id]; ok {
+		return errors.New("duplicate")
+	}
+
+	f.Objs[in.Id] = proto.Clone(in).(*hardware.Hardware)
+
+	return nil
+}
+
+// Update Hardware in Tinkerbell.
+func (f *Hardware) Update(ctx context.Context, in *hardware.Hardware) error {
+	if _, ok := f.Objs[in.Id]; ok {
+		f.Objs[in.Id] = proto.Clone(in).(*hardware.Hardware)
+
+		return nil
+	}
+
+	return errors.New("nobody home")
+}
+
 // Get gets a Hardware from Tinkerbell.
-func (f *Hardware) Get(ctx context.Context, id, mac, ip string) (*hardware.Hardware, error) {
-	// TODO: need to implement fake ip and mac lookups
-	if _, ok := f.Objs[id]; ok {
-		return f.Objs[id], nil
+func (f *Hardware) Get(ctx context.Context, id, ip, mac string) (*hardware.Hardware, error) {
+	switch {
+	case id != "":
+		if _, ok := f.Objs[id]; ok {
+			return proto.Clone(f.Objs[id]).(*hardware.Hardware), nil
+		}
+	default:
+		for _, hw := range f.Objs {
+			for _, i := range hw.GetNetwork().GetInterfaces() {
+				switch {
+				case mac != "":
+					if i.GetDhcp().GetMac() == mac {
+						return proto.Clone(hw).(*hardware.Hardware), nil
+					}
+				case ip != "":
+					if i.GetDhcp().GetIp().Address == ip {
+						return proto.Clone(hw).(*hardware.Hardware), nil
+					}
+				}
+			}
+		}
 	}
 
 	return nil, client.ErrNotFound

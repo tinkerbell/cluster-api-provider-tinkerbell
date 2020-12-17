@@ -19,26 +19,32 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
 	"github.com/tinkerbell/tink/protos/workflow"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+type workflowClient interface {
+	Get(ctx context.Context, id string) (*workflow.Workflow, error)
+	Create(ctx context.Context, templateID, hardwareID string) (string, error)
+	Delete(ctx context.Context, id string) error
+}
+
 // WorkflowReconciler implements Reconciler interface by managing Tinkerbell workflows.
 type WorkflowReconciler struct {
 	client.Client
-	WorkflowClient workflow.WorkflowServiceClient
+	WorkflowClient workflowClient
 	Log            logr.Logger
-	Recorder       record.EventRecorder
 	Scheme         *runtime.Scheme
 }
 
@@ -69,8 +75,7 @@ func (r *WorkflowReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Ensure that we add the finalizer to the resource
-	err := common.EnsureFinalizer(ctx, r.Client, logger, workflow, tinkv1alpha1.WorkflowFinalizer)
-	if err != nil {
+	if err := common.EnsureFinalizer(ctx, r.Client, logger, workflow, tinkv1alpha1.WorkflowFinalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer on workflow: %w", err)
 	}
 
@@ -79,16 +84,80 @@ func (r *WorkflowReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return r.reconcileDelete(ctx, workflow)
 	}
 
-	return r.reconcileNormal(workflow)
+	return r.reconcileNormal(ctx, workflow)
 }
 
-func (r *WorkflowReconciler) reconcileNormal(workflow *tinkv1alpha1.Workflow) (ctrl.Result, error) {
-	logger := r.Log.WithValues("workflow", workflow.Name)
-	err := common.ErrNotImplemented
+func (r *WorkflowReconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
+	logger := r.Log.WithValues("workflow", w.Name)
 
-	logger.Error(err, "Not yet implemented")
+	var workflowID string
 
-	return ctrl.Result{}, err
+	tinkWorkflow, err := r.getWorkflow(ctx, w)
+
+	switch {
+	case errors.Is(err, tinkclient.ErrNotFound):
+		id, err := r.createWorkflow(ctx, w)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		workflowID = id
+	case err != nil:
+		return ctrl.Result{}, err
+
+	default:
+		workflowID = tinkWorkflow.Id
+	}
+
+	if err := common.EnsureAnnotation(ctx, r.Client, logger, w, tinkv1alpha1.WorkflowIDAnnotation,
+		workflowID); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to ensure id annotation on workflow: %w", err)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *WorkflowReconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (string, error) {
+	logger := r.Log.WithValues("workflow", w.Name)
+
+	hw := &tinkv1alpha1.Hardware{}
+	hwKey := client.ObjectKey{Name: w.Spec.HardwareRef}
+
+	if err := r.Client.Get(ctx, hwKey, hw); err != nil {
+		logger.Error(err, "Failed to get hardware")
+
+		return "", fmt.Errorf("failed to get hardware: %w", err)
+	}
+
+	t := &tinkv1alpha1.Template{}
+	tKey := client.ObjectKey{Name: w.Spec.TemplateRef}
+
+	if err := r.Client.Get(ctx, tKey, t); err != nil {
+		logger.Error(err, "Failed to get template")
+
+		return "", fmt.Errorf("failed to get template: %w", err)
+	}
+
+	id, err := r.WorkflowClient.Create(
+		ctx, t.GetObjectMeta().GetAnnotations()[tinkv1alpha1.TemplateIDAnnotation],
+		hw.Spec.ID,
+	)
+	if err != nil {
+		logger.Error(err, "Failed to create workflow")
+
+		return "", fmt.Errorf("failed to create workflow: %w", err)
+	}
+
+	return id, nil
+}
+
+func (r *WorkflowReconciler) getWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (*workflow.Workflow, error) {
+	annotations := w.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+
+	return r.WorkflowClient.Get(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation])
 }
 
 func (r *WorkflowReconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
@@ -97,29 +166,19 @@ func (r *WorkflowReconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha
 
 	logger := r.Log.WithValues("workflow", w.Name)
 
-	if w.Annotations == nil {
-		w.Annotations = map[string]string{}
+	annotations := w.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
 	}
 
-	id, ok := w.Annotations[tinkv1alpha1.WorkflowIDAnnotation]
-	if !ok {
-		// TODO: figure out how to lookup a workflow without an ID
-		logger.Error(common.ErrNotImplemented, "Unable to delete a workflow without having recorded the ID")
+	// If we've recorded an ID for the Workflow, then we should delete it
+	if id, ok := annotations[tinkv1alpha1.WorkflowIDAnnotation]; ok {
+		err := r.WorkflowClient.Delete(ctx, id)
+		if err != nil && !errors.Is(err, tinkclient.ErrNotFound) {
+			logger.Error(err, "Failed to delete workflow from Tinkerbell")
 
-		return ctrl.Result{}, common.ErrNotImplemented
-	}
-
-	workflowRequest := &workflow.GetRequest{
-		Id: id,
-	}
-
-	_, err := r.WorkflowClient.DeleteWorkflow(ctx, workflowRequest)
-	// TODO: Tinkerbell should return some type of status that is easier to handle
-	// than parsing for this specific error message.
-	if err != nil && err.Error() != "rpc error: code = Unknown desc = sql: no rows in result set" {
-		logger.Error(err, "Failed to delete workflow from Tinkerbell")
-
-		return ctrl.Result{}, fmt.Errorf("failed to delete workflow from Tinkerbell: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to delete workflow from Tinkerbell: %w", err)
+		}
 	}
 
 	controllerutil.RemoveFinalizer(w, tinkv1alpha1.WorkflowFinalizer)

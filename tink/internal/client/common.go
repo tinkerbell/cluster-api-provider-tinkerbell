@@ -25,5 +25,6 @@ import (
 var ErrNotFound = errors.New("resource not found")
 
 // TODO: Tinkerbell should return some type of status that is easier to handle
-// than parsing for this specific error message.
+// than parsing for these specific error message.
 const sqlErrorString = "rpc error: code = Unknown desc = sql: no rows in result set"
+const sqlErrorStringAlt = "rpc error: code = Unknown desc = SELECT: sql: no rows in result set"

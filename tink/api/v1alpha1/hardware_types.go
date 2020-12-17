@@ -20,16 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// HardwareIDAnnotation is used by the controller to store the
-	// ID assigned to the hardware by Tinkerbell.
-	HardwareIDAnnotation = "hardware.tinkerbell.org/id"
-
-	HardwareFinalizer = "hardware.tinkerbell.org"
-)
-
 // HardwareSpec defines the desired state of Hardware.
 type HardwareSpec struct {
+	// ID is the ID of the hardware in Tinkerbell
+	// +kubebuilder:validation:MinLength=1
+	ID string `json:"id"`
 }
 
 // HardwareStatus defines the observed state of Hardware.

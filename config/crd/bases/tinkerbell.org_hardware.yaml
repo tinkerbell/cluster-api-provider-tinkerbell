@@ -33,6 +33,13 @@ spec:
             type: object
           spec:
             description: HardwareSpec defines the desired state of Hardware.
+            properties:
+              id:
+                description: ID is the ID of the hardware in Tinkerbell
+                minLength: 1
+                type: string
+            required:
+            - id
             type: object
           status:
             description: HardwareStatus defines the observed state of Hardware.

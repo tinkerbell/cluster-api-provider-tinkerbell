@@ -21,8 +21,10 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
 	"github.com/tinkerbell/tink/protos/template"
+	"google.golang.org/protobuf/proto"
 )
 
 // Template is a fake client for Tinkerbell Templates.
@@ -34,14 +36,12 @@ type Template struct {
 func NewFakeTemplateClient(objs ...*template.WorkflowTemplate) *Template {
 	f := &Template{Objs: map[string]*template.WorkflowTemplate{}}
 
-	for i, obj := range objs {
-		id := obj.GetId()
-
-		if id == "" {
-			obj.Id = obj.GetName()
+	for _, obj := range objs {
+		if obj.GetId() == "" {
+			obj.Id = uuid.New().String()
 		}
 
-		f.Objs[id] = objs[i]
+		f.Objs[obj.Id] = proto.Clone(obj).(*template.WorkflowTemplate)
 	}
 
 	return f
@@ -49,35 +49,32 @@ func NewFakeTemplateClient(objs ...*template.WorkflowTemplate) *Template {
 
 // Create creates a new Template.
 func (f *Template) Create(ctx context.Context, in *template.WorkflowTemplate) error {
-	id := in.GetId()
-
-	if id == "" {
-		id = in.GetName()
+	if in.GetId() == "" {
+		in.Id = uuid.New().String()
 	}
 
-	if _, ok := f.Objs[id]; ok {
+	if _, ok := f.Objs[in.Id]; ok {
 		return errors.New("duplicate")
 	}
 
-	f.Objs[id] = &template.WorkflowTemplate{
-		Id:   id,
-		Name: in.GetName(),
-		Data: in.GetData(),
-	}
-
-	in.Id = id
+	f.Objs[in.Id] = proto.Clone(in).(*template.WorkflowTemplate)
 
 	return nil
 }
 
 // Get gets a Template from Tinkerbell.
 func (f *Template) Get(ctx context.Context, id, name string) (*template.WorkflowTemplate, error) {
-	if id == "" {
-		id = name
-	}
-
-	if _, ok := f.Objs[id]; ok {
-		return f.Objs[id], nil
+	switch {
+	case id != "":
+		if _, ok := f.Objs[id]; ok {
+			return proto.Clone(f.Objs[id]).(*template.WorkflowTemplate), nil
+		}
+	default:
+		for _, obj := range f.Objs {
+			if obj.GetName() == name {
+				return proto.Clone(obj).(*template.WorkflowTemplate), nil
+			}
+		}
 	}
 
 	return nil, client.ErrNotFound
@@ -96,14 +93,8 @@ func (f *Template) Delete(ctx context.Context, id string) error {
 
 // Update updates a Template from Tinkerbell.
 func (f *Template) Update(ctx context.Context, in *template.WorkflowTemplate) error {
-	id := in.GetId()
-
-	if id == "" {
-		in.Id = in.GetName()
-	}
-
-	if _, ok := f.Objs[id]; ok {
-		f.Objs[id].Data = in.GetData()
+	if _, ok := f.Objs[in.Id]; ok {
+		f.Objs[in.Id] = proto.Clone(in).(*template.WorkflowTemplate)
 
 		return nil
 	}

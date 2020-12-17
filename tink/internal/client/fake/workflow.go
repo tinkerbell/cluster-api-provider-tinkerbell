@@ -23,32 +23,43 @@ import (
 	"github.com/google/uuid"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
 	"github.com/tinkerbell/tink/protos/workflow"
+	"google.golang.org/protobuf/proto"
 )
 
 // Workflow is a fake client for Tinkerbell Workflows.
 type Workflow struct {
-	Objs map[string]*workflow.Workflow
+	Objs           map[string]*workflow.Workflow
+	hwClient       Hardware
+	templateClient Template
 }
 
 // NewFakeWorkflowClient returns a new fake client.
-func NewFakeWorkflowClient(objs ...*workflow.Workflow) *Workflow {
-	f := &Workflow{Objs: map[string]*workflow.Workflow{}}
+func NewFakeWorkflowClient(hwClient Hardware, templateClient Template, objs ...*workflow.Workflow) *Workflow {
+	f := &Workflow{
+		Objs:           map[string]*workflow.Workflow{},
+		hwClient:       hwClient,
+		templateClient: templateClient,
+	}
 
-	for i, obj := range objs {
-		f.Objs[obj.GetId()] = objs[i]
+	for _, obj := range objs {
+		if obj.GetId() == "" {
+			obj.Id = uuid.New().String()
+		}
+
+		f.Objs[obj.Id] = proto.Clone(obj).(*workflow.Workflow)
 	}
 
 	return f
 }
 
 // Create creates a new Workflow.
-func (f *Workflow) Create(ctx context.Context, template, hardware string) (string, error) {
+func (f *Workflow) Create(ctx context.Context, templateID, hardwareID string) (string, error) {
 	id := uuid.New().String()
 
 	f.Objs[id] = &workflow.Workflow{
 		Id:       id,
-		Template: template,
-		Hardware: hardware,
+		Template: templateID,
+		Hardware: hardwareID,
 		// TODO: populate fake Data
 	}
 
@@ -58,7 +69,7 @@ func (f *Workflow) Create(ctx context.Context, template, hardware string) (strin
 // Get gets a Workflow from Tinkerbell.
 func (f *Workflow) Get(ctx context.Context, id string) (*workflow.Workflow, error) {
 	if _, ok := f.Objs[id]; ok {
-		return f.Objs[id], nil
+		return proto.Clone(f.Objs[id]).(*workflow.Workflow), nil
 	}
 
 	return nil, client.ErrNotFound

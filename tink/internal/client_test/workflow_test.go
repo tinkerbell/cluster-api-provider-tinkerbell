@@ -30,7 +30,8 @@ func TestWorkflowLifecycle(t *testing.T) {
 	ctx := context.Background()
 
 	templateClient := client.NewTemplateClient(realTemplateClient(t))
-	_ = realWorkflowClient(t)
+	hardwareClient := client.NewHardwareClient(realHardwareClient(t))
+	workflowClient := client.NewWorkflowClient(realWorkflowClient(t), hardwareClient)
 
 	// Create a template for the workflow to use
 	testTemplate := generateTemplate(rand.String(12), helloWorldTemplate)
@@ -38,17 +39,37 @@ func TestWorkflowLifecycle(t *testing.T) {
 
 	// Attempt to cleanup even if later assertions fail
 	defer func() {
-		// Ensure that we can delete the template by ID
 		g.Expect(templateClient.Delete(ctx, testTemplate.Id))
 	}()
 
-	// TODO: Create hardware for the workflow to use
+	// Create hardware for the workflow to use
+	testHardware, err := generateHardware(3)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(hardwareClient.Create(ctx, testHardware)).To(Succeed())
 
-	// TODO: Create the workflow
+	// Attempt to cleanup even if later assertions fail
+	defer func() {
+		g.Expect(hardwareClient.Delete(ctx, testHardware.Id))
+	}()
 
-	// TODO: Ensure we can get the workflow we just created by ID
-	// and that it has the values we expect
+	// Create the workflow
+	workflowID, err := workflowClient.Create(ctx, testTemplate.Id, testHardware.Id)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(workflowID).NotTo(BeEmpty())
 
-	// TODO: Delete the workflow
-	t.Error("not ready yet")
+	// Attempt to cleanup even if later assertions fail
+	defer func() {
+		g.Expect(workflowClient.Delete(ctx, workflowID))
+	}()
+
+	// Get the workflow and verify the values are what we expect
+	res, err := workflowClient.Get(ctx, workflowID)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(res).NotTo(BeNil())
+	g.Expect(res.GetId()).To(BeEquivalentTo(workflowID))
+	g.Expect(res.GetTemplate()).To(BeEquivalentTo(testTemplate.Id))
+
+	expectedHardwareJSON, err := client.HardwareToJSON(testHardware)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(res.GetHardware()).To(MatchJSON(expectedHardwareJSON))
 }

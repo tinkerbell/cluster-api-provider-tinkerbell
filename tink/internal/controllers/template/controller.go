@@ -35,17 +35,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-type TemplateClient interface {
+type templateClient interface {
 	Get(ctx context.Context, id, name string) (*template.WorkflowTemplate, error)
 	Create(ctx context.Context, template *template.WorkflowTemplate) error
 	Update(ctx context.Context, template *template.WorkflowTemplate) error
-	Delete(ctx context.Context, id, name string) error
+	Delete(ctx context.Context, id string) error
 }
 
 // Reconciler implements the Reconciler interface for managing Tinkerbell templates.
 type Reconciler struct {
 	client.Client
-	TemplateClient TemplateClient
+	TemplateClient templateClient
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 }
@@ -177,14 +177,14 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha1.Templa
 		annotations = map[string]string{}
 	}
 
-	err := r.TemplateClient.Delete(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation], t.Name)
+	// If we've recorded an ID for the Template, then we should delete it
+	if id, ok := annotations[tinkv1alpha1.TemplateIDAnnotation]; ok {
+		err := r.TemplateClient.Delete(ctx, id)
+		if err != nil && !errors.Is(err, tinkclient.ErrNotFound) {
+			logger.Error(err, "Failed to delete template from Tinkerbell")
 
-	// TODO: Tinkerbell should return some type of status that is easier to handle
-	// than parsing for this specific error message.
-	if err != nil && !errors.Is(err, tinkclient.ErrNotFound) {
-		logger.Error(err, "Failed to delete template from Tinkerbell")
-
-		return ctrl.Result{}, fmt.Errorf("failed to delete template from Tinkerbell: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to delete template from Tinkerbell: %w", err)
+		}
 	}
 
 	controllerutil.RemoveFinalizer(t, tinkv1alpha1.TemplateFinalizer)

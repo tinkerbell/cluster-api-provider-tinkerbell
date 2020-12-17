@@ -44,7 +44,7 @@ func (t *Template) Get(ctx context.Context, id, name string) (*template.Workflow
 
 	tinkTemplate, err := t.client.GetTemplate(ctx, req)
 	if err != nil {
-		if err.Error() == sqlErrorString {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
 			return nil, fmt.Errorf("template %w", ErrNotFound)
 		}
 
@@ -81,7 +81,7 @@ func (t *Template) Delete(ctx context.Context, id string) error {
 		GetBy: &template.GetRequest_Id{Id: id},
 	}
 	if _, err := t.client.DeleteTemplate(ctx, req); err != nil {
-		if err.Error() == sqlErrorString {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
 			return fmt.Errorf("template %w", ErrNotFound)
 		}
 

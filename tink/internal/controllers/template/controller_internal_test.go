@@ -60,24 +60,6 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "successful delete by name",
-			in: &tinkv1alpha1.Template{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test",
-					DeletionTimestamp: &now,
-					Finalizers:        []string{tinkv1alpha1.TemplateFinalizer},
-				},
-			},
-			tinkObjs: []*template.WorkflowTemplate{
-				{
-					Id:   "test",
-					Name: "test",
-				},
-			},
-			want:    ctrl.Result{},
-			wantErr: false,
-		},
-		{
 			name: "successful delete by id",
 			in: &tinkv1alpha1.Template{
 				ObjectMeta: metav1.ObjectMeta{
