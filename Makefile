@@ -270,17 +270,6 @@ deploy: $(KUSTOMIZE) crds
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/release | kubectl apply -f -
 
-# Generate manifests e.g. CRD, RBAC etc.
-crds: $(CONTROLLER_GEN)
-	$(CONTROLLER_GEN) \
-		paths=./api/... \
-		paths=./controllers/... \
-		crd:crdVersions=v1 \
-		rbac:roleName=manager-role \
-		output:crd:dir=./config/crd/bases \
-		output:webhook:dir=./config/webhook \
-		webhook
-
 # Run go fmt against code
 fmt:
 	go fmt ./...
@@ -289,9 +278,26 @@ fmt:
 vet:
 	go vet ./...
 
-# Generate code
-generate: $(CONTROLLER_GEN)
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+.PHONY: generate
+generate: ## Generate code, manifests etc.
+	$(MAKE) generate-go
+	$(MAKE) generate-manifests
+
+.PHONY: generate-go
+generate-go: $(CONTROLLER_GEN) # Generate Go code.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate/boilerplate.generatego.txt" paths="./..."
+
+.PHONY: generate-manifests
+generate-manifests: $(CONTROLLER_GEN) # Generate manifests e.g. CRD, RBAC etc.
+	$(CONTROLLER_GEN) \
+		paths=./api/... \
+		paths=./controllers/... \
+		crd:crdVersions=v1 \
+		rbac:roleName=manager-role \
+		output:crd:dir=./config/crd/bases \
+		output:webhook:dir=./config/webhook \
+		webhook
 
 ## make the images for all supported ARCH
 image-all: $(addprefix sub-image-, $(ARCHES))
@@ -303,7 +309,7 @@ image: test
 	docker buildx build --load -t $(IMG)-$(ARCH) -f Dockerfile --build-arg ARCH=$(ARCH) --platform $(OS)/$(ARCH) .
 	echo "Done. image is at $(IMG)-$(ARCH)"
 
-  # Targets used when cross building.
+# Targets used when cross building.
 .PHONY: register
 # Enable binfmt adding support for miscellaneous binary formats.
 # This is only needed when running non-native binaries.
@@ -422,3 +428,25 @@ modules: ## Runs go mod to ensure modules are up to date.
 .PHONY: lint
 lint:
 	golangci-lint run
+
+##@ Verify
+
+.PHONY: verify verify-boilerplate verify-golangci-lint verify-go-mod verify-gen
+
+verify: verify-boilerplate verify-golangci-lint verify-go-mod verify-gen ## Runs verification scripts to ensure correct execution
+
+verify-boilerplate: ## Runs the file header check
+	./hack/verify-boilerplate.sh
+
+verify-go-mod: ## Runs the go module linter
+	./hack/verify-go-mod.sh
+
+verify-golangci-lint: ## Runs all golang linters
+	./hack/verify-golangci-lint.sh
+
+.PHONY: verify-gen
+verify-gen: generate
+	@if !(git diff --quiet HEAD); then \
+		echo "Generated files are out of date, run 'make generate' and commit generated changes."; exit 1; \
+	fi
+
