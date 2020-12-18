@@ -21,12 +21,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
-	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
-	tinktemplate "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/template"
-	tinkworkflow "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/workflow"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
+	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkclient "github.com/tinkerbell/tink/client"
 	tinkevents "github.com/tinkerbell/tink/protos/events"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,13 +30,17 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"k8s.io/klog/klogr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
+	tinktemplate "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/template"
+	tinkworkflow "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/workflow"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -219,20 +219,16 @@ func main() {
 		}
 
 		if err = (&controllers.TinkerbellClusterReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
-			Recorder: mgr.GetEventRecorderFor("tinkerbellcluster-controller"),
-			Scheme:   mgr.GetScheme(),
+			Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
+			Client: mgr.GetClient(),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
 			os.Exit(1)
 		}
 
 		if err = (&controllers.TinkerbellMachineReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
-			Scheme:   mgr.GetScheme(),
-			Recorder: mgr.GetEventRecorderFor("tinkerbellmachine-controller"),
+			Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
+			Client: mgr.GetClient(),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "TinkerbellMachine")
 			os.Exit(1)

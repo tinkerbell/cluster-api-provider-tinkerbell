@@ -17,10 +17,11 @@ limitations under the License.
 package controllers
 
 import (
-	"github.com/go-logr/logr"
+	"context"
+	"fmt"
+	"time"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"github.com/go-logr/logr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,10 +34,8 @@ import (
 
 // TinkerbellMachineReconciler implements Reconciler interface by managing Tinkerbell machines.
 type TinkerbellMachineReconciler struct {
-	client.Client
-	Log      logr.Logger
-	Recorder record.EventRecorder
-	Scheme   *runtime.Scheme
+	Log    logr.Logger
+	Client client.Client
 }
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines,verbs=get;list;watch;create;update;patch;delete
@@ -45,12 +44,36 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets;,verbs=get;list;watch
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
-func (r *TinkerbellMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
-	return ctrl.Result{}, nil
+func (tmr *TinkerbellMachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	ctx := context.Background()
+
+	bmrc, result, err := tmr.newReconcileContext(ctx, req.NamespacedName)
+	if err != nil {
+		return result, fmt.Errorf("creating reconciliation context: %w", err)
+	}
+
+	if bmrc == nil {
+		return result, nil
+	}
+
+	if bmrc.MachineScheduledForDeletion() {
+		return ctrl.Result{}, bmrc.DeleteMachineWithDependencies()
+	}
+
+	mrc, err := bmrc.IntoMachineReconcileContext()
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("building machine reconcile context: %w", err)
+	}
+
+	if mrc == nil {
+		return defaultRequeueResult(), nil
+	}
+
+	return ctrl.Result{}, mrc.Reconcile()
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *TinkerbellMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (tmr *TinkerbellMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrastructurev1alpha3.TinkerbellMachine{}).
 		Watches(
@@ -59,5 +82,15 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				ToRequests: util.MachineToInfrastructureMapFunc(infrastructurev1alpha3.GroupVersion.WithKind("TinkerbellMachine")),
 			},
 		).
-		Complete(r)
+		Complete(tmr)
+}
+
+// defaultRequeueResult returns requeue result with default requeue time defined, as Go does not support const structs.
+func defaultRequeueResult() ctrl.Result {
+	return ctrl.Result{
+		// TODO: Why 5 seconds is a good value? Usually it takes few seconds for other controllers to converge
+		// and prepare dependencies for Machine and Cluster objects, so 5 seconds wait time should provide good
+		// balance, as sync time might be e.g. 10 minutes.
+		RequeueAfter: 5 * time.Second, //nolint:gomnd
+	}
 }
