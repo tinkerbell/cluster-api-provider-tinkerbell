@@ -213,20 +213,16 @@ func main() {
 	}
 
 	if err = (&controllers.TinkerbellClusterReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
-		Recorder: mgr.GetEventRecorderFor("tinkerbellcluster-controller"),
-		Scheme:   mgr.GetScheme(),
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
 		os.Exit(1)
 	}
 
 	if err = (&controllers.TinkerbellMachineReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("tinkerbellmachine-controller"),
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellMachine")
 		os.Exit(1)
