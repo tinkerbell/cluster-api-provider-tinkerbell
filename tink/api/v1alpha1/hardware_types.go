@@ -45,6 +45,11 @@ type Hardware struct {
 	Status HardwareStatus `json:"status,omitempty"`
 }
 
+// TinkID returns the Tinkerbell ID associated with this Hardware.
+func (h *Hardware) TinkID() string {
+	return h.Spec.ID
+}
+
 // +kubebuilder:object:root=true
 
 // HardwareList contains a list of Hardware.

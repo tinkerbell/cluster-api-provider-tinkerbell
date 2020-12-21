@@ -32,8 +32,8 @@ type Hardware struct {
 }
 
 // NewHardwareClient returns a Hardware client.
-func NewHardwareClient(client hardware.HardwareServiceClient) Hardware {
-	return Hardware{client: client}
+func NewHardwareClient(client hardware.HardwareServiceClient) *Hardware {
+	return &Hardware{client: client}
 }
 
 // Create Tinkerbell Hardware.

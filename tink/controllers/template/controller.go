@@ -24,8 +24,8 @@ import (
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
+	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/common"
 	"github.com/tinkerbell/tink/protos/template"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +33,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type templateClient interface {
@@ -51,9 +54,13 @@ type Reconciler struct {
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, templateChan <-chan event.GenericEvent) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tinkv1alpha1.Template{}).
+		Watches(
+			&source.Channel{Source: templateChan},
+			&handler.EnqueueRequestForObject{},
+		).
 		Complete(r)
 }
 

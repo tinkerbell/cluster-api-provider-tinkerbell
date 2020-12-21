@@ -28,12 +28,12 @@ import (
 // Workflow client for Tinkerbell.
 type Workflow struct {
 	client         workflow.WorkflowServiceClient
-	hardwareClient Hardware
+	hardwareClient *Hardware
 }
 
 // NewWorkflowClient returns a Workflow client.
-func NewWorkflowClient(client workflow.WorkflowServiceClient, hClient Hardware) Workflow {
-	return Workflow{client: client, hardwareClient: hClient}
+func NewWorkflowClient(client workflow.WorkflowServiceClient, hClient *Hardware) *Workflow {
+	return &Workflow{client: client, hardwareClient: hClient}
 }
 
 // Get returns a Tinkerbell Workflow.

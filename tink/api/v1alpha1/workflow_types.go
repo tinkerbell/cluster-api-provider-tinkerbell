@@ -63,6 +63,16 @@ type Workflow struct {
 	Status WorkflowStatus `json:"status,omitempty"`
 }
 
+// TinkID returns the Tinkerbell ID associated with this Workflow.
+func (w *Workflow) TinkID() string {
+	annotations := w.GetAnnotations()
+	if len(annotations) == 0 {
+		return ""
+	}
+
+	return annotations[WorkflowIDAnnotation]
+}
+
 // +kubebuilder:object:root=true
 
 // WorkflowList contains a list of Workflows.

@@ -29,8 +29,8 @@ type Template struct {
 }
 
 // NewTemplateClient returns a Template client.
-func NewTemplateClient(client template.TemplateServiceClient) Template {
-	return Template{client: client}
+func NewTemplateClient(client template.TemplateServiceClient) *Template {
+	return &Template{client: client}
 }
 
 // Get returns a Tinkerbell Template.

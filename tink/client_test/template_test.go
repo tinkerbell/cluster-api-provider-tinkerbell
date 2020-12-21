@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 

@@ -22,7 +22,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"

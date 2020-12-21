@@ -28,6 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type hardwareClient interface {
@@ -46,9 +49,13 @@ type Reconciler struct {
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, hwChan <-chan event.GenericEvent) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tinkv1alpha1.Hardware{}).
+		Watches(
+			&source.Channel{Source: hwChan},
+			&handler.EnqueueRequestForObject{},
+		).
 		Complete(r)
 }
 

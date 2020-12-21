@@ -24,14 +24,17 @@ import (
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/client"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/internal/controllers/common"
+	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/common"
 	"github.com/tinkerbell/tink/protos/workflow"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type workflowClient interface {
@@ -40,8 +43,8 @@ type workflowClient interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// WorkflowReconciler implements Reconciler interface by managing Tinkerbell workflows.
-type WorkflowReconciler struct {
+// Reconciler implements Reconciler interface by managing Tinkerbell workflows.
+type Reconciler struct {
 	client.Client
 	WorkflowClient workflowClient
 	Log            logr.Logger
@@ -49,16 +52,20 @@ type WorkflowReconciler struct {
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *WorkflowReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, workflowChan <-chan event.GenericEvent) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tinkv1alpha1.Workflow{}).
+		Watches(
+			&source.Channel{Source: workflowChan},
+			&handler.EnqueueRequestForObject{},
+		).
 		Complete(r)
 }
 
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=workflows;workflows/status,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile ensures state of Tinkerbell workflows.
-func (r *WorkflowReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	logger := r.Log.WithValues("workflow", req.NamespacedName.Name)
 
@@ -87,7 +94,7 @@ func (r *WorkflowReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return r.reconcileNormal(ctx, workflow)
 }
 
-func (r *WorkflowReconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
+func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
 	logger := r.Log.WithValues("workflow", w.Name)
 
 	var workflowID string
@@ -117,7 +124,7 @@ func (r *WorkflowReconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha
 	return ctrl.Result{}, nil
 }
 
-func (r *WorkflowReconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (string, error) {
+func (r *Reconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (string, error) {
 	logger := r.Log.WithValues("workflow", w.Name)
 
 	hw := &tinkv1alpha1.Hardware{}
@@ -151,7 +158,7 @@ func (r *WorkflowReconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1
 	return id, nil
 }
 
-func (r *WorkflowReconciler) getWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (*workflow.Workflow, error) {
+func (r *Reconciler) getWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (*workflow.Workflow, error) {
 	annotations := w.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
@@ -160,7 +167,7 @@ func (r *WorkflowReconciler) getWorkflow(ctx context.Context, w *tinkv1alpha1.Wo
 	return r.WorkflowClient.Get(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation])
 }
 
-func (r *WorkflowReconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
+func (r *Reconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
 	// Create a patch for use later
 	patch := client.MergeFrom(w.DeepCopy())
 

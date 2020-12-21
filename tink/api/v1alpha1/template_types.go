@@ -52,6 +52,16 @@ type Template struct {
 	Status TemplateStatus `json:"status,omitempty"`
 }
 
+// TinkID returns the Tinkerbell ID associated with this Template.
+func (t *Template) TinkID() string {
+	annotations := t.GetAnnotations()
+	if len(annotations) == 0 {
+		return ""
+	}
+
+	return annotations[TemplateIDAnnotation]
+}
+
 // +kubebuilder:object:root=true
 
 // TemplateList contains a list of Templates.

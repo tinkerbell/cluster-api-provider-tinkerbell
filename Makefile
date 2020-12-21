@@ -294,7 +294,7 @@ generate-manifests: $(CONTROLLER_GEN) # Generate manifests e.g. CRD, RBAC etc.
 		paths=./api/... \
 		paths=./controllers/... \
 		paths=./tink/api/... \
-		paths=./tink/internal/controllers/... \
+		paths=./tink/controllers/... \
 		crd:crdVersions=v1 \
 		rbac:roleName=manager-role \
 		output:crd:dir=./config/crd/bases \
