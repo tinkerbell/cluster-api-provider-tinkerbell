@@ -122,7 +122,7 @@ func main() {
 		Port:                    webhookPort,
 		EventBroadcaster:        broadcaster,
 		LeaderElection:          enableLeaderElection,
-		LeaderElectionID:        "controller-leader-election-capp",
+		LeaderElectionID:        "controller-leader-election-capt",
 		LeaderElectionNamespace: leaderElectionNamespace,
 		Namespace:               watchNamespace,
 		SyncPeriod:              &syncPeriod,
