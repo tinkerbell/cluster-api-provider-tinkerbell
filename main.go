@@ -16,32 +16,25 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
-	"fmt"
-	"io"
 	"os"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
 	tinktemplate "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/template"
 	tinkworkflow "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/workflow"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
 	tinkclient "github.com/tinkerbell/tink/client"
-	tinkinformers "github.com/tinkerbell/tink/client/informers"
 	tinkevents "github.com/tinkerbell/tink/protos/events"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"k8s.io/klog/klogr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
@@ -168,31 +161,28 @@ func main() {
 		templateChan := make(chan event.GenericEvent)
 		workflowChan := make(chan event.GenericEvent)
 
-		if err := mgr.Add(&tinkEventWatcher{
-			k8sClient:    mgr.GetClient(),
-			eventCh:      hwChan,
-			logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
-			resourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
+		if err := mgr.Add(&sources.TinkEventWatcher{
+			EventCh:      hwChan,
+			Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
+			ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
 		}); err != nil {
 			setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Hardware")
 			os.Exit(1)
 		}
 
-		if err := mgr.Add(&tinkEventWatcher{
-			k8sClient:    mgr.GetClient(),
-			eventCh:      templateChan,
-			logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
-			resourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
+		if err := mgr.Add(&sources.TinkEventWatcher{
+			EventCh:      templateChan,
+			Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
+			ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
 		}); err != nil {
 			setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Template")
 			os.Exit(1)
 		}
 
-		if err := mgr.Add(&tinkEventWatcher{
-			k8sClient:    mgr.GetClient(),
-			eventCh:      workflowChan,
-			logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
-			resourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
+		if err := mgr.Add(&sources.TinkEventWatcher{
+			EventCh:      workflowChan,
+			Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
+			ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
 		}); err != nil {
 			setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Workflow")
 			os.Exit(1)
@@ -270,121 +260,4 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-type tinkEventWatcher struct {
-	k8sClient    ctrlclient.Client
-	eventCh      chan<- event.GenericEvent
-	logger       logr.Logger
-	resourceType tinkevents.ResourceType
-}
-
-func (w *tinkEventWatcher) getHardwareForID(ctx context.Context, id string) (*tinkv1.Hardware, error) {
-	hwList := &tinkv1.HardwareList{}
-	if err := w.k8sClient.List(ctx, hwList); err != nil {
-		return nil, err
-	}
-
-	for i, h := range hwList.Items {
-		if h.TinkID() == id {
-			return &hwList.Items[i], nil
-		}
-	}
-
-	return nil, nil
-}
-
-func (w *tinkEventWatcher) getTemplateForID(ctx context.Context, id string) (*tinkv1.Template, error) {
-	templateList := &tinkv1.TemplateList{}
-	if err := w.k8sClient.List(ctx, templateList); err != nil {
-		return nil, err
-	}
-
-	for i, t := range templateList.Items {
-		if t.TinkID() == id {
-			return &templateList.Items[i], nil
-		}
-	}
-
-	return nil, nil
-}
-
-func (w *tinkEventWatcher) getWorkflowForID(ctx context.Context, id string) (*tinkv1.Workflow, error) {
-	workflowList := &tinkv1.WorkflowList{}
-	if err := w.k8sClient.List(ctx, workflowList); err != nil {
-		return nil, err
-	}
-
-	for i, w := range workflowList.Items {
-		if w.TinkID() == id {
-			return &workflowList.Items[i], nil
-		}
-	}
-
-	return nil, nil
-}
-
-func (w *tinkEventWatcher) generateEventForTinkID(ctx context.Context, id string) error {
-	switch w.resourceType {
-	case tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE:
-		hw, _ := w.getHardwareForID(ctx, id)
-		w.eventCh <- event.GenericEvent{
-			Meta:   hw,
-			Object: hw,
-		}
-	case tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE:
-		template, _ := w.getTemplateForID(ctx, id)
-		w.eventCh <- event.GenericEvent{
-			Meta:   template,
-			Object: template,
-		}
-	case tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW:
-		workflow, _ := w.getWorkflowForID(ctx, id)
-		w.eventCh <- event.GenericEvent{
-			Meta:   workflow,
-			Object: workflow,
-		}
-	default:
-		return fmt.Errorf("unknown resource type: %s", w.resourceType.String())
-	}
-
-	return nil
-}
-
-func (w *tinkEventWatcher) Start(stopCh <-chan struct{}) error {
-	now := time.Now()
-
-	req := &tinkevents.WatchRequest{
-		EventTypes: []tinkevents.EventType{
-			tinkevents.EventType_EVENT_TYPE_CREATED,
-			tinkevents.EventType_EVENT_TYPE_UPDATED,
-			tinkevents.EventType_EVENT_TYPE_DELETED,
-		},
-		ResourceTypes:   []tinkevents.ResourceType{w.resourceType},
-		WatchEventsFrom: timestamppb.New(now),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		<-stopCh
-		cancel()
-	}()
-
-	tinkInformer := tinkinformers.New()
-
-	w.logger.Info("Starting Tinkerbell Informer", "resourceType", w.resourceType.String())
-
-	err := tinkInformer.Start(ctx, req, func(e *tinkevents.Event) error {
-		if err := w.generateEventForTinkID(ctx, e.GetResourceId()); err != nil {
-			return err
-		}
-
-		return nil
-	})
-	if err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-
-	return nil
 }

@@ -47,6 +47,78 @@ spec:
             type: object
           status:
             description: HardwareStatus defines the observed state of Hardware.
+            properties:
+              state:
+                type: string
+              tinkInterfaces:
+                items:
+                  properties:
+                    dhcp:
+                      properties:
+                        arch:
+                          type: string
+                        hostname:
+                          type: string
+                        iface_name:
+                          type: string
+                        ip:
+                          properties:
+                            address:
+                              type: string
+                            family:
+                              format: int64
+                              type: integer
+                            gateway:
+                              type: string
+                            netmask:
+                              type: string
+                          type: object
+                        lease_time:
+                          format: int64
+                          type: integer
+                        mac:
+                          type: string
+                        name_servers:
+                          items:
+                            type: string
+                          type: array
+                        time_servers:
+                          items:
+                            type: string
+                          type: array
+                        uefi:
+                          type: boolean
+                      type: object
+                    netboot:
+                      properties:
+                        allowPXE:
+                          type: boolean
+                        allowWorkflow:
+                          type: boolean
+                        ipxe:
+                          properties:
+                            contents:
+                              type: string
+                            url:
+                              type: string
+                          type: object
+                        osie:
+                          properties:
+                            baseURL:
+                              type: string
+                            initrd:
+                              type: string
+                            kernel:
+                              type: string
+                          type: object
+                      type: object
+                  type: object
+                type: array
+              tinkMetadata:
+                type: string
+              tinkVersion:
+                format: int64
+                type: integer
             type: object
         type: object
     served: true

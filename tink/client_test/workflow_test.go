@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
@@ -34,7 +35,7 @@ func TestWorkflowLifecycle(t *testing.T) {
 	workflowClient := client.NewWorkflowClient(realWorkflowClient(t), hardwareClient)
 
 	// Create a template for the workflow to use
-	testTemplate := generateTemplate(rand.String(12), helloWorldTemplate)
+	testTemplate := testutils.GenerateTemplate(rand.String(12), testutils.HelloWorldTemplate)
 	g.Expect(templateClient.Create(ctx, testTemplate)).To(Succeed())
 
 	// Attempt to cleanup even if later assertions fail
@@ -43,7 +44,7 @@ func TestWorkflowLifecycle(t *testing.T) {
 	}()
 
 	// Create hardware for the workflow to use
-	testHardware, err := generateHardware(3)
+	testHardware, err := testutils.GenerateHardware(3)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(hardwareClient.Create(ctx, testHardware)).To(Succeed())
 

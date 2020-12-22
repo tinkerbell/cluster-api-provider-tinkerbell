@@ -20,7 +20,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type TemplateState string
+
 const (
+	TemplateError = TemplateState("Error")
+	TemplateReady = TemplateState("Ready")
+
 	// TemplateIDAnnotation is used by the controller to store the
 	// ID assigned to the template by Tinkerbell.
 	TemplateIDAnnotation = "template.tinkerbell.org/id"
@@ -36,6 +41,7 @@ type TemplateSpec struct {
 
 // TemplateStatus defines the observed state of Template.
 type TemplateStatus struct {
+	State TemplateState `json:"state,omitempty"`
 }
 
 // +kubebuilder:subresource:status

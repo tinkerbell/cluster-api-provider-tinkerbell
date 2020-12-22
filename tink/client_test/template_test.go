@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
@@ -56,7 +57,7 @@ func TestTemplateLifecycle(t *testing.T) {
 	g.Expect(err).To(MatchError(client.ErrNotFound))
 
 	// Create a template using the hello world template
-	testTemplate := generateTemplate(name, helloWorldTemplate)
+	testTemplate := testutils.GenerateTemplate(name, testutils.HelloWorldTemplate)
 	g.Expect(templateClient.Create(ctx, testTemplate)).To(Succeed())
 
 	// Ensure that the template now has an ID set
@@ -74,7 +75,7 @@ func TestTemplateLifecycle(t *testing.T) {
 	}()
 
 	// Verify that trying to create a template with a duplicate name fails
-	testDuplicateName := generateTemplate(name, sampleTemplate)
+	testDuplicateName := testutils.GenerateTemplate(name, sampleTemplate)
 	g.Expect(templateClient.Create(ctx, testDuplicateName)).NotTo(Succeed())
 
 	// Ensure we can get the template we just created by ID
@@ -84,7 +85,7 @@ func TestTemplateLifecycle(t *testing.T) {
 	g.Expect(resByID).NotTo(BeNil())
 	g.Expect(resByID.Id).To(BeEquivalentTo(expectedID))
 	g.Expect(resByID.Name).To(BeEquivalentTo(name))
-	g.Expect(resByID.Data).To(BeEquivalentTo(helloWorldTemplate))
+	g.Expect(resByID.Data).To(BeEquivalentTo(testutils.HelloWorldTemplate))
 
 	// Ensure we can get the previously created template by Name
 	// and it has the values we expect
@@ -93,7 +94,7 @@ func TestTemplateLifecycle(t *testing.T) {
 	g.Expect(resByName).NotTo(BeNil())
 	g.Expect(resByName.Id).To(BeEquivalentTo(expectedID))
 	g.Expect(resByName.Name).To(BeEquivalentTo(name))
-	g.Expect(resByName.Data).To(BeEquivalentTo(helloWorldTemplate))
+	g.Expect(resByName.Data).To(BeEquivalentTo(testutils.HelloWorldTemplate))
 
 	// Update the template's data
 	testTemplate.Data = sampleTemplate

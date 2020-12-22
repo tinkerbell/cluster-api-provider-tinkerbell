@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/common"
@@ -137,6 +138,21 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 	if t.Spec.Data == nil {
 		t.Spec.Data = pointer.StringPtr(tinkTemplate.GetData())
 	}
+
+	if err := r.Client.Patch(ctx, t, patch); err != nil {
+		logger.Error(err, "Failed to patch template")
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
+	}
+
+	return r.reconcileStatus(ctx, t, tinkTemplate)
+}
+
+func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Template, tinkTemplate *template.WorkflowTemplate) (ctrl.Result, error) {
+	logger := r.Log.WithValues("template", t.Name)
+	patch := client.MergeFrom(t.DeepCopy())
+
+	t.Status.State = v1alpha1.TemplateReady
 
 	if err := r.Client.Patch(ctx, t, patch); err != nil {
 		logger.Error(err, "Failed to patch template")

@@ -109,6 +109,11 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workfl
 		}
 
 		workflowID = id
+
+		tinkWorkflow, err = r.getWorkflow(ctx, w)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	case err != nil:
 		return ctrl.Result{}, err
 
@@ -119,6 +124,22 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workfl
 	if err := common.EnsureAnnotation(ctx, r.Client, logger, w, tinkv1alpha1.WorkflowIDAnnotation,
 		workflowID); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to ensure id annotation on workflow: %w", err)
+	}
+
+	return r.reconcileStatus(ctx, w, tinkWorkflow)
+}
+
+func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workflow, tinkWorkflow *workflow.Workflow) (ctrl.Result, error) {
+	logger := r.Log.WithValues("workflow", w.Name)
+	patch := client.MergeFrom(w.DeepCopy())
+
+	w.Status.Data = tinkWorkflow.GetData()
+	w.Status.State = tinkWorkflow.GetState().String()
+
+	if err := r.Client.Patch(ctx, w, patch); err != nil {
+		logger.Error(err, "Failed to patch workflow")
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch workflow: %w", err)
 	}
 
 	return ctrl.Result{}, nil

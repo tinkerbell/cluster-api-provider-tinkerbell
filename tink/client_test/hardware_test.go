@@ -22,15 +22,16 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )
 
-func TestHardwareLifecycle(t *testing.T) {
+func TestHardwareLifecycle(t *testing.T) { //nolint:funlen
 	g := NewWithT(t)
 	ctx := context.Background()
 	hardwareClient := client.NewHardwareClient(realHardwareClient(t))
 
 	// Create a Hardware resource in Tinkerbell
-	testHardware, err := generateHardware(2)
+	testHardware, err := testutils.GenerateHardware(2)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	hardwareMACs := make([]string, 0, len(testHardware.Network.Interfaces))
@@ -93,7 +94,7 @@ func TestHardwareLifecycle(t *testing.T) {
 	}
 
 	// Ensure that we can update the hardware in Tinkerbell
-	additionalInterface, err := generateHardwareInterface("")
+	additionalInterface, err := testutils.GenerateHardwareInterface("")
 	g.Expect(err).NotTo(HaveOccurred())
 
 	testHardware.Network.Interfaces = append(testHardware.Network.Interfaces, additionalInterface)

@@ -20,6 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type HardwareState string
+
+const (
+	HardwareError = HardwareState("Error")
+	HardwareReady = HardwareState("Ready")
+)
+
 // HardwareSpec defines the desired state of Hardware.
 type HardwareSpec struct {
 	// ID is the ID of the hardware in Tinkerbell
@@ -29,6 +36,65 @@ type HardwareSpec struct {
 
 // HardwareStatus defines the observed state of Hardware.
 type HardwareStatus struct {
+	TinkMetadata string `json:"tinkMetadata,omitempty"`
+
+	TinkVersion int64 `json:"tinkVersion,omitempty"`
+
+	TinkInterfaces []Interface `json:"tinkInterfaces,omitempty"`
+
+	State HardwareState `json:"state,omitempty"`
+}
+
+type Interface struct {
+	//+optional
+	Netboot *Netboot `json:"netboot,omitempty"`
+
+	//+optional
+	DHCP *DHCP `json:"dhcp,omitempty"`
+}
+
+type Netboot struct {
+	//+optional
+	AllowPXE *bool `json:"allowPXE,omitempty"`
+
+	//+optional
+	AllowWorkflow *bool `json:"allowWorkflow,omitempty"`
+
+	//+optional
+	IPXE *IPXE `json:"ipxe,omitempty"`
+
+	//+optional
+	OSIE *OSIE `json:"osie,omitempty"`
+}
+
+type IPXE struct {
+	URL      string `json:"url,omitempty"`
+	Contents string `json:"contents,omitempty"`
+}
+
+type OSIE struct {
+	BaseURL string `json:"baseURL,omitempty"`
+	Kernel  string `json:"kernel,omitempty"`
+	Initrd  string `json:"initrd,omitempty"`
+}
+
+type DHCP struct {
+	MAC         string   `json:"mac,omitempty"`
+	Hostname    string   `json:"hostname,omitempty"`
+	LeaseTime   int64    `json:"lease_time,omitempty"`
+	NameServers []string `json:"name_servers,omitempty"`
+	TimeServers []string `json:"time_servers,omitempty"`
+	Arch        string   `json:"arch,omitempty"`
+	UEFI        bool     `json:"uefi,omitempty"`
+	IfaceName   string   `json:"iface_name,omitempty"`
+	IP          *IP      `json:"ip,omitempty"`
+}
+
+type IP struct {
+	Address string `json:"address,omitempty"`
+	Netmask string `json:"netmask,omitempty"`
+	Gateway string `json:"gateway,omitempty"`
+	Family  int64  `json:"family,omitempty"`
 }
 
 // +kubebuilder:subresource:status
