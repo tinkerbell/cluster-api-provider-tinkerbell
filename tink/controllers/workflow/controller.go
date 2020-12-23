@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
@@ -153,15 +154,6 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workfl
 
 	w.Status.Metadata = string(md)
 
-	state, err := r.WorkflowClient.GetState(ctx, tinkWorkflow.GetId())
-	if err != nil {
-		logger.Error(err, "Failed to get state for workflow")
-
-		return ctrl.Result{}, fmt.Errorf("failed to get state for workflow: %w", err)
-	}
-
-	w.Status.State = state.String()
-
 	actions, err := r.WorkflowClient.GetActions(ctx, tinkWorkflow.GetId())
 	if err != nil {
 		logger.Error(err, "Failed to get actions for workflow")
@@ -208,6 +200,22 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workfl
 	}
 
 	w.Status.Events = statusEvents
+
+	state, err := r.WorkflowClient.GetState(ctx, tinkWorkflow.GetId())
+	if err != nil {
+		logger.Error(err, "Failed to get state for workflow")
+
+		return ctrl.Result{}, fmt.Errorf("failed to get state for workflow: %w", err)
+	}
+
+	w.Status.State = state.String()
+
+	if state != workflow.State_STATE_SUCCESS {
+		// If the workflow hasn't successfully run, requeue in
+		// a minute. This is to workaround the lack of events
+		// for workflow status
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
 
 	return ctrl.Result{}, nil
 }
