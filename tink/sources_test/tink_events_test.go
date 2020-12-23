@@ -180,7 +180,7 @@ func TestTemplateEvents(t *testing.T) { //nolint: funlen
 	g.Consistently(eventCh).ShouldNot(Receive())
 
 	// Create the matching k8s resource
-	te := &tinkv1.Template{
+	k8sTemplate := &tinkv1.Template{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testTemplate.Name,
 			Annotations: map[string]string{
@@ -191,15 +191,15 @@ func TestTemplateEvents(t *testing.T) { //nolint: funlen
 			Data: pointer.StringPtr(testTemplate.Data),
 		},
 	}
-	g.Expect(fakeClient.Create(ctx, te)).To(Succeed())
+	g.Expect(fakeClient.Create(ctx, k8sTemplate)).To(Succeed())
 
 	// Update the template
 	testTemplate.Data = sampleTemplate
 	g.Expect(templateClient.Update(ctx, testTemplate)).To(Succeed())
 
 	expectedEvent := event.GenericEvent{
-		Meta:   te,
-		Object: te,
+		Meta:   k8sTemplate,
+		Object: k8sTemplate,
 	}
 	g.Eventually(eventCh).Should(Receive(BeEquivalentTo(expectedEvent)))
 }
@@ -273,7 +273,7 @@ func TestWorkflowEvents(t *testing.T) { //nolint: funlen
 	g.Consistently(eventCh).ShouldNot(Receive())
 
 	// Create the matching k8s resources
-	te := &tinkv1.Template{
+	k8sTemplate := &tinkv1.Template{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testTemplate.Name,
 			Annotations: map[string]string{
@@ -285,7 +285,7 @@ func TestWorkflowEvents(t *testing.T) { //nolint: funlen
 		},
 	}
 
-	g.Expect(fakeClient.Create(ctx, te)).To(Succeed())
+	g.Expect(fakeClient.Create(ctx, k8sTemplate)).To(Succeed())
 
 	h := &tinkv1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
@@ -306,7 +306,7 @@ func TestWorkflowEvents(t *testing.T) { //nolint: funlen
 			},
 		},
 		Spec: tinkv1.WorkflowSpec{
-			TemplateRef: te.Name,
+			TemplateRef: k8sTemplate.Name,
 			HardwareRef: h.Name,
 		},
 	}

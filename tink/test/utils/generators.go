@@ -73,7 +73,7 @@ func (i *ipGetter) nextAddressFromCIDR(cidr string) (string, string, string, err
 	gw[len(gw)-1]++
 	gateway := gw.String()
 
-	// Attempt to get the last address used, othewise use the
+	// Attempt to get the last address used, otherwise use the
 	// gateway address as the starting point
 	lastAddress, ok := i.addresses[cidr]
 	if !ok {
