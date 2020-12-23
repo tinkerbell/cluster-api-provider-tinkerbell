@@ -43,6 +43,9 @@ spec:
             type: object
           status:
             description: TemplateStatus defines the observed state of Template.
+            properties:
+              state:
+                type: string
             type: object
         type: object
     served: true

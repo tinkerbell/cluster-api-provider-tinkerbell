@@ -99,7 +99,7 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, h *tinkv1alpha1.Hardwa
 
 			h.Status.State = tinkv1alpha1.HardwareError
 
-			if err := r.Client.Patch(ctx, h, patch); err != nil {
+			if err := r.Client.Status().Patch(ctx, h, patch); err != nil {
 				logger.Error(err, "Failed to patch hardware")
 
 				return ctrl.Result{}, fmt.Errorf("failed to patch hardware: %w", err)
@@ -176,7 +176,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, h *tinkv1alpha1.Hardwa
 
 	h.Status.State = v1alpha1.HardwareReady
 
-	if err := r.Client.Patch(ctx, h, patch); err != nil {
+	if err := r.Client.Status().Patch(ctx, h, patch); err != nil {
 		logger.Error(err, "Failed to patch hardware")
 
 		return ctrl.Result{}, fmt.Errorf("failed to patch hardware: %w", err)

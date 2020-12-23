@@ -78,6 +78,8 @@ func (t *Hardware) Get(ctx context.Context, id, ip, mac string) (*hardware.Hardw
 	case ip != "":
 		req.Ip = ip
 		method = t.client.ByIP
+	default:
+		return nil, errors.New("need to specify either id, ip, or mac")
 	}
 
 	tinkHardware, err := method(ctx, req)

@@ -97,28 +97,20 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
 	logger := r.Log.WithValues("workflow", w.Name)
 
-	var workflowID string
+	workflowID := w.TinkID()
 
-	tinkWorkflow, err := r.getWorkflow(ctx, w)
-
-	switch {
-	case errors.Is(err, tinkclient.ErrNotFound):
+	if workflowID == "" {
 		id, err := r.createWorkflow(ctx, w)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		workflowID = id
+	}
 
-		tinkWorkflow, err = r.getWorkflow(ctx, w)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	case err != nil:
+	tinkWorkflow, err := r.WorkflowClient.Get(ctx, workflowID)
+	if err != nil {
 		return ctrl.Result{}, err
-
-	default:
-		workflowID = tinkWorkflow.Id
 	}
 
 	if err := common.EnsureAnnotation(ctx, r.Client, logger, w, tinkv1alpha1.WorkflowIDAnnotation,
@@ -136,7 +128,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workfl
 	w.Status.Data = tinkWorkflow.GetData()
 	w.Status.State = tinkWorkflow.GetState().String()
 
-	if err := r.Client.Patch(ctx, w, patch); err != nil {
+	if err := r.Client.Status().Patch(ctx, w, patch); err != nil {
 		logger.Error(err, "Failed to patch workflow")
 
 		return ctrl.Result{}, fmt.Errorf("failed to patch workflow: %w", err)
@@ -167,7 +159,7 @@ func (r *Reconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1.Workflo
 	}
 
 	id, err := r.WorkflowClient.Create(
-		ctx, t.GetObjectMeta().GetAnnotations()[tinkv1alpha1.TemplateIDAnnotation],
+		ctx, t.TinkID(),
 		hw.Spec.ID,
 	)
 	if err != nil {
@@ -177,15 +169,6 @@ func (r *Reconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1.Workflo
 	}
 
 	return id, nil
-}
-
-func (r *Reconciler) getWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (*workflow.Workflow, error) {
-	annotations := w.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-
-	return r.WorkflowClient.Get(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation])
 }
 
 func (r *Reconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {

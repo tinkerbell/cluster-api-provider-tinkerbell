@@ -154,7 +154,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Templa
 
 	t.Status.State = v1alpha1.TemplateReady
 
-	if err := r.Client.Patch(ctx, t, patch); err != nil {
+	if err := r.Client.Status().Patch(ctx, t, patch); err != nil {
 		logger.Error(err, "Failed to patch template")
 
 		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
