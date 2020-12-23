@@ -35,9 +35,6 @@ type WorkflowSpec struct {
 
 	// Name of the Hardware associated with this workflow.
 	HardwareRef string `json:"hardwareRef,omitempty"`
-
-	// HardwareTemplate is the template used for creating the workflow.
-	HardwareTemplate string `json:"hardwareTemplate,omitempty"`
 }
 
 // WorkflowStatus defines the observed state of Workflow.
@@ -47,6 +44,38 @@ type WorkflowStatus struct {
 
 	// Data is the populated Workflow Data in Tinkerbell.
 	Data string `json:"data,omitempty"`
+
+	// Metadata is the metadata stored in Tinkerbell.
+	Metadata string `json:"metadata,omitempty"`
+
+	// Actions are the actions for this Workflow.
+	Actions []Action `json:"actions,omitempty"`
+
+	// Events are events for this Workflow.
+	Events []Event `json:"events,omitempty"`
+}
+
+type Action struct {
+	TaskName    string   `json:"task_name,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Image       string   `json:"image,omitempty"`
+	Timeout     int64    `json:"timeout,omitempty"`
+	Command     []string `json:"command,omitempty"`
+	OnTimeout   []string `json:"on_timeout,omitempty"`
+	OnFailure   []string `json:"on_failure,omitempty"`
+	WorkerID    string   `json:"worker_id,omitempty"`
+	Volumes     []string `json:"volumes,omitempty"`
+	Environment []string `json:"environment,omitempty"`
+}
+
+type Event struct {
+	TaskName     string      `json:"task_name,omitempty"`
+	ActionName   string      `json:"action_name,omitempty"`
+	ActionStatus string      `json:"action_status,omitempty"`
+	Seconds      int64       `json:"seconds,omitempty"`
+	Message      string      `json:"message,omitempty"`
+	CreatedAt    metav1.Time `json:"created_at,omitempty"`
+	WorkerID     string      `json:"worker_id,omitempty"`
 }
 
 // +kubebuilder:subresource:status
@@ -71,6 +100,15 @@ func (w *Workflow) TinkID() string {
 	}
 
 	return annotations[WorkflowIDAnnotation]
+}
+
+// SetTinkID sets the Tinkerbell ID associated with this Workflow.
+func (w *Workflow) SetTinkID(id string) {
+	if w.GetAnnotations() == nil {
+		w.SetAnnotations(make(map[string]string))
+	}
+
+	w.Annotations[WorkflowIDAnnotation] = id
 }
 
 // +kubebuilder:object:root=true

@@ -19,7 +19,9 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 
 	"github.com/tinkerbell/tink/protos/hardware"
 	"github.com/tinkerbell/tink/protos/workflow"
@@ -48,6 +50,111 @@ func (t *Workflow) Get(ctx context.Context, id string) (*workflow.Workflow, erro
 	}
 
 	return tinkWorkflow, nil
+}
+
+func (t *Workflow) GetMetadata(ctx context.Context, id string) ([]byte, error) {
+	verReq := &workflow.GetWorkflowDataRequest{WorkflowId: id}
+
+	verResp, err := t.client.GetWorkflowDataVersion(ctx, verReq)
+	if err != nil {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
+			return nil, fmt.Errorf("workflow %w", ErrNotFound)
+		}
+
+		return nil, fmt.Errorf("failed to get workflow version from Tinkerbell: %w", err)
+	}
+
+	req := &workflow.GetWorkflowDataRequest{WorkflowId: id, Version: verResp.GetVersion()}
+
+	resp, err := t.client.GetWorkflowMetadata(ctx, req)
+	if err != nil {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
+			return nil, fmt.Errorf("workflow %w", ErrNotFound)
+		}
+
+		return nil, fmt.Errorf("failed to get workflow metadata from Tinkerbell: %w", err)
+	}
+
+	return resp.GetData(), nil
+}
+
+func (t *Workflow) GetActions(ctx context.Context, id string) ([]*workflow.WorkflowAction, error) {
+	req := &workflow.WorkflowActionsRequest{WorkflowId: id}
+
+	resp, err := t.client.GetWorkflowActions(ctx, req)
+	if err != nil {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
+			return nil, fmt.Errorf("workflow %w", ErrNotFound)
+		}
+
+		return nil, fmt.Errorf("failed to get workflow actions from Tinkerbell: %w", err)
+	}
+
+	return resp.GetActionList(), nil
+}
+
+func (t *Workflow) GetEvents(ctx context.Context, id string) ([]*workflow.WorkflowActionStatus, error) {
+	req := &workflow.GetRequest{Id: id}
+
+	resp, err := t.client.ShowWorkflowEvents(ctx, req)
+	if err != nil {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
+			return nil, fmt.Errorf("workflow %w", ErrNotFound)
+		}
+
+		return nil, fmt.Errorf("failed to get workflow events from Tinkerbell: %w", err)
+	}
+
+	result := []*workflow.WorkflowActionStatus{}
+
+	for {
+		e, err := resp.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get workflow event from Tinkerbell: %w", err)
+		}
+
+		result = append(result, e)
+	}
+
+	return result, nil
+}
+
+func (t *Workflow) GetState(ctx context.Context, id string) (workflow.State, error) {
+	req := &workflow.GetRequest{Id: id}
+
+	resp, err := t.client.GetWorkflowContext(ctx, req)
+	if err != nil {
+		if err.Error() == sqlErrorString || err.Error() == sqlErrorStringAlt {
+			return 0, fmt.Errorf("workflow %w", ErrNotFound)
+		}
+
+		return 0, fmt.Errorf("failed to get workflow state from Tinkerbell: %w", err)
+	}
+
+	currIndex := resp.GetCurrentActionIndex()
+	total := resp.GetTotalNumberOfActions()
+	currState := resp.GetCurrentActionState()
+
+	switch {
+	case total == 0:
+		// If there are no actions, let's just call it pending
+		return workflow.State_STATE_PENDING, nil
+	case currIndex+1 == total:
+		// If we are on the last action, just report it's state
+		return currState, nil
+	case currState != workflow.State_STATE_SUCCESS:
+		// If the state of the last action is anything other than
+		// success, just report it's state.
+		return currState, nil
+	default:
+		// We are not on the last action, and the last action
+		// was successful, we should report pending
+		return workflow.State_STATE_PENDING, nil
+	}
 }
 
 // Create a Tinkerbell Workflow.

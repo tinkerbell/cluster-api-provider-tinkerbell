@@ -53,27 +53,3 @@ func EnsureFinalizer(ctx context.Context, c client.Client, logger logr.Logger, o
 
 	return nil
 }
-
-// EnsureAnnotation ensures the given annotation key and value are applied
-// to the resource.
-func EnsureAnnotation(ctx context.Context, c client.Client, logger logr.Logger, obj Object, key, value string) error {
-	patch := client.MergeFrom(obj.DeepCopyObject())
-
-	annotations := obj.GetAnnotations()
-
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-
-	annotations[key] = value
-
-	obj.SetAnnotations(annotations)
-
-	if err := c.Patch(ctx, obj, patch); err != nil {
-		logger.Error(err, "Failed to add annotation to resource")
-
-		return fmt.Errorf("failed to add annotation to resource: %w", err)
-	}
-
-	return nil
-}

@@ -227,10 +227,7 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 			key := client.ObjectKey{Name: tt.in.Name}
 			g.Expect(r.Client.Get(context.Background(), key, k8sTemplate)).To(Succeed())
 
-			// expect the k8s resource to have an id stored
-			g.Expect(k8sTemplate.GetAnnotations()).To(HaveKey(tinkv1alpha1.TemplateIDAnnotation))
-
-			id := k8sTemplate.Annotations[tinkv1alpha1.TemplateIDAnnotation]
+			id := k8sTemplate.TinkID()
 
 			// Expect the id to be non-empty
 			g.Expect(id).NotTo(BeEmpty())
@@ -242,7 +239,7 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 			tinkTemplate := fakeTemplateClient.Objs[id]
 
 			// Verify the IDs match
-			g.Expect(tinkTemplate.Id, k8sTemplate.Annotations[tinkv1alpha1.TemplateIDAnnotation])
+			g.Expect(tinkTemplate.Id, id)
 
 			// Verify the Names match
 			g.Expect(tinkTemplate.Name).To(BeEquivalentTo(k8sTemplate.Name))

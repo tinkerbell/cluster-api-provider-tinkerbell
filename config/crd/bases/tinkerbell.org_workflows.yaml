@@ -41,10 +41,6 @@ spec:
               hardwareRef:
                 description: Name of the Hardware associated with this workflow.
                 type: string
-              hardwareTemplate:
-                description: HardwareTemplate is the template used for creating the
-                  workflow.
-                type: string
               templateRef:
                 description: Name of the Template associated with this workflow.
                 type: string
@@ -52,8 +48,70 @@ spec:
           status:
             description: WorkflowStatus defines the observed state of Workflow.
             properties:
+              actions:
+                description: Actions are the actions for this Workflow.
+                items:
+                  properties:
+                    command:
+                      items:
+                        type: string
+                      type: array
+                    environment:
+                      items:
+                        type: string
+                      type: array
+                    image:
+                      type: string
+                    name:
+                      type: string
+                    on_failure:
+                      items:
+                        type: string
+                      type: array
+                    on_timeout:
+                      items:
+                        type: string
+                      type: array
+                    task_name:
+                      type: string
+                    timeout:
+                      format: int64
+                      type: integer
+                    volumes:
+                      items:
+                        type: string
+                      type: array
+                    worker_id:
+                      type: string
+                  type: object
+                type: array
               data:
                 description: Data is the populated Workflow Data in Tinkerbell.
+                type: string
+              events:
+                description: Events are events for this Workflow.
+                items:
+                  properties:
+                    action_name:
+                      type: string
+                    action_status:
+                      type: string
+                    created_at:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    seconds:
+                      format: int64
+                      type: integer
+                    task_name:
+                      type: string
+                    worker_id:
+                      type: string
+                  type: object
+                type: array
+              metadata:
+                description: Metadata is the metadata stored in Tinkerbell.
                 type: string
               state:
                 description: State is the state of the workflow in Tinkerbell.

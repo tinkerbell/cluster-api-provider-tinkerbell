@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/common"
@@ -99,11 +98,19 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
 	// Create a patch for use later
-	patch := client.MergeFrom(t.DeepCopy())
-
 	logger := r.Log.WithValues("template", t.Name)
 
-	tinkTemplate, err := r.getTemplate(ctx, t)
+	templateID := t.TinkID()
+	if templateID == "" {
+		tinkTemplate, err := r.createTemplate(ctx, t)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		templateID = tinkTemplate.Id
+	}
+
+	tinkTemplate, err := r.TemplateClient.Get(ctx, templateID, t.Name)
 
 	switch {
 	case errors.Is(err, tinkclient.ErrNotFound):
@@ -114,7 +121,17 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 
 		tinkTemplate = result
 	case err != nil:
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get template: %w", err)
+	}
+
+	// Make sure that we record the tinkerbell id for the workflow
+	patch := client.MergeFrom(t.DeepCopy())
+	t.SetTinkID(templateID)
+
+	if err := r.Client.Patch(ctx, t, patch); err != nil {
+		logger.Error(err, "Failed to patch template")
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
 	}
 
 	// If the data is specified and different than what is stored in Tinkerbell,
@@ -128,11 +145,7 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 		}
 	}
 
-	if err := common.EnsureAnnotation(ctx, r.Client, logger, t, tinkv1alpha1.TemplateIDAnnotation,
-		tinkTemplate.Id); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to ensure id annotation on template: %w", err)
-	}
-
+	patch = client.MergeFrom(t.DeepCopy())
 	// If data was not specified, we are importing a pre-existing resource and should
 	// populate it from Tinkerbell
 	if t.Spec.Data == nil {
@@ -152,7 +165,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Templa
 	logger := r.Log.WithValues("template", t.Name)
 	patch := client.MergeFrom(t.DeepCopy())
 
-	t.Status.State = v1alpha1.TemplateReady
+	t.Status.State = tinkv1alpha1.TemplateReady
 
 	if err := r.Client.Status().Patch(ctx, t, patch); err != nil {
 		logger.Error(err, "Failed to patch template")
@@ -180,28 +193,14 @@ func (r *Reconciler) createTemplate(ctx context.Context, t *tinkv1alpha1.Templat
 	return tinkTemplate, nil
 }
 
-func (r *Reconciler) getTemplate(ctx context.Context, t *tinkv1alpha1.Template) (*template.WorkflowTemplate, error) {
-	annotations := t.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-
-	return r.TemplateClient.Get(ctx, annotations[tinkv1alpha1.TemplateIDAnnotation], t.Name)
-}
-
 func (r *Reconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
 	// Create a patch for use later
 	patch := client.MergeFrom(t.DeepCopy())
 
 	logger := r.Log.WithValues("template", t.Name)
 
-	annotations := t.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-
 	// If we've recorded an ID for the Template, then we should delete it
-	if id, ok := annotations[tinkv1alpha1.TemplateIDAnnotation]; ok {
+	if id := t.TinkID(); id != "" {
 		err := r.TemplateClient.Delete(ctx, id)
 		if err != nil && !errors.Is(err, tinkclient.ErrNotFound) {
 			logger.Error(err, "Failed to delete template from Tinkerbell")

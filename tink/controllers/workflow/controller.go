@@ -28,6 +28,7 @@ import (
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/common"
 	"github.com/tinkerbell/tink/protos/workflow"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +42,10 @@ type workflowClient interface {
 	Get(ctx context.Context, id string) (*workflow.Workflow, error)
 	Create(ctx context.Context, templateID, hardwareID string) (string, error)
 	Delete(ctx context.Context, id string) error
+	GetMetadata(ctx context.Context, id string) ([]byte, error)
+	GetActions(ctx context.Context, id string) ([]*workflow.WorkflowAction, error)
+	GetEvents(ctx context.Context, id string) ([]*workflow.WorkflowActionStatus, error)
+	GetState(ctx context.Context, id string) (workflow.State, error)
 }
 
 // Reconciler implements Reconciler interface by managing Tinkerbell workflows.
@@ -110,12 +115,17 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workfl
 
 	tinkWorkflow, err := r.WorkflowClient.Get(ctx, workflowID)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get workflow: %w", err)
 	}
 
-	if err := common.EnsureAnnotation(ctx, r.Client, logger, w, tinkv1alpha1.WorkflowIDAnnotation,
-		workflowID); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to ensure id annotation on workflow: %w", err)
+	// Make sure that we record the tinkerbell id for the workflow
+	patch := client.MergeFrom(w.DeepCopy())
+	w.SetTinkID(workflowID)
+
+	if err := r.Client.Patch(ctx, w, patch); err != nil {
+		logger.Error(err, "Failed to patch workflow")
+
+		return ctrl.Result{}, fmt.Errorf("failed to patch workflow: %w", err)
 	}
 
 	return r.reconcileStatus(ctx, w, tinkWorkflow)
@@ -125,14 +135,79 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workfl
 	logger := r.Log.WithValues("workflow", w.Name)
 	patch := client.MergeFrom(w.DeepCopy())
 
+	// Try to patch what we have even if we hit errors gather additional status information
+	defer func() {
+		if err := r.Client.Status().Patch(ctx, w, patch); err != nil {
+			logger.Error(err, "Failed to patch workflow status")
+		}
+	}()
+
 	w.Status.Data = tinkWorkflow.GetData()
-	w.Status.State = tinkWorkflow.GetState().String()
 
-	if err := r.Client.Status().Patch(ctx, w, patch); err != nil {
-		logger.Error(err, "Failed to patch workflow")
+	md, err := r.WorkflowClient.GetMetadata(ctx, tinkWorkflow.GetId())
+	if err != nil {
+		logger.Error(err, "Failed to get metadata for workflow")
 
-		return ctrl.Result{}, fmt.Errorf("failed to patch workflow: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to get metadata for workflow: %w", err)
 	}
+
+	w.Status.Metadata = string(md)
+
+	state, err := r.WorkflowClient.GetState(ctx, tinkWorkflow.GetId())
+	if err != nil {
+		logger.Error(err, "Failed to get state for workflow")
+
+		return ctrl.Result{}, fmt.Errorf("failed to get state for workflow: %w", err)
+	}
+
+	w.Status.State = state.String()
+
+	actions, err := r.WorkflowClient.GetActions(ctx, tinkWorkflow.GetId())
+	if err != nil {
+		logger.Error(err, "Failed to get actions for workflow")
+
+		return ctrl.Result{}, fmt.Errorf("failed to get actions for workflow: %w", err)
+	}
+
+	statusActions := make([]tinkv1alpha1.Action, 0, len(actions))
+	for _, action := range actions {
+		statusActions = append(statusActions, tinkv1alpha1.Action{
+			Name:        action.GetName(),
+			TaskName:    action.GetTaskName(),
+			Image:       action.GetImage(),
+			Timeout:     action.GetTimeout(),
+			Command:     action.GetCommand(),
+			OnTimeout:   action.GetOnTimeout(),
+			OnFailure:   action.GetOnFailure(),
+			WorkerID:    action.GetWorkerId(),
+			Volumes:     action.GetVolumes(),
+			Environment: action.GetEnvironment(),
+		})
+	}
+
+	w.Status.Actions = statusActions
+
+	events, err := r.WorkflowClient.GetEvents(ctx, tinkWorkflow.GetId())
+	if err != nil {
+		logger.Error(err, "Failed to get events for workflow")
+
+		return ctrl.Result{}, fmt.Errorf("failed to get events for workflow: %w", err)
+	}
+
+	statusEvents := make([]tinkv1alpha1.Event, 0, len(events))
+	for _, event := range events {
+		statusEvents = append(statusEvents, tinkv1alpha1.Event{
+			ActionName:   event.GetActionName(),
+			TaskName:     event.GetTaskName(),
+			ActionStatus: event.GetActionStatus().String(),
+			Seconds:      event.GetSeconds(),
+			Message:      event.GetMessage(),
+			WorkerID:     event.GetWorkerId(),
+			CreatedAt:    metav1.NewTime(event.GetCreatedAt().AsTime()),
+		})
+	}
+
+	w.Status.Events = statusEvents
 
 	return ctrl.Result{}, nil
 }
@@ -177,13 +252,8 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha1.Workfl
 
 	logger := r.Log.WithValues("workflow", w.Name)
 
-	annotations := w.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-
 	// If we've recorded an ID for the Workflow, then we should delete it
-	if id, ok := annotations[tinkv1alpha1.WorkflowIDAnnotation]; ok {
+	if id := w.TinkID(); id != "" {
 		err := r.WorkflowClient.Delete(ctx, id)
 		if err != nil && !errors.Is(err, tinkclient.ErrNotFound) {
 			logger.Error(err, "Failed to delete workflow from Tinkerbell")

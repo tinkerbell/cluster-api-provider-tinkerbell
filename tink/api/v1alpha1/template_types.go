@@ -68,6 +68,15 @@ func (t *Template) TinkID() string {
 	return annotations[TemplateIDAnnotation]
 }
 
+// SetTinkID sets the Tinkerbell ID associated with this Template.
+func (t *Template) SetTinkID(id string) {
+	if t.GetAnnotations() == nil {
+		t.SetAnnotations(make(map[string]string))
+	}
+
+	t.Annotations[TemplateIDAnnotation] = id
+}
+
 // +kubebuilder:object:root=true
 
 // TemplateList contains a list of Templates.
