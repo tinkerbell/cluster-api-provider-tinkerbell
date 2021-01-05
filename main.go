@@ -121,29 +121,29 @@ func main() {
 
 	// TODO: Get a Tinkerbell client.
 
-	if webhookPort == 0 {
-		if err = (&controllers.TinkerbellClusterReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("controllers").WithName("TinerellCluster"),
-			Recorder: mgr.GetEventRecorderFor("tinerellcluster-controller"),
-			Scheme:   mgr.GetScheme(),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
-			os.Exit(1)
-		}
-
-		if err = (&controllers.TinkerbellMachineReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
-			Scheme:   mgr.GetScheme(),
-			Recorder: mgr.GetEventRecorderFor("tinkerbellmachine-controller"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "TinkerbellMachine")
-			os.Exit(1)
-		}
-	} else {
+	if webhookPort != 0 {
 		// TODO: add the webhook configuration
 		setupLog.Error(errors.New("webhook not implemented"), "webhook", "not available")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.TinkerbellClusterReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("TinerellCluster"),
+		Recorder: mgr.GetEventRecorderFor("tinerellcluster-controller"),
+		Scheme:   mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.TinkerbellMachineReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("tinkerbellmachine-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellMachine")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
