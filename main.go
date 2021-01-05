@@ -65,39 +65,25 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	flag.StringVar(
-		&leaderElectionNamespace,
-		"leader-election-namespace",
-		"",
+	flag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "",
 		"Namespace that the controller performs leader election in. "+
 			"If unspecified, the controller will discover which namespace it is running in.",
 	)
 
-	flag.StringVar(&healthAddr,
-		"health-addr",
-		":9440",
-		"The address the health endpoint binds to.",
-	)
+	flag.StringVar(&healthAddr, "health-addr", ":9440", "The address the health endpoint binds to.")
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 
-	flag.DurationVar(&syncPeriod,
-		"sync-period",
-		10*time.Minute,
+	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute,
 		"The minimum interval at which watched resources are reconciled (e.g. 15m)",
 	)
 
-	flag.StringVar(
-		&watchNamespace,
-		"namespace",
-		"",
+	flag.StringVar(&watchNamespace, "namespace", "",
 		"Namespace that the controller watches to reconcile cluster-api objects. "+
 			"If unspecified, the controller watches for cluster-api objects across all namespaces.",
 	)
 
-	flag.IntVar(&webhookPort,
-		"webhook-port",
-		0,
+	flag.IntVar(&webhookPort, "webhook-port", 0,
 		"Webhook Server port, disabled by default. When enabled, the manager will only "+
 			"work as webhook server, no reconcilers are installed.",
 	)
