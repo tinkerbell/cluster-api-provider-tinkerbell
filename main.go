@@ -101,13 +101,27 @@ func optionsFromFlags() ctrl.Options {
 	return options
 }
 
+func validateOptions(options ctrl.Options) error {
+	if options.Namespace != "" {
+		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", options.Namespace)
+	}
+
+	if options.Port != 0 {
+		// TODO: add the webhook configuration
+		return errors.New("webhook not implemented")
+	}
+
+	return nil
+}
+
 func main() {
 	ctrl.SetLogger(klogr.New())
 
 	options := optionsFromFlags()
 
-	if options.Namespace != "" {
-		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", options.Namespace)
+	if err := validateOptions(options); err != nil {
+		setupLog.Error(err, "validating controllers configuration")
+		os.Exit(1)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
@@ -117,12 +131,6 @@ func main() {
 	}
 
 	// TODO: Get a Tinkerbell client.
-
-	if options.Port != 0 {
-		// TODO: add the webhook configuration
-		setupLog.Error(errors.New("webhook not implemented"), "webhook not available")
-		os.Exit(1)
-	}
 
 	if err = (&controllers.TinkerbellClusterReconciler{
 		Client:   mgr.GetClient(),
