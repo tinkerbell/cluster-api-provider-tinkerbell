@@ -25,10 +25,11 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
+	"k8s.io/klog/klogr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
@@ -51,6 +52,8 @@ func init() {
 
 // optionsFromFlags parse CLI flags and converts them to controller runtime options.
 func optionsFromFlags() ctrl.Options {
+	klog.InitFlags(nil)
+
 	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
 	// Setting the burst size higher ensures all events will be recorded and submitted to the API
 	broadcaster := record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{
@@ -99,7 +102,7 @@ func optionsFromFlags() ctrl.Options {
 }
 
 func main() {
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(klogr.New())
 
 	options := optionsFromFlags()
 
