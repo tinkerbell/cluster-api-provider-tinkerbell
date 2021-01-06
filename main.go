@@ -111,7 +111,7 @@ func main() {
 
 	if options.Port != 0 {
 		// TODO: add the webhook configuration
-		setupLog.Error(errors.New("webhook not implemented"), "webhook", "not available")
+		setupLog.Error(errors.New("webhook not implemented"), "webhook not available")
 		os.Exit(1)
 	}
 
