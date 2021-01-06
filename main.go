@@ -51,39 +51,44 @@ func init() {
 
 //nolint:funlen,gomnd
 func main() {
-	var (
-		enableLeaderElection    bool
-		leaderElectionNamespace string
-		healthAddr              string
-		metricsAddr             string
-		webhookPort             int
-		syncPeriod              time.Duration
-		watchNamespace          string
-	)
+	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
+	// Setting the burst size higher ensures all events will be recorded and submitted to the API
+	broadcaster := record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{
+		BurstSize: 100,
+	})
 
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
+	var syncPeriod time.Duration
+
+	options := ctrl.Options{
+		Scheme:           scheme,
+		LeaderElectionID: "controller-leader-election-capt",
+		EventBroadcaster: broadcaster,
+		SyncPeriod:       &syncPeriod,
+	}
+
+	flag.BoolVar(&options.LeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	flag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "",
+	flag.StringVar(&options.LeaderElectionNamespace, "leader-election-namespace", "",
 		"Namespace that the controller performs leader election in. "+
 			"If unspecified, the controller will discover which namespace it is running in.",
 	)
 
-	flag.StringVar(&healthAddr, "health-addr", ":9440", "The address the health endpoint binds to.")
+	flag.StringVar(&options.HealthProbeBindAddress, "health-addr", ":9440", "The address the health endpoint binds to.")
 
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&options.MetricsBindAddress, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute,
 		"The minimum interval at which watched resources are reconciled (e.g. 15m)",
 	)
 
-	flag.StringVar(&watchNamespace, "namespace", "",
+	flag.StringVar(&options.Namespace, "namespace", "",
 		"Namespace that the controller watches to reconcile cluster-api objects. "+
 			"If unspecified, the controller watches for cluster-api objects across all namespaces.",
 	)
 
-	flag.IntVar(&webhookPort, "webhook-port", 0,
+	flag.IntVar(&options.Port, "webhook-port", 0,
 		"Webhook Server port, disabled by default. When enabled, the manager will only "+
 			"work as webhook server, no reconcilers are installed.",
 	)
@@ -92,28 +97,11 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	if watchNamespace != "" {
-		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", watchNamespace)
+	if options.Namespace != "" {
+		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", options.Namespace)
 	}
 
-	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
-	// Setting the burst size higher ensures all events will be recorded and submitted to the API
-	broadcaster := record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{
-		BurstSize: 100,
-	})
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                  scheme,
-		MetricsBindAddress:      metricsAddr,
-		Port:                    webhookPort,
-		EventBroadcaster:        broadcaster,
-		LeaderElection:          enableLeaderElection,
-		LeaderElectionID:        "controller-leader-election-capt",
-		LeaderElectionNamespace: leaderElectionNamespace,
-		Namespace:               watchNamespace,
-		SyncPeriod:              &syncPeriod,
-		HealthProbeBindAddress:  healthAddr,
-	})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -121,7 +109,7 @@ func main() {
 
 	// TODO: Get a Tinkerbell client.
 
-	if webhookPort != 0 {
+	if options.Port != 0 {
 		// TODO: add the webhook configuration
 		setupLog.Error(errors.New("webhook not implemented"), "webhook", "not available")
 		os.Exit(1)
