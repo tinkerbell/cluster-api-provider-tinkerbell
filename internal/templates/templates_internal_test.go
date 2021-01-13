@@ -50,7 +50,7 @@ func Test_Indent(t *testing.T) {
 		},
 	}
 
-	for caseName, c := range cases {
+	for caseName, c := range cases { //nolint:paralleltest
 		c := c
 
 		t.Run(caseName, func(t *testing.T) {

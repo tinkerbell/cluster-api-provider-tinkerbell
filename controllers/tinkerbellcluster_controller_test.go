@@ -34,6 +34,8 @@ func unreadyTinkerbellCluster(name, namespace string) *infrastructurev1alpha3.Ti
 
 //nolint:funlen,gocognit
 func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
+	t.Parallel()
+
 	objects := []runtime.Object{
 		validHardware(hardwareName, uuid.New().String(), hardwareIP),
 		validCluster(clusterName, clusterNamespace),
@@ -59,6 +61,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior.
 	t.Run("sets_controlplane_endpoint_host_with_IP_address_of_selected_hardware", func(t *testing.T) {
+		t.Parallel()
+
 		endpoint := updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Host
 		if endpoint != hardwareIP {
 			t.Fatalf("Expected controlplane endpoint to be set to %q, got: %q", hardwareIP, endpoint)
@@ -67,6 +71,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 
 	// TODO: Verify if we actually need to set port, maybe we can use "default" one?
 	t.Run("sets_controlplane_endpoint_port_with_hardcoded_value", func(t *testing.T) {
+		t.Parallel()
+
 		if updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Port != controllers.KubernetesAPIPort {
 			t.Fatalf("Expected port %d, got %d", controllers.KubernetesAPIPort,
 				updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Port)
@@ -75,6 +81,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior.
 	t.Run("sets_infrastructure_status_to_ready", func(t *testing.T) {
+		t.Parallel()
+
 		if !updatedTinkerbellCluster.Status.Ready {
 			t.Fatalf("Expected infrastructure to be ready when hardware is assigned")
 		}
@@ -82,6 +90,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 
 	// To ensure reconcile runs when cluster is removed to release used hardware.
 	t.Run("sets_tinkerbell_finalizer_on_cluster_object", func(t *testing.T) {
+		t.Parallel()
+
 		if len(updatedTinkerbellCluster.ObjectMeta.Finalizers) == 0 {
 			t.Fatalf("Expected at least one finalizer to be set")
 		}
@@ -92,6 +102,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 	})
 
 	t.Run("updates_hardware_selected_for_controlplane_with", func(t *testing.T) {
+		t.Parallel()
+
 		updatedHardware := &tinkv1alpha1.Hardware{}
 
 		namespacedName := types.NamespacedName{
@@ -109,6 +121,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 		// TODO: Make SHIM define and set "owner" label for Hardwares which participated in at least one workflow to
 		// something like "external".
 		t.Run("cluster_labels", func(t *testing.T) {
+			t.Parallel()
+
 			clusterNameLabel, ok := updatedHardware.ObjectMeta.Labels[controllers.ClusterNameLabel]
 			if !ok {
 				t.Fatalf("Cluster label name missing on Hardware object")
@@ -129,6 +143,8 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 		})
 
 		t.Run("tinkerbell_cluster_finalizer", func(t *testing.T) {
+			t.Parallel()
+
 			if len(updatedHardware.ObjectMeta.Finalizers) == 0 {
 				t.Fatalf("Expected at least one finalizer to be set")
 			}
@@ -141,7 +157,11 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 }
 
 func Test_Cluster_reconciliation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("is_requeued_when", func(t *testing.T) {
+		t.Parallel()
+
 		// This is introduced in v1alpha3 of CAPI even though behavior diagram does not reflect it.
 		t.Run("cluster_is_paused", clusterReconciliationIsRequeuedWhenClusterIsPaused)
 
@@ -151,10 +171,12 @@ func Test_Cluster_reconciliation(t *testing.T) {
 
 	// If reconciliation process started, but we cannot find cluster object anymore, it means object has been
 	// removed in the meanwhile. This means there is nothing to do.
-	t.Run("is_not_requeued_when_cluster_object_is_missing",
+	t.Run("is_not_requeued_when_cluster_object_is_missing", //nolint:paralleltest
 		clusterReconciliationIsNotRequeuedWhenClusterObjectIsMissing)
 
 	t.Run("fails_when", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("reconciler_has_no_logger_set", clusterReconciliationFailsWhenReconcilerHasNoLoggerSet)
 		t.Run("reconciler_has_no_client_set", clusterReconciliationFailsWhenReconcilerHasNoClientSet)
 
@@ -176,12 +198,14 @@ func Test_Cluster_reconciliation(t *testing.T) {
 	})
 
 	// Some sort of locking mechanism must be used so each reconciled cluster gets unique IP address.
-	t.Run("assigns_unique_controlplane_endpoint_for_each_cluster",
+	t.Run("assigns_unique_controlplane_endpoint_for_each_cluster", //nolint:paralleltest
 		clusterReconciliationAssignsUniqueControlplaneEndpointForEachCluster)
 }
 
 //nolint:funlen
 func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *testing.T) {
+	t.Parallel()
+
 	now := metav1.Now()
 
 	tinkerbellClusterScheduledForRemoval := validTinkerbellCluster(clusterName, clusterNamespace)
@@ -207,6 +231,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *tes
 	}
 
 	t.Run("marks_hardware_as_available_for_other_clusters_by", func(t *testing.T) {
+		t.Parallel()
+
 		updatedHardware := &tinkv1alpha1.Hardware{}
 
 		namespacedName := types.NamespacedName{
@@ -218,6 +244,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *tes
 		}
 
 		t.Run("removing_cluster_labels", func(t *testing.T) {
+			t.Parallel()
+
 			if _, ok := updatedHardware.ObjectMeta.Labels[controllers.ClusterNameLabel]; ok {
 				t.Fatalf("Cluster name label has not been removed from Hardware object")
 			}
@@ -228,6 +256,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *tes
 		})
 
 		t.Run("removing_tinkerbell_cluster_finalizer", func(t *testing.T) {
+			t.Parallel()
+
 			if len(updatedHardware.ObjectMeta.Finalizers) != 0 {
 				t.Fatalf("Expected all finalizers to be removed")
 			}
@@ -238,6 +268,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *tes
 	//
 	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
 	t.Run("removes_tinkerbell_finalizer_from_cluster_object", func(t *testing.T) {
+		t.Parallel()
+
 		updatedTinkerbellCluster := &infrastructurev1alpha3.TinkerbellCluster{}
 
 		namespacedName := types.NamespacedName{
@@ -257,6 +289,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *tes
 
 // From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
 func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it_removes_finalizer_for_cluster_without_owner(t *testing.T) { //nolint:lll
+	t.Parallel()
+
 	now := metav1.Now()
 
 	clusterScheduledForRemovalWithoutOwner := validTinkerbellCluster(clusterName, clusterNamespace)
@@ -301,6 +335,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it_remove
 // If removal process is interrupted at the moment we released the hardware, but we didn't get a chance to patch the
 // cluster object to remove the finalizer. This prevents removal from getting stuck while interrupted.
 func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it_removes_finalizer_for_cluster_without_hardware(t *testing.T) { //nolint:lll
+	t.Parallel()
+
 	now := metav1.Now()
 
 	clusterScheduledForRemoval := validTinkerbellCluster(clusterName, clusterNamespace)
@@ -334,6 +370,8 @@ func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it_remove
 }
 
 func clusterReconciliationFailsWhenReconcilerHasNoLoggerSet(t *testing.T) {
+	t.Parallel()
+
 	clusterController := &controllers.TinkerbellClusterReconciler{
 		Log: logr.Discard(),
 	}
@@ -351,6 +389,8 @@ func clusterReconciliationFailsWhenReconcilerHasNoLoggerSet(t *testing.T) {
 }
 
 func clusterReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
+	t.Parallel()
+
 	clusterController := &controllers.TinkerbellClusterReconciler{
 		Client: fake.NewFakeClient(),
 	}
@@ -368,6 +408,8 @@ func clusterReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
 }
 
 func clusterReconciliationFailsWhenSelectedhardwareHasNoInterfacesConfigured(t *testing.T) {
+	t.Parallel()
+
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
 	hardware.Status.TinkInterfaces = []tinkv1alpha1.Interface{}
 
@@ -377,6 +419,8 @@ func clusterReconciliationFailsWhenSelectedhardwareHasNoInterfacesConfigured(t *
 }
 
 func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPConfiguredOnFirstInterface(t *testing.T) {
+	t.Parallel()
+
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
 	hardware.Status.TinkInterfaces[0].DHCP = nil
 
@@ -386,6 +430,8 @@ func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPConfiguredOnFirstInt
 }
 
 func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPIPConfiguredOnFirstInterface(t *testing.T) {
+	t.Parallel()
+
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
 	hardware.Status.TinkInterfaces[0].DHCP.IP = nil
 
@@ -395,6 +441,8 @@ func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPIPConfiguredOnFirstI
 }
 
 func clusterReconciliationFailsWhenSelectedhardwareHasEmptyDHCPIPConfiguredOnFirstInterface(t *testing.T) {
+	t.Parallel()
+
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
 	hardware.Status.TinkInterfaces[0].DHCP.IP.Address = ""
 
@@ -404,6 +452,8 @@ func clusterReconciliationFailsWhenSelectedhardwareHasEmptyDHCPIPConfiguredOnFir
 }
 
 func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.Client {
+	t.Helper()
+
 	scheme := runtime.NewScheme()
 
 	if err := tinkv1alpha1.AddToScheme(scheme); err != nil {
@@ -447,6 +497,8 @@ func reconcileClusterWithClient(client client.Client, name, namespace string) (c
 }
 
 func clusterReconciliationIsNotRequeuedWhenClusterObjectIsMissing(t *testing.T) {
+	t.Parallel()
+
 	result, err := reconcileClusterWithClient(kubernetesClientWithObjects(t, nil), clusterName, clusterNamespace)
 	if err != nil {
 		t.Fatalf("Reconciling when cluster object does not exist should not return error")
@@ -465,6 +517,8 @@ const (
 )
 
 func clusterReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
+	t.Parallel()
+
 	objects := []runtime.Object{
 		validCluster(clusterName, clusterNamespace),
 		unreadyTinkerbellCluster(clusterName, clusterNamespace),
@@ -481,6 +535,8 @@ func clusterReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
 }
 
 func clusterReconciliationIsRequeuedWhenClusterHasNoOwnerSet(t *testing.T) {
+	t.Parallel()
+
 	unreadyTinkerbellClusterWithoutOwner := unreadyTinkerbellCluster(clusterName, clusterNamespace)
 	unreadyTinkerbellClusterWithoutOwner.ObjectMeta.OwnerReferences = nil
 
@@ -500,6 +556,8 @@ func clusterReconciliationIsRequeuedWhenClusterHasNoOwnerSet(t *testing.T) {
 }
 
 func clusterReconciliationIsRequeuedWhenClusterIsPaused(t *testing.T) {
+	t.Parallel()
+
 	pausedTinkerbellCluster := validTinkerbellCluster(clusterName, clusterNamespace)
 	pausedTinkerbellCluster.ObjectMeta.Annotations = map[string]string{
 		clusterv1.PausedAnnotation: "true",
@@ -521,6 +579,8 @@ func clusterReconciliationIsRequeuedWhenClusterIsPaused(t *testing.T) {
 }
 
 func reconcileWithHardwares(t *testing.T, hardwares []*tinkv1alpha1.Hardware) (ctrl.Result, error) {
+	t.Helper()
+
 	objects := []runtime.Object{
 		validCluster(clusterName, clusterNamespace),
 		unreadyTinkerbellCluster(clusterName, clusterNamespace),
@@ -534,6 +594,8 @@ func reconcileWithHardwares(t *testing.T, hardwares []*tinkv1alpha1.Hardware) (c
 }
 
 func clusterReconciliationFailsWhenAllAvailableHardwareIsOccupied(t *testing.T) {
+	t.Parallel()
+
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
 
 	hardware.ObjectMeta.Labels = map[string]string{
@@ -548,6 +610,8 @@ func clusterReconciliationFailsWhenAllAvailableHardwareIsOccupied(t *testing.T) 
 
 // When multiple clusters are created simultaneously, each should get different IP address.
 func clusterReconciliationAssignsUniqueControlplaneEndpointForEachCluster(t *testing.T) {
+	t.Parallel()
+
 	firstClusterName := "firstClusterName"
 	secondClusterName := "secondClusterName"
 

@@ -79,7 +79,7 @@ func Test_Machine(t *testing.T) {
 		},
 	}
 
-	for name, c := range cases {
+	for name, c := range cases { //nolint:paralleltest
 		c := c
 
 		t.Run(name, func(t *testing.T) {

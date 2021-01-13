@@ -81,7 +81,7 @@ func Test_Cloud_config_template(t *testing.T) {
 		},
 
 		"rendered_output_should_be_valid_YAML": {
-			validateF: func(t *testing.T, wt *templates.WorkflowTemplate, renderResult string) {
+			validateF: func(t *testing.T, wt *templates.WorkflowTemplate, renderResult string) { //nolint:thelper
 				x := &map[string]interface{}{}
 
 				if err := yaml.Unmarshal([]byte(renderResult), x); err != nil {
@@ -91,7 +91,7 @@ func Test_Cloud_config_template(t *testing.T) {
 		},
 	}
 
-	for name, c := range cases {
+	for name, c := range cases { //nolint:paralleltest
 		c := c
 
 		t.Run(name, func(t *testing.T) {

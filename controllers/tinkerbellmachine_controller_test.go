@@ -146,6 +146,8 @@ func validHardware(name, uuid, ip string) *tinkv1alpha1.Hardware {
 
 //nolint:funlen,gocognit
 func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	objects := []runtime.Object{
@@ -170,6 +172,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	}
 
 	t.Run("creates_template", func(t *testing.T) {
+		t.Parallel()
+
 		template := &tinkv1alpha1.Template{}
 
 		if err := client.Get(ctx, globalResourceName, template); err != nil {
@@ -190,6 +194,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	})
 
 	t.Run("creates_workflow", func(t *testing.T) {
+		t.Parallel()
+
 		workflow := &tinkv1alpha1.Workflow{}
 
 		if err := client.Get(ctx, globalResourceName, workflow); err != nil {
@@ -221,6 +227,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
 	t.Run("sets_provider_id_with_selected_hardware_id", func(t *testing.T) {
+		t.Parallel()
+
 		if !strings.Contains(updatedMachine.Spec.ProviderID, hardwareUUID) {
 			t.Fatalf("Expected ProviderID field to include %q, got %q", hardwareUUID, updatedMachine.Spec.ProviderID)
 		}
@@ -228,6 +236,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
 	t.Run("sets_tinkerbell_machine_status_to_ready", func(t *testing.T) {
+		t.Parallel()
+
 		if !updatedMachine.Status.Ready {
 			t.Fatalf("Machine is not ready")
 		}
@@ -235,6 +245,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
 	t.Run("sets_tinkerbell_finalizer", func(t *testing.T) {
+		t.Parallel()
+
 		if len(updatedMachine.ObjectMeta.Finalizers) == 0 {
 			t.Fatalf("Expected at least one finalizer to be set")
 		}
@@ -242,6 +254,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
 	t.Run("sets_tinkerbell_machine_IP_address", func(t *testing.T) {
+		t.Parallel()
+
 		if len(updatedMachine.Status.Addresses) == 0 {
 			t.Fatalf("Expected at least one IP address to be populated")
 		}
@@ -253,6 +267,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 	// So it becomes unavailable for other clusters.
 	t.Run("sets_ownership_label_on_selected_hardware", func(t *testing.T) {
+		t.Parallel()
+
 		hardwareNamespacedName := types.NamespacedName{
 			Name: hardwareName,
 		}
@@ -284,12 +300,17 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	// Ensure idempotency of reconcile operation. E.g. we shouldn't try to create the template with the same name
 	// on every iteration.
 	t.Run("succeeds_when_executed_twice", func(t *testing.T) {
+		t.Parallel()
+
 		if _, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace); err != nil {
 			t.Fatalf("Unexpected reconciliation error: %v", err)
 		}
 	})
 
-	t.Run("refreshes_status_when_machine_is_already_provisioned", func(t *testing.T) {
+	// Status should be updated on every run.
+	//
+	// Don't execute this test in parallel, as we reset status here.
+	t.Run("refreshes_status_when_machine_is_already_provisioned", func(t *testing.T) { //nolint:paralleltest
 		updatedMachine.Status.Addresses = nil
 
 		if err := client.Update(context.Background(), updatedMachine); err != nil {
@@ -313,10 +334,12 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 //nolint:funlen
 func Test_Machine_reconciliation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("is_requeued_when", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("is_not_requeued_when_machine_object_is_missing",
+		t.Run("is_requeued_when_machine_object_is_missing",
 			machineReconciliationIsRequeuedWhenMachineObjectIsMissing)
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
@@ -330,6 +353,8 @@ func Test_Machine_reconciliation(t *testing.T) {
 	})
 
 	t.Run("fails_when", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("reconciler_is_nil", machineReconciliationFailsWhenReconcilerIsNil)
 		t.Run("reconciler_has_no_logger_set", machineReconciliationFailsWhenReconcilerHasNoLoggerSet)
 		t.Run("reconciler_has_no_client_set", machineReconciliationFailsWhenReconcilerHasNoClientSet)
@@ -360,21 +385,23 @@ func Test_Machine_reconciliation(t *testing.T) {
 
 	// We only support single controlplane node at the moment as we don't have a concept of load balancer, so it's
 	// the role of cluster controller to select which hardware to use for controlplane node.
-	t.Run("uses_hardware_selected_by_cluster_controller_for_controlplane_node",
+	t.Run("uses_hardware_selected_by_cluster_controller_for_controlplane_node", //nolint:paralleltest
 		machineReconciliationUsesHardwareSelectedByClusterControllerForControlplaneNode)
 
 	// Single hardware should only ever be used for a single machine.
-	t.Run("selects_unique_and_available_hardware_for_each_machine",
+	t.Run("selects_unique_and_available_hardware_for_each_machine", //nolint:paralleltest
 		machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine)
 
 	// Patching Hardware and TinkerbellMachine are not atomic operations, so we should handle situation, when
 	// misspelling process is aborted in the middle.
 	//
 	// Without that, new Hardware will be selected each time.
-	t.Run("uses_already_selected_hardware_if_patching_tinkerbell_machine_failed",
+	t.Run("uses_already_selected_hardware_if_patching_tinkerbell_machine_failed", //nolint:paralleltest
 		machineReconciliationUsesAlreadySelectedHardwareIfPatchingTinkerbellMachineFailed)
 
 	t.Run("when_machine_is_scheduled_for_removal_it", func(t *testing.T) {
+		t.Parallel()
+
 		// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
 		t.Run("removes_tinkerbell_finalizer", notImplemented)
 
@@ -385,6 +412,8 @@ func Test_Machine_reconciliation(t *testing.T) {
 
 //nolint:funlen
 func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *testing.T) {
+	t.Parallel()
+
 	objects := []runtime.Object{
 		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, ""),
 		validCluster(clusterName, clusterNamespace),
@@ -434,12 +463,16 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 	}
 
 	t.Run("removes_tinkerbell_machine_finalizer_from_hardware", func(t *testing.T) {
+		t.Parallel()
+
 		if len(updatedHardware.ObjectMeta.Finalizers) != 0 {
 			t.Errorf("Unexpected finalizers: %v", updatedHardware.ObjectMeta.Finalizers)
 		}
 	})
 
 	t.Run("makes_hardware_available_for_other_machines", func(t *testing.T) {
+		t.Parallel()
+
 		if _, ok := updatedHardware.ObjectMeta.Labels[controllers.HardwareOwnerNameLabel]; ok {
 			t.Errorf("Found hardware owner name label")
 		}
@@ -456,6 +489,8 @@ const (
 )
 
 func machineReconciliationFailsWhenReconcilerIsNil(t *testing.T) {
+	t.Parallel()
+
 	var machineController *controllers.TinkerbellMachineReconciler
 
 	request := ctrl.Request{
@@ -471,6 +506,8 @@ func machineReconciliationFailsWhenReconcilerIsNil(t *testing.T) {
 }
 
 func machineReconciliationFailsWhenReconcilerHasNoLoggerSet(t *testing.T) {
+	t.Parallel()
+
 	machineController := &controllers.TinkerbellMachineReconciler{
 		Log: logr.Discard(),
 	}
@@ -488,6 +525,8 @@ func machineReconciliationFailsWhenReconcilerHasNoLoggerSet(t *testing.T) {
 }
 
 func machineReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
+	t.Parallel()
+
 	machineController := &controllers.TinkerbellMachineReconciler{
 		Client: fake.NewFakeClient(),
 	}
@@ -537,6 +576,8 @@ func machineReconciliationIsRequeuedWhenMachineObjectIsMissing(t *testing.T) {
 }
 
 func machineReconciliationIsRequeuedWhenMachineHasNoOwnerSet(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	tinkerbellMachine := validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID)
@@ -565,6 +606,8 @@ func machineReconciliationIsRequeuedWhenMachineHasNoOwnerSet(t *testing.T) {
 }
 
 func machineReconciliationIsRequeuedWhenBootstrapSecretIsNotReady(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	machineWithoutSecretReference := validMachine(machineName, clusterNamespace, clusterName)
@@ -592,6 +635,8 @@ func machineReconciliationIsRequeuedWhenBootstrapSecretIsNotReady(t *testing.T) 
 }
 
 func machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	notReadyTinkerbellCluster := validTinkerbellCluster(clusterName, clusterNamespace)
@@ -619,6 +664,8 @@ func machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady(t *testi
 }
 
 func machineReconciliationFailsWhenMachineHasNoVersionSet(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	machineWithoutVersion := validMachine(machineName, clusterNamespace, clusterName)
@@ -641,6 +688,8 @@ func machineReconciliationFailsWhenMachineHasNoVersionSet(t *testing.T) {
 }
 
 func machineReconciliationFailsWhenBootstrapConfigIsEmpty(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	emptySecret := validSecret(machineName, clusterNamespace)
@@ -667,6 +716,8 @@ func machineReconciliationFailsWhenBootstrapConfigIsEmpty(t *testing.T) {
 }
 
 func machineReconciliationFailsWhenBootstrapConfigHasNoValueKey(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	emptySecret := validSecret(machineName, clusterNamespace)
@@ -693,6 +744,8 @@ func machineReconciliationFailsWhenBootstrapConfigHasNoValueKey(t *testing.T) {
 }
 
 func machineReconciliationFailsWhenAssociatedClusterObjectDoesNotExist(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	objects := []runtime.Object{
@@ -716,6 +769,8 @@ func machineReconciliationFailsWhenAssociatedClusterObjectDoesNotExist(t *testin
 }
 
 func machineReconciliationFailsWhenAssociatedTinkerbellClusterObjectDoesNotExist(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	objects := []runtime.Object{
@@ -739,6 +794,8 @@ func machineReconciliationFailsWhenAssociatedTinkerbellClusterObjectDoesNotExist
 }
 
 func machineReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	objects := []runtime.Object{
@@ -762,6 +819,8 @@ func machineReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
 }
 
 func machineReconciliationFailsWhenReconcilingControlplaneMachineAndThereIsNoHardwareAavailableLabeledByClusterController(t *testing.T) { //nolint:lll
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	controlplaneMachine := validMachine(machineName, clusterNamespace, clusterName)
@@ -788,6 +847,8 @@ func machineReconciliationFailsWhenReconcilingControlplaneMachineAndThereIsNoHar
 }
 
 func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.T) {
+	t.Parallel()
+
 	hardwareUUID := uuid.New().String()
 
 	malformedHardware := validHardware(hardwareName, hardwareUUID, "")
@@ -813,6 +874,8 @@ func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.
 }
 
 func machineReconciliationUsesHardwareSelectedByClusterControllerForControlplaneNode(t *testing.T) {
+	t.Parallel()
+
 	controlplaneHardwareUUID := uuid.New().String()
 
 	controlplaneHardware := validHardware("myhardware", controlplaneHardwareUUID, "2.2.2.2")
@@ -863,6 +926,8 @@ func machineReconciliationUsesHardwareSelectedByClusterControllerForControlplane
 }
 
 func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine(t *testing.T) {
+	t.Parallel()
+
 	secondMachineName := "secondMachineName"
 	secondHardwareName := "secondHardwareName"
 
@@ -923,6 +988,8 @@ func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine(t *tes
 }
 
 func machineReconciliationUsesAlreadySelectedHardwareIfPatchingTinkerbellMachineFailed(t *testing.T) {
+	t.Parallel()
+
 	expectedHardwareName := "alreadyOwnedHardware"
 	alreadyOwnedHardware := validHardware(expectedHardwareName, uuid.New().String(), "2.2.2.2")
 	alreadyOwnedHardware.ObjectMeta.Labels = map[string]string{
