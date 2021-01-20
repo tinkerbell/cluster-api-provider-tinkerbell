@@ -35,7 +35,7 @@ bootstrapped.
 
 This project is under active development and you should expect issues, pull
 requests and conversation ongoing in the [bi-weekly community
-meeting]()https://github.com/tinkerbell/.github/blob/master/COMMUNICATION.md#contributors-mailing-list.
+meeting](https://github.com/tinkerbell/.github/blob/master/COMMUNICATION.md#contributors-mailing-list).
 Feel free to join if you are curious or if you have any question.
 
 There is a milestone called `v0.1.0 tech preview`. Have a look at issues
