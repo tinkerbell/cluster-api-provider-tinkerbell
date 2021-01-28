@@ -162,7 +162,7 @@ CLUSTERCTL_TEMPLATE ?= templates/clusterctl-template.yaml
 CLUSTER_TEMPLATE ?= templates/cluster-template.yaml
 
 # Binaries.
-KUSTOMIZE_VER := v3.8.8
+KUSTOMIZE_VER := v3.9.2
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
