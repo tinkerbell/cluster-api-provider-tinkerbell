@@ -3,7 +3,7 @@ module github.com/tinkerbell/cluster-api-provider-tinkerbell
 go 1.15
 
 require (
-	github.com/go-logr/logr v0.3.0
+	github.com/go-logr/logr v0.4.0
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/uuid v1.1.2
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
