@@ -7,7 +7,7 @@ require (
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
-	github.com/onsi/gomega v1.10.1
+	github.com/onsi/gomega v1.10.5
 	github.com/tinkerbell/tink v0.0.0-20210104124527-57eb0efb6dbb
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
