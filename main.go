@@ -18,21 +18,29 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
+	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
+	tinktemplate "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/template"
+	tinkworkflow "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/workflow"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
+	tinkclient "github.com/tinkerbell/tink/client"
+	tinkevents "github.com/tinkerbell/tink/protos/events"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"k8s.io/klog/klogr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-
-	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -44,9 +52,12 @@ var (
 
 //nolint:wsl,gochecknoinits
 func init() {
+	klog.InitFlags(nil)
+
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1alpha3.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
+	_ = tinkv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -114,6 +125,81 @@ func validateOptions(options ctrl.Options) error {
 	return nil
 }
 
+func addHealthChecks(mgr ctrl.Manager) error {
+	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
+		return fmt.Errorf("unable to create ready check: %w", err)
+	}
+
+	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
+		return fmt.Errorf("unable to create healthz check: %w", err)
+	}
+
+	return nil
+}
+
+func setupTinkShimControllers(mgr ctrl.Manager) error {
+	hwClient := client.NewHardwareClient(tinkclient.HardwareClient)
+	templateClient := client.NewTemplateClient(tinkclient.TemplateClient)
+	workflowClient := client.NewWorkflowClient(tinkclient.WorkflowClient, hwClient)
+
+	hwChan := make(chan event.GenericEvent)
+	templateChan := make(chan event.GenericEvent)
+	workflowChan := make(chan event.GenericEvent)
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      hwChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
+	}); err != nil {
+		return fmt.Errorf("unable to create tink hardware watcher: %w", err)
+	}
+
+	if err := (&tinkhardware.Reconciler{
+		Client:         mgr.GetClient(),
+		HardwareClient: hwClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Hardware"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, hwChan); err != nil {
+		return fmt.Errorf("unable to create tink hardware controller: %w", err)
+	}
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      templateChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
+	}); err != nil {
+		return fmt.Errorf("unable to create tink template watcher: %w", err)
+	}
+
+	if err := (&tinktemplate.Reconciler{
+		Client:         mgr.GetClient(),
+		TemplateClient: templateClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Template"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, templateChan); err != nil {
+		return fmt.Errorf("unable to create tink template controller: %w", err)
+	}
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      workflowChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
+	}); err != nil {
+		return fmt.Errorf("unable to create tink workflow watcher: %w", err)
+	}
+
+	if err := (&tinkworkflow.Reconciler{
+		Client:         mgr.GetClient(),
+		WorkflowClient: workflowClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Workflow"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, workflowChan); err != nil {
+		return fmt.Errorf("unable to create tink workflow controller: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	ctrl.SetLogger(klogr.New())
 
@@ -130,42 +216,43 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Get a Tinkerbell client.
+	if err := tinkclient.Setup(); err != nil {
+		setupLog.Error(err, "unable to create tinkerbell client")
+		os.Exit(1)
+	}
+
+	stopCh := ctrl.SetupSignalHandler()
+
+	if err := setupTinkShimControllers(mgr); err != nil {
+		setupLog.Error(err, "failed to add Tinkerbell Shim Controllers")
+		os.Exit(1)
+	}
 
 	if err = (&controllers.TinkerbellClusterReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("TinerellCluster"),
-		Recorder: mgr.GetEventRecorderFor("tinerellcluster-controller"),
-		Scheme:   mgr.GetScheme(),
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
 		os.Exit(1)
 	}
 
 	if err = (&controllers.TinkerbellMachineReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("tinkerbellmachine-controller"),
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellMachine")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to create ready check")
-		os.Exit(1)
-	}
-
-	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to create health check")
+	if err := addHealthChecks(mgr); err != nil {
+		setupLog.Error(err, "failed to add health checks")
 		os.Exit(1)
 	}
 
 	setupLog.Info("starting manager")
 
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(stopCh); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

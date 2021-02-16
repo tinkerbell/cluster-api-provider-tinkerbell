@@ -59,7 +59,12 @@ spec:
           spec:
             description: TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
             properties:
-              hardwareReservationID:
+              hardwareName:
+                description: Those fields are set programmatically, but they cannot
+                  be re-constructed from "state of the world", so we put them in spec
+                  instead of status.
+                type: string
+              providerID:
                 type: string
             type: object
           status:

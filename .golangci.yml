@@ -34,7 +34,9 @@ linters:
     - errorlint
     - exhaustive
     - exportloopref
+    - forbidigo
     - funlen
+    - gochecknoglobals
     - gochecknoinits
     - gocognit
     - goconst
@@ -49,22 +51,28 @@ linters:
     - gomnd
     - gomodguard
     - goprintffuncname
+    - gosec
     - ineffassign
     - interfacer
     - lll
+    - makezero
+    - maligned
     - misspell
     - nakedret
     - nestif
     - nlreturn
     - noctx
     - nolintlint
+    - paralleltest
     - prealloc
+    - predeclared
     - rowserrcheck
     - scopelint
     - sqlclosecheck
     - structcheck
     - stylecheck
     - testpackage
+    - thelper
     - tparallel
     - typecheck
     - unconvert
@@ -77,3 +85,4 @@ linters:
     - gci
     - godox
     - goerr113
+    - exhaustivestruct

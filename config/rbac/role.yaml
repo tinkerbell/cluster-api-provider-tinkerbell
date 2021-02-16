@@ -72,3 +72,42 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - tinkerbell.org
+  resources:
+  - hardware
+  - hardware/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tinkerbell.org
+  resources:
+  - templates
+  - templates/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tinkerbell.org
+  resources:
+  - workflows
+  - workflows/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

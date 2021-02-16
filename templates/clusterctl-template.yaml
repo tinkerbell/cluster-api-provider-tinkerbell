@@ -1,4 +1,4 @@
 providers:
-- name: packet
+- name: tinkerbell
   url: URL
   type: InfrastructureProvider

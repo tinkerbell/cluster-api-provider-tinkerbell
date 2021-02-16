@@ -48,7 +48,12 @@ spec:
                     description: Spec is the specification of the desired behavior
                       of the machine.
                     properties:
-                      hardwareReservationID:
+                      hardwareName:
+                        description: Those fields are set programmatically, but they
+                          cannot be re-constructed from "state of the world", so we
+                          put them in spec instead of status.
+                        type: string
+                      providerID:
                         type: string
                     type: object
                 required:

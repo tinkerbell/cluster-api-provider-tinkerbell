@@ -7,6 +7,9 @@ resources:
 - bases/infrastructure.cluster.x-k8s.io_tinkerbellclusters.yaml
 - bases/infrastructure.cluster.x-k8s.io_tinkerbellmachines.yaml
 - bases/infrastructure.cluster.x-k8s.io_tinkerbellmachinetemplates.yaml
+- bases/tinkerbell.org_hardware.yaml
+- bases/tinkerbell.org_templates.yaml
+- bases/tinkerbell.org_workflows.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

@@ -10,21 +10,25 @@ spec:
     kind: TinkerbellMachineTemplate
     name: "${CLUSTER_NAME}-control-plane"
   kubeadmConfigSpec:
+    # initConfiguration and joinConfiguration must be in sync to have the same features
+    # for both cluster bootstrapping and new controller nodes joining.
+    #
+    # This is not super important at the moment, as Tinkerbell provider only supports
+    # single controller node.
     initConfiguration:
       nodeRegistration:
         kubeletExtraArgs:
-          cloud-provider: external
-    clusterConfiguration:
-      apiServer:
-        extraArgs:
-          cloud-provider: external
-      controllerManager:
-        extraArgs:
-          cloud-provider: external
+          # This field is replaced by controller when rendering cloud-init config
+          # until we have Tinkerbell CCM.
+          provider-id: "PROVIDER_ID"
+    # This key is required by 'kubeadm init'.
+    clusterConfiguration: {}
     joinConfiguration:
       nodeRegistration:
         kubeletExtraArgs:
-          cloud-provider: external
+          # This field is replaced by controller when rendering cloud-init config
+          # until we have Tinkerbell CCM.
+          provider-id: "PROVIDER_ID"
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
 kind: TinkerbellMachineTemplate
@@ -32,7 +36,7 @@ metadata:
   name: "${CLUSTER_NAME}-control-plane"
 spec:
   template:
-    spec:
+    spec: {}
 ---
 apiVersion: cluster.x-k8s.io/v1alpha3
 kind: Cluster
@@ -59,7 +63,7 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
 kind: TinkerbellCluster
 metadata:
   name: "${CLUSTER_NAME}"
-spec:
+spec: {}
 ---
 apiVersion: cluster.x-k8s.io/v1alpha3
 kind: MachineDeployment
@@ -99,7 +103,7 @@ metadata:
   name: ${CLUSTER_NAME}-worker-a
 spec:
   template:
-    spec:
+    spec: {}
 ---
 kind: KubeadmConfigTemplate
 apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
@@ -111,4 +115,6 @@ spec:
       joinConfiguration:
         nodeRegistration:
           kubeletExtraArgs:
-            cloud-provider: external
+            # This field is replaced by controller when rendering cloud-init config
+            # until we have Tinkerbell CCM.
+            provider-id: "PROVIDER_ID"

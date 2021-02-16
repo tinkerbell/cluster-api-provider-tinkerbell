@@ -33,7 +33,10 @@ const (
 
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
 type TinkerbellMachineSpec struct {
-	HardwareID string `json:"hardwareReservationID,omitempty"`
+	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
+	// we put them in spec instead of status.
+	HardwareName string `json:"hardwareName,omitempty"`
+	ProviderID   string `json:"providerID,omitempty"`
 }
 
 // TinkerbellMachineStatus defines the observed state of TinkerbellMachine.

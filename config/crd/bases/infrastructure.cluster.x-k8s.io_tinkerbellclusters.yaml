@@ -38,24 +38,22 @@ spec:
               INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important:
               Run "make" to regenerate code after modifying this file.'
             properties:
-              controlPlaneHardwareIDs:
-                description: ControlPlaneHardwareIDs contains a list of hardware IDs
-                  used as pool for control plane kubernetes instances.
-                items:
-                  type: string
-                type: array
-              hardwareDiscoveryStrategy:
-                description: HardwareDiscoveryStrategy is a switch we have to implement
-                  more advacned discovery strategy. The unique one we have today is
-                  the default one obviously and it uses the two lists of hardware
-                  IDs specified down here.
-                type: string
-              machineHardwareIDs:
-                description: MachineHardwareIDs contains a list of hardware IDs used
-                  as pool for data plane kubernetes instances.
-                items:
-                  type: string
-                type: array
+              controlPlaneEndpoint:
+                description: "ControlPlaneEndpoint is a required field by ClusterAPI
+                  v1alpha3. \n See https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
+                  for more details."
+                properties:
+                  host:
+                    description: The hostname on which the API server is serving.
+                    type: string
+                  port:
+                    description: The port on which the API server is serving.
+                    format: int32
+                    type: integer
+                required:
+                - host
+                - port
+                type: object
             type: object
           status:
             description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
