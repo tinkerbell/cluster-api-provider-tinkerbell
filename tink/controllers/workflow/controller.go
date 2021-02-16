@@ -132,7 +132,78 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workfl
 	return r.reconcileStatus(ctx, w, tinkWorkflow)
 }
 
-func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workflow, tinkWorkflow *workflow.Workflow) (ctrl.Result, error) {
+func actionFromTinkAction(action *workflow.WorkflowAction) tinkv1alpha1.Action {
+	return tinkv1alpha1.Action{
+		Name:        action.GetName(),
+		TaskName:    action.GetTaskName(),
+		Image:       action.GetImage(),
+		Timeout:     action.GetTimeout(),
+		Command:     action.GetCommand(),
+		OnTimeout:   action.GetOnTimeout(),
+		OnFailure:   action.GetOnFailure(),
+		WorkerID:    action.GetWorkerId(),
+		Volumes:     action.GetVolumes(),
+		Environment: action.GetEnvironment(),
+	}
+}
+
+func eventFromTinkEvent(event *workflow.WorkflowActionStatus) tinkv1alpha1.Event {
+	return tinkv1alpha1.Event{
+		ActionName:   event.GetActionName(),
+		TaskName:     event.GetTaskName(),
+		ActionStatus: event.GetActionStatus().String(),
+		Seconds:      event.GetSeconds(),
+		Message:      event.GetMessage(),
+		WorkerID:     event.GetWorkerId(),
+		CreatedAt:    metav1.NewTime(event.GetCreatedAt().AsTime()),
+	}
+}
+
+func (r *Reconciler) reconcileStatusEvents(ctx context.Context, w *tinkv1alpha1.Workflow, id string) error {
+	logger := r.Log.WithValues("workflow", w.Name)
+
+	events, err := r.WorkflowClient.GetEvents(ctx, id)
+	if err != nil {
+		logger.Error(err, "Failed to get events for workflow")
+
+		return fmt.Errorf("failed to get events for workflow: %w", err)
+	}
+
+	statusEvents := make([]tinkv1alpha1.Event, 0, len(events))
+	for _, event := range events {
+		statusEvents = append(statusEvents, eventFromTinkEvent(event))
+	}
+
+	w.Status.Events = statusEvents
+
+	return nil
+}
+
+func (r *Reconciler) reconcileStatusActions(ctx context.Context, w *tinkv1alpha1.Workflow, id string) error {
+	logger := r.Log.WithValues("workflow", w.Name)
+
+	actions, err := r.WorkflowClient.GetActions(ctx, id)
+	if err != nil {
+		logger.Error(err, "Failed to get actions for workflow")
+
+		return fmt.Errorf("failed to get actions for workflow: %w", err)
+	}
+
+	statusActions := make([]tinkv1alpha1.Action, 0, len(actions))
+	for _, action := range actions {
+		statusActions = append(statusActions, actionFromTinkAction(action))
+	}
+
+	w.Status.Actions = statusActions
+
+	return nil
+}
+
+func (r *Reconciler) reconcileStatus(
+	ctx context.Context,
+	w *tinkv1alpha1.Workflow,
+	tinkWorkflow *workflow.Workflow,
+) (ctrl.Result, error) {
 	logger := r.Log.WithValues("workflow", w.Name)
 	patch := client.MergeFrom(w.DeepCopy())
 
@@ -154,52 +225,13 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, w *tinkv1alpha1.Workfl
 
 	w.Status.Metadata = string(md)
 
-	actions, err := r.WorkflowClient.GetActions(ctx, tinkWorkflow.GetId())
-	if err != nil {
-		logger.Error(err, "Failed to get actions for workflow")
-
-		return ctrl.Result{}, fmt.Errorf("failed to get actions for workflow: %w", err)
+	if err := r.reconcileStatusActions(ctx, w, tinkWorkflow.GetId()); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	statusActions := make([]tinkv1alpha1.Action, 0, len(actions))
-	for _, action := range actions {
-		statusActions = append(statusActions, tinkv1alpha1.Action{
-			Name:        action.GetName(),
-			TaskName:    action.GetTaskName(),
-			Image:       action.GetImage(),
-			Timeout:     action.GetTimeout(),
-			Command:     action.GetCommand(),
-			OnTimeout:   action.GetOnTimeout(),
-			OnFailure:   action.GetOnFailure(),
-			WorkerID:    action.GetWorkerId(),
-			Volumes:     action.GetVolumes(),
-			Environment: action.GetEnvironment(),
-		})
+	if err := r.reconcileStatusEvents(ctx, w, tinkWorkflow.GetId()); err != nil {
+		return ctrl.Result{}, err
 	}
-
-	w.Status.Actions = statusActions
-
-	events, err := r.WorkflowClient.GetEvents(ctx, tinkWorkflow.GetId())
-	if err != nil {
-		logger.Error(err, "Failed to get events for workflow")
-
-		return ctrl.Result{}, fmt.Errorf("failed to get events for workflow: %w", err)
-	}
-
-	statusEvents := make([]tinkv1alpha1.Event, 0, len(events))
-	for _, event := range events {
-		statusEvents = append(statusEvents, tinkv1alpha1.Event{
-			ActionName:   event.GetActionName(),
-			TaskName:     event.GetTaskName(),
-			ActionStatus: event.GetActionStatus().String(),
-			Seconds:      event.GetSeconds(),
-			Message:      event.GetMessage(),
-			WorkerID:     event.GetWorkerId(),
-			CreatedAt:    metav1.NewTime(event.GetCreatedAt().AsTime()),
-		})
-	}
-
-	w.Status.Events = statusEvents
 
 	state, err := r.WorkflowClient.GetState(ctx, tinkWorkflow.GetId())
 	if err != nil {

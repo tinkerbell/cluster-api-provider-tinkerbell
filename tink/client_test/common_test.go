@@ -17,21 +17,19 @@ limitations under the License.
 package client_test
 
 import (
-	"crypto/x509"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/tinkerbell/tink/client"
 	"github.com/tinkerbell/tink/protos/hardware"
 	"github.com/tinkerbell/tink/protos/template"
 	"github.com/tinkerbell/tink/protos/workflow"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 func realConn(t *testing.T) *grpc.ClientConn {
+	t.Helper()
 	g := NewWithT(t)
 
 	certURL, ok := os.LookupEnv("TINKERBELL_CERT_URL")
@@ -44,38 +42,28 @@ func realConn(t *testing.T) *grpc.ClientConn {
 		t.Skip("Skipping live client tests because TINKERBELL_GRPC_AUTHORITY is not set.")
 	}
 
-	resp, err := http.Get(certURL) //nolint:noctx
-	g.Expect(err).NotTo(HaveOccurred())
-
-	defer resp.Body.Close() //nolint:errcheck
-
-	certs, err := ioutil.ReadAll(resp.Body)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	cp := x509.NewCertPool()
-	ok = cp.AppendCertsFromPEM(certs)
-	g.Expect(ok).To(BeTrue())
-
-	creds := credentials.NewClientTLSFromCert(cp, "tink-server")
-	conn, err := grpc.Dial(grpcAuthority, grpc.WithTransportCredentials(creds))
+	conn, err := client.GetConnection()
 	g.Expect(err).NotTo(HaveOccurred())
 
 	return conn
 }
 
 func realTemplateClient(t *testing.T) template.TemplateServiceClient {
+	t.Helper()
 	conn := realConn(t)
 
 	return template.NewTemplateServiceClient(conn)
 }
 
 func realWorkflowClient(t *testing.T) workflow.WorkflowServiceClient {
+	t.Helper()
 	conn := realConn(t)
 
 	return workflow.NewWorkflowServiceClient(conn)
 }
 
 func realHardwareClient(t *testing.T) hardware.HardwareServiceClient {
+	t.Helper()
 	conn := realConn(t)
 
 	return hardware.NewHardwareServiceClient(conn)

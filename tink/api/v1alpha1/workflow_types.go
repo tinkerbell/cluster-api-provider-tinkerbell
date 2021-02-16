@@ -25,6 +25,8 @@ const (
 	// ID assigned to the workflow by Tinkerbell.
 	WorkflowIDAnnotation = "workflow.tinkerbell.org/id"
 
+	// WorkflowFinalizer is used by the controller to ensure
+	// proper deletion of the workflow resource.
 	WorkflowFinalizer = "workflow.tinkerbell.org"
 )
 
@@ -55,6 +57,7 @@ type WorkflowStatus struct {
 	Events []Event `json:"events,omitempty"`
 }
 
+// Action represents a workflow action.
 type Action struct {
 	TaskName    string   `json:"task_name,omitempty"`
 	Name        string   `json:"name,omitempty"`
@@ -68,6 +71,7 @@ type Action struct {
 	Environment []string `json:"environment,omitempty"`
 }
 
+// Event represents a workflow event.
 type Event struct {
 	TaskName     string      `json:"task_name,omitempty"`
 	ActionName   string      `json:"action_name,omitempty"`
@@ -120,6 +124,7 @@ type WorkflowList struct {
 	Items           []Workflow `json:"items"`
 }
 
+//nolint:gochecknoinits
 func init() {
 	SchemeBuilder.Register(&Workflow{}, &WorkflowList{})
 }

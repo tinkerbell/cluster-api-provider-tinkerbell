@@ -20,10 +20,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// HardwareState represents the hardware state.
 type HardwareState string
 
 const (
+	// HardwareError represents hardware that is in an error state.
 	HardwareError = HardwareState("Error")
+
+	// HardwareReady represents hardware that is in a ready state.
 	HardwareReady = HardwareState("Ready")
 )
 
@@ -45,6 +49,7 @@ type HardwareStatus struct {
 	State HardwareState `json:"state,omitempty"`
 }
 
+// Interface represents a network interface configuration for Hardware.
 type Interface struct {
 	//+optional
 	Netboot *Netboot `json:"netboot,omitempty"`
@@ -53,6 +58,7 @@ type Interface struct {
 	DHCP *DHCP `json:"dhcp,omitempty"`
 }
 
+// Netboot configuration.
 type Netboot struct {
 	//+optional
 	AllowPXE *bool `json:"allowPXE,omitempty"`
@@ -67,17 +73,20 @@ type Netboot struct {
 	OSIE *OSIE `json:"osie,omitempty"`
 }
 
+// IPXE configuration.
 type IPXE struct {
 	URL      string `json:"url,omitempty"`
 	Contents string `json:"contents,omitempty"`
 }
 
+// OSIE configuration.
 type OSIE struct {
 	BaseURL string `json:"baseURL,omitempty"`
 	Kernel  string `json:"kernel,omitempty"`
 	Initrd  string `json:"initrd,omitempty"`
 }
 
+// DHCP configuration.
 type DHCP struct {
 	MAC         string   `json:"mac,omitempty"`
 	Hostname    string   `json:"hostname,omitempty"`
@@ -90,6 +99,7 @@ type DHCP struct {
 	IP          *IP      `json:"ip,omitempty"`
 }
 
+// IP configuration.
 type IP struct {
 	Address string `json:"address,omitempty"`
 	Netmask string `json:"netmask,omitempty"`
@@ -125,6 +135,7 @@ type HardwareList struct {
 	Items           []Hardware `json:"items"`
 }
 
+//nolint:gochecknoinits
 func init() {
 	SchemeBuilder.Register(&Hardware{}, &HardwareList{})
 }

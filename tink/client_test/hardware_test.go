@@ -25,7 +25,7 @@ import (
 	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )
 
-func TestHardwareLifecycle(t *testing.T) { //nolint:funlen
+func TestHardwareLifecycle(t *testing.T) { //nolint:funlen,paralleltest
 	g := NewWithT(t)
 	ctx := context.Background()
 	hardwareClient := client.NewHardwareClient(realHardwareClient(t))

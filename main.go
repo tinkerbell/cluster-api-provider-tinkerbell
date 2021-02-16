@@ -18,6 +18,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -124,6 +125,81 @@ func validateOptions(options ctrl.Options) error {
 	return nil
 }
 
+func addHealthChecks(mgr ctrl.Manager) error {
+	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
+		return fmt.Errorf("unable to create ready check: %w", err)
+	}
+
+	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
+		return fmt.Errorf("unable to create healthz check: %w", err)
+	}
+
+	return nil
+}
+
+func setupTinkShimControllers(mgr ctrl.Manager) error {
+	hwClient := client.NewHardwareClient(tinkclient.HardwareClient)
+	templateClient := client.NewTemplateClient(tinkclient.TemplateClient)
+	workflowClient := client.NewWorkflowClient(tinkclient.WorkflowClient, hwClient)
+
+	hwChan := make(chan event.GenericEvent)
+	templateChan := make(chan event.GenericEvent)
+	workflowChan := make(chan event.GenericEvent)
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      hwChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
+	}); err != nil {
+		return fmt.Errorf("unable to create tink hardware watcher: %w", err)
+	}
+
+	if err := (&tinkhardware.Reconciler{
+		Client:         mgr.GetClient(),
+		HardwareClient: hwClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Hardware"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, hwChan); err != nil {
+		return fmt.Errorf("unable to create tink hardware controller: %w", err)
+	}
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      templateChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
+	}); err != nil {
+		return fmt.Errorf("unable to create tink template watcher: %w", err)
+	}
+
+	if err := (&tinktemplate.Reconciler{
+		Client:         mgr.GetClient(),
+		TemplateClient: templateClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Template"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, templateChan); err != nil {
+		return fmt.Errorf("unable to create tink template controller: %w", err)
+	}
+
+	if err := mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      workflowChan,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
+		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
+	}); err != nil {
+		return fmt.Errorf("unable to create tink workflow watcher: %w", err)
+	}
+
+	if err := (&tinkworkflow.Reconciler{
+		Client:         mgr.GetClient(),
+		WorkflowClient: workflowClient,
+		Log:            ctrl.Log.WithName("controllers").WithName("Workflow"),
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr, workflowChan); err != nil {
+		return fmt.Errorf("unable to create tink workflow controller: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	ctrl.SetLogger(klogr.New())
 
@@ -145,70 +221,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	hwClient := client.NewHardwareClient(tinkclient.HardwareClient)
-	templateClient := client.NewTemplateClient(tinkclient.TemplateClient)
-	workflowClient := client.NewWorkflowClient(tinkclient.WorkflowClient, hwClient)
-
 	stopCh := ctrl.SetupSignalHandler()
 
-	hwChan := make(chan event.GenericEvent)
-	templateChan := make(chan event.GenericEvent)
-	workflowChan := make(chan event.GenericEvent)
-
-	if err := mgr.Add(&sources.TinkEventWatcher{
-		EventCh:      hwChan,
-		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
-		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
-	}); err != nil {
-		setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Hardware")
-		os.Exit(1)
-	}
-
-	if err := mgr.Add(&sources.TinkEventWatcher{
-		EventCh:      templateChan,
-		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
-		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
-	}); err != nil {
-		setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Template")
-		os.Exit(1)
-	}
-
-	if err := mgr.Add(&sources.TinkEventWatcher{
-		EventCh:      workflowChan,
-		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
-		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
-	}); err != nil {
-		setupLog.Error(err, "unable to create tink watcher", "tinkwatcher", "Workflow")
-		os.Exit(1)
-	}
-
-	if err = (&tinkhardware.Reconciler{
-		Client:         mgr.GetClient(),
-		HardwareClient: hwClient,
-		Log:            ctrl.Log.WithName("controllers").WithName("Hardware"),
-		Scheme:         mgr.GetScheme(),
-	}).SetupWithManager(mgr, hwChan); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Hardware")
-		os.Exit(1)
-	}
-
-	if err = (&tinktemplate.Reconciler{
-		Client:         mgr.GetClient(),
-		TemplateClient: templateClient,
-		Log:            ctrl.Log.WithName("controllers").WithName("Template"),
-		Scheme:         mgr.GetScheme(),
-	}).SetupWithManager(mgr, templateChan); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Template")
-		os.Exit(1)
-	}
-
-	if err = (&tinkworkflow.Reconciler{
-		Client:         mgr.GetClient(),
-		WorkflowClient: workflowClient,
-		Log:            ctrl.Log.WithName("controllers").WithName("Workflow"),
-		Scheme:         mgr.GetScheme(),
-	}).SetupWithManager(mgr, workflowChan); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Workflow")
+	if err := setupTinkShimControllers(mgr); err != nil {
+		setupLog.Error(err, "failed to add Tinkerbell Shim Controllers")
 		os.Exit(1)
 	}
 
@@ -229,13 +245,8 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to create ready check")
-		os.Exit(1)
-	}
-
-	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to create health check")
+	if err := addHealthChecks(mgr); err != nil {
+		setupLog.Error(err, "failed to add health checks")
 		os.Exit(1)
 	}
 

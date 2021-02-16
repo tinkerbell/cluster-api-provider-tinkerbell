@@ -46,7 +46,7 @@ tasks:
         timeout: 60`
 )
 
-func TestTemplateLifecycle(t *testing.T) {
+func TestTemplateLifecycle(t *testing.T) { //nolint:paralleltest
 	g := NewWithT(t)
 	ctx := context.Background()
 	templateClient := client.NewTemplateClient(realTemplateClient(t))

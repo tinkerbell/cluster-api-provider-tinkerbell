@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	"github.com/tinkerbell/tink/protos/hardware"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -118,63 +117,72 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, h *tinkv1alpha1.Hardwa
 	return r.reconcileStatus(ctx, h, tinkHardware)
 }
 
-func (r *Reconciler) reconcileStatus(ctx context.Context, h *tinkv1alpha1.Hardware, tinkHardware *hardware.Hardware) (ctrl.Result, error) {
+func interfaceFromTinkInterface(iface *hardware.Hardware_Network_Interface) tinkv1alpha1.Interface {
+	tinkInterface := tinkv1alpha1.Interface{}
+	if netboot := iface.GetNetboot(); netboot != nil {
+		tinkInterface.Netboot = &tinkv1alpha1.Netboot{
+			AllowPXE:      pointer.BoolPtr(netboot.GetAllowPxe()),
+			AllowWorkflow: pointer.BoolPtr(netboot.GetAllowWorkflow()),
+		}
+		if ipxe := netboot.GetIpxe(); ipxe != nil {
+			tinkInterface.Netboot.IPXE = &tinkv1alpha1.IPXE{
+				URL:      ipxe.GetUrl(),
+				Contents: ipxe.GetContents(),
+			}
+		}
+
+		if osie := netboot.GetOsie(); osie != nil {
+			tinkInterface.Netboot.OSIE = &tinkv1alpha1.OSIE{
+				BaseURL: osie.GetBaseUrl(),
+				Kernel:  osie.GetKernel(),
+				Initrd:  osie.GetInitrd(),
+			}
+		}
+	}
+
+	if dhcp := iface.GetDhcp(); dhcp != nil {
+		tinkInterface.DHCP = &tinkv1alpha1.DHCP{
+			MAC:         dhcp.GetMac(),
+			Hostname:    dhcp.GetHostname(),
+			LeaseTime:   dhcp.GetLeaseTime(),
+			NameServers: dhcp.GetNameServers(),
+			TimeServers: dhcp.GetTimeServers(),
+			Arch:        dhcp.GetArch(),
+			UEFI:        dhcp.GetUefi(),
+			IfaceName:   dhcp.GetIfaceName(),
+		}
+
+		if ip := dhcp.GetIp(); ip != nil {
+			tinkInterface.DHCP.IP = &tinkv1alpha1.IP{
+				Address: ip.GetAddress(),
+				Netmask: ip.GetNetmask(),
+				Gateway: ip.GetGateway(),
+				Family:  ip.GetFamily(),
+			}
+		}
+	}
+
+	return tinkInterface
+}
+
+func (r *Reconciler) reconcileStatus(
+	ctx context.Context,
+	h *tinkv1alpha1.Hardware,
+	tinkHardware *hardware.Hardware,
+) (ctrl.Result, error) {
 	logger := r.Log.WithValues("hardware", h.Name)
 	patch := client.MergeFrom(h.DeepCopy())
 
 	h.Status.TinkMetadata = tinkHardware.GetMetadata()
 	h.Status.TinkVersion = tinkHardware.GetVersion()
-	h.Status.TinkInterfaces = []v1alpha1.Interface{}
+	h.Status.TinkInterfaces = []tinkv1alpha1.Interface{}
 
 	for _, iface := range tinkHardware.GetNetwork().GetInterfaces() {
-		tinkInterface := v1alpha1.Interface{}
-		if netboot := iface.GetNetboot(); netboot != nil {
-			tinkInterface.Netboot = &v1alpha1.Netboot{
-				AllowPXE:      pointer.BoolPtr(netboot.GetAllowPxe()),
-				AllowWorkflow: pointer.BoolPtr(netboot.GetAllowWorkflow()),
-			}
-			if ipxe := netboot.GetIpxe(); ipxe != nil {
-				tinkInterface.Netboot.IPXE = &v1alpha1.IPXE{
-					URL:      ipxe.GetUrl(),
-					Contents: ipxe.GetContents(),
-				}
-			}
-
-			if osie := netboot.GetOsie(); osie != nil {
-				tinkInterface.Netboot.OSIE = &v1alpha1.OSIE{
-					BaseURL: osie.GetBaseUrl(),
-					Kernel:  osie.GetKernel(),
-					Initrd:  osie.GetInitrd(),
-				}
-			}
-		}
-
-		if dhcp := iface.GetDhcp(); dhcp != nil {
-			tinkInterface.DHCP = &v1alpha1.DHCP{
-				MAC:         dhcp.GetMac(),
-				Hostname:    dhcp.GetHostname(),
-				LeaseTime:   dhcp.GetLeaseTime(),
-				NameServers: dhcp.GetNameServers(),
-				TimeServers: dhcp.GetTimeServers(),
-				Arch:        dhcp.GetArch(),
-				UEFI:        dhcp.GetUefi(),
-				IfaceName:   dhcp.GetIfaceName(),
-			}
-
-			if ip := dhcp.GetIp(); ip != nil {
-				tinkInterface.DHCP.IP = &v1alpha1.IP{
-					Address: ip.GetAddress(),
-					Netmask: ip.GetNetmask(),
-					Gateway: ip.GetGateway(),
-					Family:  ip.GetFamily(),
-				}
-			}
-		}
-
+		tinkInterface := interfaceFromTinkInterface(iface)
 		h.Status.TinkInterfaces = append(h.Status.TinkInterfaces, tinkInterface)
 	}
 
-	h.Status.State = v1alpha1.HardwareReady
+	h.Status.State = tinkv1alpha1.HardwareReady
 
 	if err := r.Client.Status().Patch(ctx, h, patch); err != nil {
 		logger.Error(err, "Failed to patch hardware")

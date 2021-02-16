@@ -96,8 +96,19 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return r.reconcileNormal(ctx, template)
 }
 
+func (r *Reconciler) ensureTemplateID(ctx context.Context, t *tinkv1alpha1.Template, id string) error {
+	// Make sure that we record the tinkerbell id for the workflow
+	patch := client.MergeFrom(t.DeepCopy())
+	t.SetTinkID(id)
+
+	if err := r.Client.Patch(ctx, t, patch); err != nil {
+		return fmt.Errorf("failed to patch template: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
-	// Create a patch for use later
 	logger := r.Log.WithValues("template", t.Name)
 
 	templateID := t.TinkID()
@@ -124,14 +135,10 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 		return ctrl.Result{}, fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// Make sure that we record the tinkerbell id for the workflow
-	patch := client.MergeFrom(t.DeepCopy())
-	t.SetTinkID(templateID)
+	if err := r.ensureTemplateID(ctx, t, templateID); err != nil {
+		logger.Error(err, "Failed to record template ID")
 
-	if err := r.Client.Patch(ctx, t, patch); err != nil {
-		logger.Error(err, "Failed to patch template")
-
-		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
+		return ctrl.Result{}, err
 	}
 
 	// If the data is specified and different than what is stored in Tinkerbell,
@@ -145,7 +152,7 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 		}
 	}
 
-	patch = client.MergeFrom(t.DeepCopy())
+	patch := client.MergeFrom(t.DeepCopy())
 	// If data was not specified, we are importing a pre-existing resource and should
 	// populate it from Tinkerbell
 	if t.Spec.Data == nil {
@@ -158,10 +165,10 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
 	}
 
-	return r.reconcileStatus(ctx, t, tinkTemplate)
+	return r.reconcileStatus(ctx, t)
 }
 
-func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Template, tinkTemplate *template.WorkflowTemplate) (ctrl.Result, error) {
+func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
 	logger := r.Log.WithValues("template", t.Name)
 	patch := client.MergeFrom(t.DeepCopy())
 

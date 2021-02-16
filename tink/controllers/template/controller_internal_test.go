@@ -45,7 +45,9 @@ tasks:
         image: hello-world
         timeout: 60`
 
+//nolint:funlen
 func TestTemplateReconciler_reconcileDelete(t *testing.T) {
+	t.Parallel()
 	g := NewWithT(t)
 	scheme := runtime.NewScheme()
 	now := metav1.Now()
@@ -100,6 +102,7 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 	for i := range tests {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			fakeTemplateClient := tinkfake.NewFakeTemplateClient(tt.tinkObjs...)
@@ -134,7 +137,9 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestTemplateReconciler_reconcileNormal(t *testing.T) {
+	t.Parallel()
 	g := NewWithT(t)
 	scheme := runtime.NewScheme()
 
@@ -201,6 +206,7 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 	for i := range tests {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			fakeTemplateClient := tinkfake.NewFakeTemplateClient(tt.tinkObjs...)

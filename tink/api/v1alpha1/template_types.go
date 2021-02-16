@@ -20,16 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TemplateState represents the template state.
 type TemplateState string
 
 const (
+	// TemplateError represents a template that is in an error state.
 	TemplateError = TemplateState("Error")
+
+	// TemplateReady represents a template that is in a ready state.
 	TemplateReady = TemplateState("Ready")
 
 	// TemplateIDAnnotation is used by the controller to store the
 	// ID assigned to the template by Tinkerbell.
 	TemplateIDAnnotation = "template.tinkerbell.org/id"
 
+	// TemplateFinalizer is used by the controller to ensure
+	// proper deletion of the template resource.
 	TemplateFinalizer = "template.tinkerbell.org"
 )
 
@@ -86,6 +92,7 @@ type TemplateList struct {
 	Items           []Template `json:"items"`
 }
 
+//nolint:gochecknoinits
 func init() {
 	SchemeBuilder.Register(&Template{}, &TemplateList{})
 }

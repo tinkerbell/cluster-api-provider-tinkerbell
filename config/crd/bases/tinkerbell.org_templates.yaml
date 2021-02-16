@@ -45,6 +45,7 @@ spec:
             description: TemplateStatus defines the observed state of Template.
             properties:
               state:
+                description: TemplateState represents the template state.
                 type: string
             type: object
         type: object

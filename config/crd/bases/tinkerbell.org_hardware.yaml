@@ -49,11 +49,15 @@ spec:
             description: HardwareStatus defines the observed state of Hardware.
             properties:
               state:
+                description: HardwareState represents the hardware state.
                 type: string
               tinkInterfaces:
                 items:
+                  description: Interface represents a network interface configuration
+                    for Hardware.
                   properties:
                     dhcp:
+                      description: DHCP configuration.
                       properties:
                         arch:
                           type: string
@@ -62,6 +66,7 @@ spec:
                         iface_name:
                           type: string
                         ip:
+                          description: IP configuration.
                           properties:
                             address:
                               type: string
@@ -90,12 +95,14 @@ spec:
                           type: boolean
                       type: object
                     netboot:
+                      description: Netboot configuration.
                       properties:
                         allowPXE:
                           type: boolean
                         allowWorkflow:
                           type: boolean
                         ipxe:
+                          description: IPXE configuration.
                           properties:
                             contents:
                               type: string
@@ -103,6 +110,7 @@ spec:
                               type: string
                           type: object
                         osie:
+                          description: OSIE configuration.
                           properties:
                             baseURL:
                               type: string

@@ -51,6 +51,7 @@ spec:
               actions:
                 description: Actions are the actions for this Workflow.
                 items:
+                  description: Action represents a workflow action.
                   properties:
                     command:
                       items:
@@ -91,6 +92,7 @@ spec:
               events:
                 description: Events are events for this Workflow.
                 items:
+                  description: Event represents a workflow event.
                   properties:
                     action_name:
                       type: string

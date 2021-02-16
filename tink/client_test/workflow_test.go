@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
-func TestWorkflowLifecycle(t *testing.T) {
+func TestWorkflowLifecycle(t *testing.T) { //nolint:paralleltest
 	g := NewWithT(t)
 	ctx := context.Background()
 

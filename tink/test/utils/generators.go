@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package utils contains test utilities for cluster-api-provider-tink.
 package utils
 
 import (
@@ -27,6 +28,7 @@ import (
 	"github.com/tinkerbell/tink/protos/template"
 )
 
+// HelloWorldTemplate for use in testing.
 const HelloWorldTemplate = `version: "0.1"
 name: hello_world_workflow
 global_timeout: 600
@@ -41,13 +43,15 @@ tasks:
 // These are CIDRs that we should not come across in a real
 // environment, since they are reserved for use in documentation
 // and examples.
+//nolint:gochecknoglobals
 var testCIDRs = [...]string{
 	"192.0.2.0/24",
 	"198.51.100.0/24",
 	"203.0.113.0/24",
 }
 
-var IPGetter = ipGetter{
+//nolint:gochecknoglobals
+var ipAddressGetter = ipGetter{
 	addresses: make(map[string]string),
 }
 
@@ -92,7 +96,8 @@ func (i *ipGetter) nextAddressFromCIDR(cidr string) (string, string, string, err
 	return ip, netMask, gateway, nil
 }
 
-var MACGenerator = macGenerator{
+//nolint:gochecknoglobals
+var macAddressGenerator = macGenerator{
 	addresses: make(map[string]struct{}),
 }
 
@@ -117,6 +122,7 @@ func (m *macGenerator) Get() (string, error) {
 		mac[0] &= ^byte(1)
 
 		// Ensure the local bit is set
+		//nolint:gomnd
 		mac[0] |= byte(2)
 
 		key := mac.String()
@@ -128,6 +134,7 @@ func (m *macGenerator) Get() (string, error) {
 	}
 }
 
+// GenerateTemplate generates a Tinkerbell Template for testing.
 func GenerateTemplate(name, data string) *template.WorkflowTemplate {
 	return &template.WorkflowTemplate{
 		Name: name,
@@ -135,6 +142,7 @@ func GenerateTemplate(name, data string) *template.WorkflowTemplate {
 	}
 }
 
+// GenerateHardware generates a Tinkerbell Hardware for testing.
 func GenerateHardware(numInterfaces int) (*hardware.Hardware, error) {
 	hw := &hardware.Hardware{
 		Network: &hardware.Hardware_Network{},
@@ -154,6 +162,7 @@ func GenerateHardware(numInterfaces int) (*hardware.Hardware, error) {
 	return hw, nil
 }
 
+// GenerateHardwareInterface generates a Tinkerbell Hardware Interface for testing.
 func GenerateHardwareInterface(cidr string) (*hardware.Hardware_Network_Interface, error) {
 	if cidr == "" {
 		i, err := rand.Int(rand.Reader, big.NewInt(int64(len(testCIDRs))))
@@ -164,12 +173,12 @@ func GenerateHardwareInterface(cidr string) (*hardware.Hardware_Network_Interfac
 		cidr = testCIDRs[i.Int64()]
 	}
 
-	ip, netmask, gateway, err := IPGetter.nextAddressFromCIDR(cidr)
+	ip, netmask, gateway, err := ipAddressGetter.nextAddressFromCIDR(cidr)
 	if err != nil {
 		return nil, err
 	}
 
-	mac, err := MACGenerator.Get()
+	mac, err := macAddressGenerator.Get()
 	if err != nil {
 		return nil, err
 	}

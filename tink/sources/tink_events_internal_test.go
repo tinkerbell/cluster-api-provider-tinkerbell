@@ -32,6 +32,7 @@ import (
 )
 
 func TestTinkEventWatcher_generateEventForTinkID(t *testing.T) { //nolint:funlen
+	t.Parallel()
 	g := NewWithT(t)
 	scheme := runtime.NewScheme()
 
@@ -40,11 +41,11 @@ func TestTinkEventWatcher_generateEventForTinkID(t *testing.T) { //nolint:funlen
 	tests := []struct {
 		name          string
 		id            string
-		resourceType  tinkevents.ResourceType
 		objs          []runtime.Object
-		eventExpected bool
 		want          event.GenericEvent
+		eventExpected bool
 		wantErr       bool
+		resourceType  tinkevents.ResourceType
 	}{
 		{
 			name:          "hardware not found",
@@ -182,6 +183,7 @@ func TestTinkEventWatcher_generateEventForTinkID(t *testing.T) { //nolint:funlen
 	for i := range tests {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			eventCh := make(chan event.GenericEvent)

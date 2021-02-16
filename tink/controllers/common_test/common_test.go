@@ -31,6 +31,7 @@ import (
 )
 
 func Test_EnsureFinalizer(t *testing.T) {
+	t.Parallel()
 	g := NewWithT(t)
 	scheme := runtime.NewScheme()
 
@@ -69,6 +70,7 @@ func Test_EnsureFinalizer(t *testing.T) {
 	for i := range tests {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 			ctx := context.Background()
 			fakeClient := fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopyObject())

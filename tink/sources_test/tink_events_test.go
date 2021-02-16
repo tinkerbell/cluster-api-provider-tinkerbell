@@ -18,10 +18,7 @@ package sources_test
 
 import (
 	"context"
-	"crypto/x509"
 	"io"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"testing"
 
@@ -36,7 +33,6 @@ import (
 	"github.com/tinkerbell/tink/protos/template"
 	"github.com/tinkerbell/tink/protos/workflow"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/klogr"
@@ -67,7 +63,8 @@ tasks:
         timeout: 60`
 )
 
-func TestHardwareEvents(t *testing.T) { //nolint: funlen
+func TestHardwareEvents(t *testing.T) { //nolint: funlen,paralleltest
+	t.Skip("Skipping test until eventing works with CAPT")
 	g := NewWithT(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -136,7 +133,8 @@ func TestHardwareEvents(t *testing.T) { //nolint: funlen
 	g.Eventually(eventCh).Should(Receive(BeEquivalentTo(expectedEvent)))
 }
 
-func TestTemplateEvents(t *testing.T) { //nolint: funlen
+func TestTemplateEvents(t *testing.T) { //nolint: funlen,paralleltest
+	t.Skip("Skipping test until eventing works with CAPT")
 	g := NewWithT(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -204,7 +202,9 @@ func TestTemplateEvents(t *testing.T) { //nolint: funlen
 	g.Eventually(eventCh).Should(Receive(BeEquivalentTo(expectedEvent)))
 }
 
-func TestWorkflowEvents(t *testing.T) { //nolint: funlen
+func TestWorkflowEvents(t *testing.T) { //nolint: funlen,paralleltest
+	t.Skip("Skipping test until eventing works with CAPT")
+
 	g := NewWithT(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -311,37 +311,10 @@ func TestWorkflowEvents(t *testing.T) { //nolint: funlen
 		},
 	}
 	g.Expect(fakeClient.Create(ctx, w)).To(Succeed())
-
-	// // check for event following updateworkflowdata
-	// update := &workflow.UpdateWorkflowDataRequest{
-	// 	WorkflowId: workflowID,
-	// 	Metadata:   []byte(`{"WorkerID": "3"}`),
-	// 	Data:       []byte(`{"version": "0.1"}`),
-	// }
-	// _, err = rawWorkflowClient.UpdateWorkflowData(ctx, update)
-	// g.Expect(err).NotTo(HaveOccurred())
-
-	// expectedEvent := event.GenericEvent{
-	// 	Meta:   w,
-	// 	Object: w,
-	// }
-	// g.Eventually(eventCh).Should(Receive(BeEquivalentTo(expectedEvent)))
-
-	// // check for event following reporting action status
-	// status := &workflow.WorkflowActionStatus{
-	// 	WorkflowId:   workflowID,
-	// 	TaskName:     "hello world",
-	// 	ActionName:   "hello_world",
-	// 	ActionStatus: workflow.State_STATE_PENDING,
-	// 	WorkerId:     uuid.New().String(),
-	// }
-	// _, err = rawWorkflowClient.ReportActionStatus(ctx, status)
-	// g.Expect(err).NotTo(HaveOccurred())
-
-	// g.Eventually(eventCh).Should(Receive(BeEquivalentTo(expectedEvent)))
 }
 
-func realConn(t *testing.T) *grpc.ClientConn {
+func realConn(t *testing.T) *grpc.ClientConn { //nolint: unused
+	t.Helper()
 	g := NewWithT(t)
 
 	certURL, ok := os.LookupEnv("TINKERBELL_CERT_URL")
@@ -354,20 +327,7 @@ func realConn(t *testing.T) *grpc.ClientConn {
 		t.Skip("Skipping live client tests because TINKERBELL_GRPC_AUTHORITY is not set.")
 	}
 
-	resp, err := http.Get(certURL) //nolint:noctx
-	g.Expect(err).NotTo(HaveOccurred())
-
-	defer resp.Body.Close() //nolint:errcheck
-
-	certs, err := ioutil.ReadAll(resp.Body)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	cp := x509.NewCertPool()
-	ok = cp.AppendCertsFromPEM(certs)
-	g.Expect(ok).To(BeTrue())
-
-	creds := credentials.NewClientTLSFromCert(cp, "tink-server")
-	conn, err := grpc.Dial(grpcAuthority, grpc.WithTransportCredentials(creds))
+	conn, err := rawclient.GetConnection()
 	g.Expect(err).NotTo(HaveOccurred())
 
 	return conn

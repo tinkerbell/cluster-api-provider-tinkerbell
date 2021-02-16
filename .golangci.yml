@@ -51,6 +51,7 @@ linters:
     - gomnd
     - gomodguard
     - goprintffuncname
+    - gosec
     - ineffassign
     - interfacer
     - lll

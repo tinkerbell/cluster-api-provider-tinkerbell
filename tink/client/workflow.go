@@ -52,6 +52,7 @@ func (t *Workflow) Get(ctx context.Context, id string) (*workflow.Workflow, erro
 	return tinkWorkflow, nil
 }
 
+// GetMetadata returns the metadata for a given Tinkerbell Workflow.
 func (t *Workflow) GetMetadata(ctx context.Context, id string) ([]byte, error) {
 	verReq := &workflow.GetWorkflowDataRequest{WorkflowId: id}
 
@@ -78,6 +79,7 @@ func (t *Workflow) GetMetadata(ctx context.Context, id string) ([]byte, error) {
 	return resp.GetData(), nil
 }
 
+// GetActions returns the actions for a given Tinkerbell Workflow.
 func (t *Workflow) GetActions(ctx context.Context, id string) ([]*workflow.WorkflowAction, error) {
 	req := &workflow.WorkflowActionsRequest{WorkflowId: id}
 
@@ -93,6 +95,7 @@ func (t *Workflow) GetActions(ctx context.Context, id string) ([]*workflow.Workf
 	return resp.GetActionList(), nil
 }
 
+// GetEvents returns the events for a given Tinkerbell Workflow.
 func (t *Workflow) GetEvents(ctx context.Context, id string) ([]*workflow.WorkflowActionStatus, error) {
 	req := &workflow.GetRequest{Id: id}
 
@@ -123,6 +126,7 @@ func (t *Workflow) GetEvents(ctx context.Context, id string) ([]*workflow.Workfl
 	return result, nil
 }
 
+// GetState returns the state for a given Tinkerbell Workflow.
 func (t *Workflow) GetState(ctx context.Context, id string) (workflow.State, error) {
 	req := &workflow.GetRequest{Id: id}
 
