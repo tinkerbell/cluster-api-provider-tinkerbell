@@ -22,13 +22,14 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkevents "github.com/tinkerbell/tink/protos/events"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 func TestTinkEventWatcher_generateEventForTinkID(t *testing.T) { //nolint:funlen

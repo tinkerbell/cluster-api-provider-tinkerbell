@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )

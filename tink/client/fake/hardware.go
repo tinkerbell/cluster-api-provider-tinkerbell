@@ -22,9 +22,10 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	"github.com/tinkerbell/tink/protos/hardware"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 )
 
 // Hardware is a fake client for Tinkerbell Hardwares.

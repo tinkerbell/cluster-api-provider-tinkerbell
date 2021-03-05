@@ -21,9 +21,10 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	"github.com/tinkerbell/tink/protos/workflow"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 )
 
 // Workflow is a fake client for Tinkerbell Workflows.

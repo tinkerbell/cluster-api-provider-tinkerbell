@@ -23,10 +23,6 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
-	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 	rawclient "github.com/tinkerbell/tink/client"
 	"github.com/tinkerbell/tink/protos/events"
 	"github.com/tinkerbell/tink/protos/hardware"
@@ -41,6 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/sources"
+	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )
 
 const (

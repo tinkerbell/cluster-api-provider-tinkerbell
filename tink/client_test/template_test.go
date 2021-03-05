@@ -21,9 +21,10 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/rand"
+
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
-	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 const (
