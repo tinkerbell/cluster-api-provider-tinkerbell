@@ -46,7 +46,7 @@ func (t *Workflow) Get(ctx context.Context, id string) (*workflow.Workflow, erro
 			return nil, fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get workflow from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting workflow from Tinkerbell: %w", err)
 	}
 
 	return tinkWorkflow, nil
@@ -62,7 +62,7 @@ func (t *Workflow) GetMetadata(ctx context.Context, id string) ([]byte, error) {
 			return nil, fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get workflow version from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting workflow version from Tinkerbell: %w", err)
 	}
 
 	req := &workflow.GetWorkflowDataRequest{WorkflowId: id, Version: verResp.GetVersion()}
@@ -73,7 +73,7 @@ func (t *Workflow) GetMetadata(ctx context.Context, id string) ([]byte, error) {
 			return nil, fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get workflow metadata from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting workflow metadata from Tinkerbell: %w", err)
 	}
 
 	return resp.GetData(), nil
@@ -89,7 +89,7 @@ func (t *Workflow) GetActions(ctx context.Context, id string) ([]*workflow.Workf
 			return nil, fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get workflow actions from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting workflow actions from Tinkerbell: %w", err)
 	}
 
 	return resp.GetActionList(), nil
@@ -105,7 +105,7 @@ func (t *Workflow) GetEvents(ctx context.Context, id string) ([]*workflow.Workfl
 			return nil, fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get workflow events from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting workflow events from Tinkerbell: %w", err)
 	}
 
 	result := []*workflow.WorkflowActionStatus{}
@@ -117,7 +117,7 @@ func (t *Workflow) GetEvents(ctx context.Context, id string) ([]*workflow.Workfl
 		}
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to get workflow event from Tinkerbell: %w", err)
+			return nil, fmt.Errorf("getting workflow event from Tinkerbell: %w", err)
 		}
 
 		result = append(result, e)
@@ -136,7 +136,7 @@ func (t *Workflow) GetState(ctx context.Context, id string) (workflow.State, err
 			return 0, fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return 0, fmt.Errorf("failed to get workflow state from Tinkerbell: %w", err)
+		return 0, fmt.Errorf("getting workflow state from Tinkerbell: %w", err)
 	}
 
 	currIndex := resp.GetCurrentActionIndex()
@@ -180,7 +180,7 @@ func (t *Workflow) Create(ctx context.Context, templateID, hardwareID string) (s
 
 	resp, err := t.client.CreateWorkflow(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to create workflow in Tinkerbell: %w", err)
+		return "", fmt.Errorf("creating workflow in Tinkerbell: %w", err)
 	}
 
 	return resp.GetId(), nil
@@ -193,7 +193,7 @@ func (t *Workflow) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("workflow %w", ErrNotFound)
 		}
 
-		return fmt.Errorf("failed to delete workflow from Tinkerbell: %w", err)
+		return fmt.Errorf("deleting workflow from Tinkerbell: %w", err)
 	}
 
 	return nil
@@ -213,7 +213,7 @@ func HardwareToJSON(h *hardware.Hardware) (string, error) {
 
 	hardwareJSON, err := json.Marshal(hardwareInfo)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal hardware info into json: %w", err)
+		return "", fmt.Errorf("marshaling hardware info into json: %w", err)
 	}
 
 	return string(hardwareJSON), nil

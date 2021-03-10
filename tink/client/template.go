@@ -48,7 +48,7 @@ func (t *Template) Get(ctx context.Context, id, name string) (*template.Workflow
 			return nil, fmt.Errorf("template %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get template from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting template from Tinkerbell: %w", err)
 	}
 
 	return tinkTemplate, nil
@@ -57,7 +57,7 @@ func (t *Template) Get(ctx context.Context, id, name string) (*template.Workflow
 // Update a Tinkerbell Template.
 func (t *Template) Update(ctx context.Context, template *template.WorkflowTemplate) error {
 	if _, err := t.client.UpdateTemplate(ctx, template); err != nil {
-		return fmt.Errorf("failed to update template in Tinkerbell: %w", err)
+		return fmt.Errorf("updating template in Tinkerbefll: %w", err)
 	}
 
 	return nil
@@ -67,7 +67,7 @@ func (t *Template) Update(ctx context.Context, template *template.WorkflowTempla
 func (t *Template) Create(ctx context.Context, template *template.WorkflowTemplate) error {
 	resp, err := t.client.CreateTemplate(ctx, template)
 	if err != nil {
-		return fmt.Errorf("failed to create template in Tinkerbell: %w", err)
+		return fmt.Errorf("creating template in Tinkerbell: %w", err)
 	}
 
 	template.Id = resp.GetId()
@@ -85,7 +85,7 @@ func (t *Template) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("template %w", ErrNotFound)
 		}
 
-		return fmt.Errorf("failed to delete template from Tinkerbell: %w", err)
+		return fmt.Errorf("deleting template from Tinkerbell: %w", err)
 	}
 
 	return nil
