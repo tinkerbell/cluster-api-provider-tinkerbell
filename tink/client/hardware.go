@@ -47,7 +47,7 @@ func (t *Hardware) Create(ctx context.Context, h *hardware.Hardware) error {
 	}
 
 	if _, err := t.client.Push(ctx, &hardware.PushRequest{Data: h}); err != nil {
-		return fmt.Errorf("failed to create hardware in Tinkerbell: %w", err)
+		return fmt.Errorf("creating hardware in Tinkerbell: %w", err)
 	}
 
 	return nil
@@ -56,7 +56,7 @@ func (t *Hardware) Create(ctx context.Context, h *hardware.Hardware) error {
 // Update Tinkerbell Hardware.
 func (t *Hardware) Update(ctx context.Context, h *hardware.Hardware) error {
 	if _, err := t.client.Push(ctx, &hardware.PushRequest{Data: h}); err != nil {
-		return fmt.Errorf("failed to update template in Tinkerbell: %w", err)
+		return fmt.Errorf("updating template in Tinkerbell: %w", err)
 	}
 
 	return nil
@@ -88,7 +88,7 @@ func (t *Hardware) Get(ctx context.Context, id, ip, mac string) (*hardware.Hardw
 			return nil, fmt.Errorf("hardware %w", ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to get hardware from Tinkerbell: %w", err)
+		return nil, fmt.Errorf("getting hardware from Tinkerbell: %w", err)
 	}
 
 	return tinkHardware, nil
@@ -101,7 +101,7 @@ func (t *Hardware) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("hardware %w", ErrNotFound)
 		}
 
-		return fmt.Errorf("failed to delete hardware from Tinkerbell: %w", err)
+		return fmt.Errorf("deleting hardware from Tinkerbell: %w", err)
 	}
 
 	return nil
