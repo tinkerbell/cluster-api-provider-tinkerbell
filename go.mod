@@ -4,7 +4,6 @@ go 1.15
 
 require (
 	github.com/go-logr/logr v0.4.0
-	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/onsi/gomega v1.10.5
@@ -14,7 +13,7 @@ require (
 	golang.org/x/sys v0.0.0-20210104204734-6f8348627aad // indirect
 	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
 	google.golang.org/grpc v1.35.0
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v0.17.16
 	k8s.io/apimachinery v0.17.16
