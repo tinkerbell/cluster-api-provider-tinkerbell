@@ -63,8 +63,6 @@ func init() {
 
 // optionsFromFlags parse CLI flags and converts them to controller runtime options.
 func optionsFromFlags() ctrl.Options {
-	klog.InitFlags(nil)
-
 	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
 	// Setting the burst size higher ensures all events will be recorded and submitted to the API
 	broadcaster := record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{
