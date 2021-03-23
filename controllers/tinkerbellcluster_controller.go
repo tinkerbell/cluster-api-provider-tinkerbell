@@ -187,23 +187,23 @@ func hardwareIP(hardware *tinkv1alpha1.Hardware) (string, error) {
 		return "", fmt.Errorf("given Hardware object is nil")
 	}
 
-	if len(hardware.Status.TinkInterfaces) == 0 {
+	if len(hardware.Status.Interfaces) == 0 {
 		return "", fmt.Errorf("hardware has no interfaces defined")
 	}
 
-	if hardware.Status.TinkInterfaces[0].DHCP == nil {
+	if hardware.Status.Interfaces[0].DHCP == nil {
 		return "", fmt.Errorf("hardware's first interface has no DHCP address defined")
 	}
 
-	if hardware.Status.TinkInterfaces[0].DHCP.IP == nil {
+	if hardware.Status.Interfaces[0].DHCP.IP == nil {
 		return "", fmt.Errorf("hardware's first interface has no DHCP IP address defined")
 	}
 
-	if hardware.Status.TinkInterfaces[0].DHCP.IP.Address == "" {
+	if hardware.Status.Interfaces[0].DHCP.IP.Address == "" {
 		return "", fmt.Errorf("hardware's first interface has no DHCP IP address is empty")
 	}
 
-	return hardware.Status.TinkInterfaces[0].DHCP.IP.Address, nil
+	return hardware.Status.Interfaces[0].DHCP.IP.Address, nil
 }
 
 func (crc *clusterReconcileContext) takeHardwareOwnership(hardware *tinkv1alpha1.Hardware) error {

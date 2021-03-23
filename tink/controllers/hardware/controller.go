@@ -19,7 +19,9 @@ package hardware
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tink/protos/hardware"
@@ -37,7 +39,7 @@ import (
 
 type hardwareClient interface {
 	// Create(ctx context.Context, h *hardware.Hardware) error
-	// Update(ctx context.Context, h *hardware.Hardware) error
+	Update(ctx context.Context, h *hardware.Hardware) error
 	Get(ctx context.Context, id, ip, mac string) (*hardware.Hardware, error)
 	// Delete(ctx context.Context, id string) error
 }
@@ -115,7 +117,58 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, h *tinkv1alpha1.Hardwa
 
 	logger.Info("Found hardware in tinkerbell", "tinkHardware", tinkHardware)
 
+	// TODO: also allow for reconciling hw.metadata.instance.id and hw.metadata.instance.hostname if not set?
+	// TODO: bubble up storage information better in status
+
+	if err := r.reconcileUserData(ctx, h, tinkHardware); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return r.reconcileStatus(ctx, h, tinkHardware)
+}
+
+func (r *Reconciler) reconcileUserData(
+	ctx context.Context,
+	h *tinkv1alpha1.Hardware,
+	tinkHardware *hardware.Hardware,
+) error {
+	logger := r.Log.WithValues("hardware", h.Name)
+
+	// if UserData is nil, skip reconciliation
+	if h.Spec.UserData == nil {
+		return nil
+	}
+
+	metadata := tinkHardware.GetMetadata()
+
+	hwMetaData := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(metadata), &hwMetaData); err != nil {
+		logger.Error(err, "Failed to unmarshal metadata from json")
+
+		return fmt.Errorf("failed to unmarshal metadata from json: %w", err)
+	}
+
+	if hwMetaData["userdata"] != *h.Spec.UserData {
+		hwMetaData["userdata"] = *h.Spec.UserData
+
+		newHWMetaData, err := json.Marshal(hwMetaData)
+		if err != nil {
+			logger.Error(err, "Failed to marshal updated metadata to json")
+
+			return fmt.Errorf("failed to marshal updated metadata to json: %w", err)
+		}
+
+		tinkHardware.Metadata = string(newHWMetaData)
+		if err := r.HardwareClient.Update(ctx, tinkHardware); err != nil {
+			logger.Error(err, "Failed to update hardware userdata", "hardware", tinkHardware)
+
+			return fmt.Errorf("failed to update hardware userdata: %w", err)
+		}
+
+		logger.Info("Updated userdata for hardware in Tinkerbell")
+	}
+
+	return nil
 }
 
 func interfaceFromTinkInterface(iface *hardware.Hardware_Network_Interface) tinkv1alpha1.Interface {
@@ -176,14 +229,22 @@ func (r *Reconciler) reconcileStatus(
 
 	h.Status.TinkMetadata = tinkHardware.GetMetadata()
 	h.Status.TinkVersion = tinkHardware.GetVersion()
-	h.Status.TinkInterfaces = []tinkv1alpha1.Interface{}
+	h.Status.Interfaces = []tinkv1alpha1.Interface{}
 
 	for _, iface := range tinkHardware.GetNetwork().GetInterfaces() {
 		tinkInterface := interfaceFromTinkInterface(iface)
-		h.Status.TinkInterfaces = append(h.Status.TinkInterfaces, tinkInterface)
+		h.Status.Interfaces = append(h.Status.Interfaces, tinkInterface)
 	}
 
 	h.Status.State = tinkv1alpha1.HardwareReady
+
+	disks, err := disksFromMetaData(h.Status.TinkMetadata)
+	if err != nil {
+		// TODO: better way to bubble up an issue here?
+		logger.Error(err, "Failed to parse disk information from metadata")
+	}
+
+	h.Status.Disks = disks
 
 	if err := r.Client.Status().Patch(ctx, h, patch); err != nil {
 		logger.Error(err, "Failed to patch hardware")
@@ -192,4 +253,45 @@ func (r *Reconciler) reconcileStatus(
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func disksFromMetaData(metadata string) ([]tinkv1alpha1.Disk, error) {
+	// Attempt to extract disk information from metadata
+	hwMetaData := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(metadata), &hwMetaData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal metadata from json: %w", err)
+	}
+
+	if instanceData, ok := hwMetaData["instance"]; ok {
+		id := reflect.ValueOf(instanceData)
+		if id.Kind() == reflect.Map && id.Type().Key().Kind() == reflect.String {
+			storage := reflect.ValueOf(id.MapIndex(reflect.ValueOf("storage")).Interface())
+			if storage.Kind() == reflect.Map && storage.Type().Key().Kind() == reflect.String {
+				return parseDisks(storage.MapIndex(reflect.ValueOf("disks")).Interface()), nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func parseDisks(disks interface{}) []tinkv1alpha1.Disk {
+	d := reflect.ValueOf(disks)
+	if d.Kind() == reflect.Slice {
+		foundDisks := make([]tinkv1alpha1.Disk, 0, d.Len())
+
+		for i := 0; i < d.Len(); i++ {
+			disk := reflect.ValueOf(d.Index(i).Interface())
+			if disk.Kind() == reflect.Map && disk.Type().Key().Kind() == reflect.String {
+				device := reflect.ValueOf(disk.MapIndex(reflect.ValueOf("device")).Interface())
+				if device.Kind() == reflect.String {
+					foundDisks = append(foundDisks, tinkv1alpha1.Disk{Device: device.String()})
+				}
+			}
+		}
+
+		return foundDisks
+	}
+
+	return nil
 }

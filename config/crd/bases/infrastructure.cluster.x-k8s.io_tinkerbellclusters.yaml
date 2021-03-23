@@ -54,6 +54,11 @@ spec:
                 - host
                 - port
                 type: object
+              imageBaseURL:
+                description: ImageBaseURL is the base URL that is used for pulling
+                  images, if not set, the default will be to use http://<TINKERBELL
+                  IP>:8080/
+                type: string
             type: object
           status:
             description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster.

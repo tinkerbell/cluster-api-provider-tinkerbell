@@ -147,7 +147,7 @@ func validHardware(name, uuid, ip string) *tinkv1alpha1.Hardware {
 			ID: uuid,
 		},
 		Status: tinkv1alpha1.HardwareStatus{
-			TinkInterfaces: []tinkv1alpha1.Interface{
+			Interfaces: []tinkv1alpha1.Interface{
 				{
 					DHCP: &tinkv1alpha1.DHCP{
 						IP: &tinkv1alpha1.IP{

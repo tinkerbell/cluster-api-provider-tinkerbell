@@ -34,6 +34,12 @@ const (
 // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 // Important: Run "make" to regenerate code after modifying this file.
 type TinkerbellClusterSpec struct {
+	// ImageBaseURL is the base URL that is used for pulling images, if not set, the default
+	// will be to use http://<TINKERBELL IP>:8080/
+	//
+	// +optional
+	ImageBaseURL string `json:"imageBaseURL,omitempty"`
+
 	// ControlPlaneEndpoint is a required field by ClusterAPI v1alpha3.
 	//
 	// See https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
