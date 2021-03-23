@@ -54,13 +54,13 @@ func NewFakeWorkflowClient(hwClient Hardware, templateClient Template, objs ...*
 }
 
 // Create creates a new Workflow.
-func (f *Workflow) Create(ctx context.Context, templateID, hardwareID string) (string, error) {
+func (f *Workflow) Create(ctx context.Context, templateID, hardware string) (string, error) {
 	id := uuid.New().String()
 
 	f.Objs[id] = &workflow.Workflow{
 		Id:       id,
 		Template: templateID,
-		Hardware: hardwareID,
+		Hardware: hardware,
 		// TODO: populate fake Data
 	}
 
