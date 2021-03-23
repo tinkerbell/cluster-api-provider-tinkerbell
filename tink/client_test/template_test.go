@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client/fake"
 	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )
 
@@ -50,7 +51,7 @@ tasks:
 func TestTemplateLifecycle(t *testing.T) { //nolint:paralleltest
 	g := NewWithT(t)
 	ctx := context.Background()
-	templateClient := client.NewTemplateClient(realTemplateClient(t))
+	templateClient := fake.NewFakeTemplateClient()
 	name := rand.String(12)
 
 	// Ensure that we now get a NotFound error trying to get the template

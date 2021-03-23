@@ -23,13 +23,14 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client/fake"
 	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )
 
 func TestHardwareLifecycle(t *testing.T) { //nolint:funlen,paralleltest
 	g := NewWithT(t)
 	ctx := context.Background()
-	hardwareClient := client.NewHardwareClient(realHardwareClient(t))
+	hardwareClient := fake.NewFakeHardwareClient()
 
 	// Create a Hardware resource in Tinkerbell
 	testHardware, err := testutils.GenerateHardware(2)

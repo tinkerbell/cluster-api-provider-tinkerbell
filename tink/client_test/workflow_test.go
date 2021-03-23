@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client/fake"
 	testutils "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/test/utils"
 )
 
@@ -31,9 +32,9 @@ func TestWorkflowLifecycle(t *testing.T) { //nolint:paralleltest
 	g := NewWithT(t)
 	ctx := context.Background()
 
-	templateClient := client.NewTemplateClient(realTemplateClient(t))
-	hardwareClient := client.NewHardwareClient(realHardwareClient(t))
-	workflowClient := client.NewWorkflowClient(realWorkflowClient(t), hardwareClient)
+	templateClient := fake.NewFakeTemplateClient()
+	hardwareClient := fake.NewFakeHardwareClient()
+	workflowClient := fake.NewFakeWorkflowClient(*hardwareClient, *templateClient)
 
 	// Create a template for the workflow to use
 	testTemplate := testutils.GenerateTemplate(rand.String(12), testutils.HelloWorldTemplate)
