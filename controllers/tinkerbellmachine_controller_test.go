@@ -147,6 +147,11 @@ func validHardware(name, uuid, ip string) *tinkv1alpha1.Hardware {
 			ID: uuid,
 		},
 		Status: tinkv1alpha1.HardwareStatus{
+			Disks: []tinkv1alpha1.Disk{
+				{
+					Device: "/dev/sda",
+				},
+			},
 			Interfaces: []tinkv1alpha1.Interface{
 				{
 					DHCP: &tinkv1alpha1.DHCP{
