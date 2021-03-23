@@ -42,7 +42,7 @@ func NewFakeHardwareClient(objs ...*hardware.Hardware) *Hardware {
 			obj.Id = uuid.New().String()
 		}
 
-		f.Objs[obj.Id] = proto.Clone(obj).(*hardware.Hardware)
+		f.Objs[obj.Id], _ = proto.Clone(obj).(*hardware.Hardware)
 	}
 
 	return f
@@ -58,7 +58,7 @@ func (f *Hardware) Create(ctx context.Context, in *hardware.Hardware) error {
 		return errors.New("duplicate")
 	}
 
-	f.Objs[in.Id] = proto.Clone(in).(*hardware.Hardware)
+	f.Objs[in.Id], _ = proto.Clone(in).(*hardware.Hardware)
 
 	return nil
 }
@@ -66,7 +66,7 @@ func (f *Hardware) Create(ctx context.Context, in *hardware.Hardware) error {
 // Update Hardware in Tinkerbell.
 func (f *Hardware) Update(ctx context.Context, in *hardware.Hardware) error {
 	if _, ok := f.Objs[in.Id]; ok {
-		f.Objs[in.Id] = proto.Clone(in).(*hardware.Hardware)
+		f.Objs[in.Id], _ = proto.Clone(in).(*hardware.Hardware)
 
 		return nil
 	}

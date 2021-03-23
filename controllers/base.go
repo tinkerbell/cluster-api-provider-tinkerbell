@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -384,12 +383,4 @@ func (bmrc *baseMachineReconcileContext) getReadyTinkerbellCluster(machine *clus
 	}
 
 	return tinkerbellCluster, nil
-}
-
-// kubernetesVersionToAPTPackageVersion converts Kubernetes semver version string into
-// valid APT package version for Kubernetes packages.
-//
-// TODO: Add some validation rules?
-func kubernetesVersionToAPTPackageVersion(version string) string {
-	return fmt.Sprintf("%s-00", strings.TrimLeft(version, "v"))
 }

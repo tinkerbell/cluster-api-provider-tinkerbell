@@ -36,7 +36,7 @@ func readyMachine() *clusterv1.Machine {
 	}
 }
 
-//nolint:funlen
+//nolint:funlen,cyclop
 func Test_Machine(t *testing.T) {
 	t.Parallel()
 

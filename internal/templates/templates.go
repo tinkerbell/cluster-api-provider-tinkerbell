@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"strings"
 )
 
 // WorkflowTemplate is a helper struct for rendering CAPT Template data.
@@ -40,6 +39,10 @@ func (wt WorkflowTemplate) Render() (string, error) {
 		return "", fmt.Errorf("name can't be empty")
 	}
 
+	if wt.KubernetesVersion == "" {
+		return "", fmt.Errorf("kubernetesVersion can't be empty")
+	}
+
 	url, err := url.Parse(wt.ImageSourceURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse url: %w", err)
@@ -49,7 +52,8 @@ func (wt WorkflowTemplate) Render() (string, error) {
 	url.Path = path.Join(url.Path, imageName)
 	imageURL := url.String()
 
-	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, imageURL, wt.DestDisk, wt.DestPartition, wt.DestPartition, wt.DestPartition), nil
+	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, imageURL, wt.DestDisk, wt.DestPartition,
+		wt.DestPartition, wt.DestPartition), nil
 }
 
 const (
@@ -118,27 +122,3 @@ tasks:
           FS_TYPE: ext4
 `
 )
-
-// indent indents a block of text with an indent string.
-func indent(text, indent string) string {
-	if text == "" {
-		return ""
-	}
-
-	if text[len(text)-1:] == "\n" {
-		result := ""
-		for _, j := range strings.Split(text[:len(text)-1], "\n") {
-			result += indent + j + "\n"
-		}
-
-		return result
-	}
-
-	result := ""
-
-	for _, j := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		result += indent + j + "\n"
-	}
-
-	return result[:len(result)-1]
-}

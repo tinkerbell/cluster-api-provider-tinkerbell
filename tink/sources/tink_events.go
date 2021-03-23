@@ -30,11 +30,22 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
+
+// Object is a standin for a Kubernetes object that implements both
+// runtime.Object and metav1.Object, this is a temporary workaround
+// until we update to a newer version of controller-runtime that exposes
+// client.Object.
+type Object interface {
+	metav1.Object
+	runtime.Object
+}
 
 // TinkEventWatcher is a source that watches for Tinkerbell events and generates a GenericEvent
 // for the associated CRD resource.
@@ -45,7 +56,7 @@ type TinkEventWatcher struct {
 	ResourceType tinkevents.ResourceType
 }
 
-func (w *TinkEventWatcher) getHardwareForID(ctx context.Context, id string) (*tinkv1.Hardware, error) {
+func (w *TinkEventWatcher) getHardwareForID(ctx context.Context, id string) (Object, error) {
 	hwList := &tinkv1.HardwareList{}
 	if err := w.client.List(ctx, hwList); err != nil {
 		return nil, fmt.Errorf("failed to list hardware: %w", err)
@@ -62,7 +73,7 @@ func (w *TinkEventWatcher) getHardwareForID(ctx context.Context, id string) (*ti
 	return nil, nil
 }
 
-func (w *TinkEventWatcher) getTemplateForID(ctx context.Context, id string) (*tinkv1.Template, error) {
+func (w *TinkEventWatcher) getTemplateForID(ctx context.Context, id string) (Object, error) {
 	templateList := &tinkv1.TemplateList{}
 	if err := w.client.List(ctx, templateList); err != nil {
 		return nil, fmt.Errorf("failed to list templates: %w", err)
@@ -79,7 +90,7 @@ func (w *TinkEventWatcher) getTemplateForID(ctx context.Context, id string) (*ti
 	return nil, nil
 }
 
-func (w *TinkEventWatcher) getWorkflowForID(ctx context.Context, id string) (*tinkv1.Workflow, error) {
+func (w *TinkEventWatcher) getWorkflowForID(ctx context.Context, id string) (Object, error) {
 	workflowList := &tinkv1.WorkflowList{}
 	if err := w.client.List(ctx, workflowList); err != nil {
 		return nil, fmt.Errorf("failed to list workflows: %w", err)
@@ -97,45 +108,29 @@ func (w *TinkEventWatcher) getWorkflowForID(ctx context.Context, id string) (*ti
 }
 
 func (w *TinkEventWatcher) generateEventForTinkID(ctx context.Context, id string) error {
+	var getter func(context.Context, string) (Object, error)
+
 	switch w.ResourceType {
 	case tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE:
-		hw, err := w.getHardwareForID(ctx, id)
-		if err != nil {
-			return err
-		}
-
-		if hw != nil {
-			w.EventCh <- event.GenericEvent{
-				Meta:   hw,
-				Object: hw,
-			}
-		}
+		getter = w.getHardwareForID
 	case tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE:
-		template, err := w.getTemplateForID(ctx, id)
-		if err != nil {
-			return err
-		}
-
-		if template != nil {
-			w.EventCh <- event.GenericEvent{
-				Meta:   template,
-				Object: template,
-			}
-		}
+		getter = w.getTemplateForID
 	case tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW:
-		workflow, err := w.getWorkflowForID(ctx, id)
-		if err != nil {
-			return err
-		}
-
-		if workflow != nil {
-			w.EventCh <- event.GenericEvent{
-				Meta:   workflow,
-				Object: workflow,
-			}
-		}
+		getter = w.getWorkflowForID
 	default:
 		return fmt.Errorf("unknown resource type: %s", w.ResourceType.String())
+	}
+
+	obj, err := getter(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if obj != nil {
+		w.EventCh <- event.GenericEvent{
+			Meta:   obj,
+			Object: obj,
+		}
 	}
 
 	return nil
@@ -184,11 +179,7 @@ func (w *TinkEventWatcher) Start(stopCh <-chan struct{}) error {
 	w.Logger.Info("Starting Tinkerbell Informer", "resourceType", w.ResourceType.String())
 
 	err := tinkInformer.Start(ctx, req, func(e *tinkevents.Event) error {
-		if err := w.generateEventForTinkID(ctx, e.GetResourceId()); err != nil {
-			return err
-		}
-
-		return nil
+		return w.generateEventForTinkID(ctx, e.GetResourceId())
 	})
 	if err != nil && !errors.Is(err, io.EOF) && status.Code(err) != codes.Canceled {
 		return fmt.Errorf("unexpected error from Tinkerbell informer: %w", err)

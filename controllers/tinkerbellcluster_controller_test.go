@@ -30,7 +30,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake" //nolint:staticcheck
 
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
@@ -48,7 +48,7 @@ func unreadyTinkerbellCluster(name, namespace string) *infrastructurev1alpha3.Ti
 	return unreadyTinkerbellCluster
 }
 
-//nolint:funlen,gocognit
+//nolint:funlen,gocognit,cyclop
 func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 	t.Parallel()
 

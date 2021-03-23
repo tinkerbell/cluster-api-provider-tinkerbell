@@ -11,7 +11,6 @@ require (
 	github.com/tinkerbell/tink v0.0.0-20210104124527-57eb0efb6dbb
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
-	golang.org/x/sys v0.0.0-20210104204734-6f8348627aad // indirect
 	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
 	google.golang.org/grpc v1.35.0
 	google.golang.org/protobuf v1.25.0

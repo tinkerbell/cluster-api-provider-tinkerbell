@@ -47,7 +47,7 @@ func NewFakeWorkflowClient(hwClient Hardware, templateClient Template, objs ...*
 			obj.Id = uuid.New().String()
 		}
 
-		f.Objs[obj.Id] = proto.Clone(obj).(*workflow.Workflow)
+		f.Objs[obj.Id], _ = proto.Clone(obj).(*workflow.Workflow)
 	}
 
 	return f

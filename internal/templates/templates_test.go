@@ -26,19 +26,14 @@ import (
 
 func validWorkflowTemplate() *templates.WorkflowTemplate {
 	return &templates.WorkflowTemplate{
-		Name: "foo",
-		CloudInitConfig: templates.CloudInitConfig{
-			Hostname: "foo",
-			CloudConfig: templates.CloudConfig{
-				BootstrapCloudConfig: "foo: bar",
-				KubernetesVersion:    "bar",
-				ProviderID:           "bar",
-			},
-		},
+		Name:              "foo",
+		ImageSourceURL:    "http://foo.bar.baz/do/it",
+		KubernetesVersion: "bar",
+		DestDisk:          "/dev/sda",
+		DestPartition:     "/dev/sda1",
 	}
 }
 
-//nolint:funlen
 func Test_Cloud_config_template(t *testing.T) {
 	t.Parallel()
 
@@ -47,37 +42,15 @@ func Test_Cloud_config_template(t *testing.T) {
 		expectError bool
 		validateF   func(*testing.T, *templates.WorkflowTemplate, string)
 	}{
-		"requires_non_empty_bootstrap_cloud_config": {
-			mutateF: func(wt *templates.WorkflowTemplate) {
-				wt.CloudInitConfig.CloudConfig.BootstrapCloudConfig = ""
-			},
-			expectError: true,
-		},
-
 		"requires_non_empty_Kubernetes_version": {
 			mutateF: func(wt *templates.WorkflowTemplate) {
-				wt.CloudInitConfig.CloudConfig.KubernetesVersion = ""
-			},
-			expectError: true,
-		},
-
-		"requires_non_empty_provider_ID": {
-			mutateF: func(wt *templates.WorkflowTemplate) {
-				wt.CloudInitConfig.CloudConfig.ProviderID = ""
+				wt.KubernetesVersion = ""
 			},
 			expectError: true,
 		},
 
 		"renders_with_valid_config": {
 			mutateF: func(wt *templates.WorkflowTemplate) {},
-		},
-
-		// This is to avoid malforming bootstrap cloud config if it includes some template syntax, as we do not
-		// have control over it.
-		"rendering_does_not_template_bootstrap_cloud_config": {
-			mutateF: func(wt *templates.WorkflowTemplate) {
-				wt.CloudInitConfig.CloudConfig.BootstrapCloudConfig = "{{.foo}"
-			},
 		},
 
 		"rendered_output_should_be_valid_YAML": {

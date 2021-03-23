@@ -26,15 +26,18 @@ linters:
   enable:
     - asciicheck
     - bodyclose
+    - cyclop
     - deadcode
     - depguard
     - dogsled
     - dupl
+    - durationcheck
     - errcheck
     - errorlint
     - exhaustive
     - exportloopref
     - forbidigo
+    - forcetypeassert
     - funlen
     - gochecknoglobals
     - gochecknoinits
@@ -52,23 +55,26 @@ linters:
     - gomodguard
     - goprintffuncname
     - gosec
+    - gosimple
+    - ifshort
+    - importas
     - ineffassign
-    - interfacer
     - lll
     - makezero
-    - maligned
     - misspell
     - nakedret
     - nestif
+    - nilerr
     - nlreturn
     - noctx
     - nolintlint
     - paralleltest
     - prealloc
     - predeclared
+    - revive
     - rowserrcheck
-    - scopelint
     - sqlclosecheck
+    - staticcheck
     - structcheck
     - stylecheck
     - testpackage
@@ -77,12 +83,17 @@ linters:
     - typecheck
     - unconvert
     - unparam
+    - unused
     - varcheck
+    - wastedassign
     - whitespace
     - wrapcheck
     - wsl
   disable:
+    - exhaustivestruct
     - gci
     - godox
     - goerr113
-    - exhaustivestruct
+    - interfacer
+    - maligned
+    - scopelint
