@@ -48,7 +48,7 @@ tasks:
         timeout: 60`
 )
 
-func TestTemplateLifecycle(t *testing.T) { //nolint:paralleltest
+func TestTemplateLifecycle(t *testing.T) { //nolint:paralleltest,funlen
 	g := NewWithT(t)
 	ctx := context.Background()
 	templateClient := fake.NewFakeTemplateClient()
@@ -76,8 +76,13 @@ func TestTemplateLifecycle(t *testing.T) { //nolint:paralleltest
 		g.Expect(err).To(MatchError(client.ErrNotFound))
 	}()
 
+	// Get original template
+	originalTemplate, err := templateClient.Get(ctx, "", name)
+	g.Expect(err).NotTo(HaveOccurred())
+
 	// Verify that trying to create a template with a duplicate name fails
 	testDuplicateName := testutils.GenerateTemplate(name, sampleTemplate)
+	testDuplicateName.Id = originalTemplate.Id
 	g.Expect(templateClient.Create(ctx, testDuplicateName)).NotTo(Succeed())
 
 	// Ensure we can get the template we just created by ID
@@ -102,7 +107,7 @@ func TestTemplateLifecycle(t *testing.T) { //nolint:paralleltest
 	testTemplate.Data = sampleTemplate
 	g.Expect(templateClient.Update(ctx, testTemplate)).To(Succeed())
 
-	// Esnure that the template was updated in Tinkerbell
+	// Ensure that the template was updated in Tinkerbell
 	res, err := templateClient.Get(ctx, expectedID, "")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(res).NotTo(BeNil())

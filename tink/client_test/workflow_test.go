@@ -18,6 +18,8 @@ package client_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -56,7 +58,14 @@ func TestWorkflowLifecycle(t *testing.T) { //nolint:paralleltest
 	}()
 
 	// Create the workflow
-	workflowID, err := workflowClient.Create(ctx, testTemplate.Id, testHardware.Id)
+	hwString := "{"
+	for i, inf := range testHardware.GetNetwork().Interfaces {
+		hwString += fmt.Sprintf("\"device_%d\": \"%s\",", i+1, inf.Dhcp.Mac)
+	}
+
+	hwString = strings.TrimSuffix(hwString, ",") + "}"
+
+	workflowID, err := workflowClient.Create(ctx, testTemplate.Id, hwString)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(workflowID).NotTo(BeEmpty())
 
