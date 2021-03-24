@@ -20,17 +20,14 @@ package templates
 
 import (
 	"fmt"
-	"net/url"
-	"path"
 )
 
 // WorkflowTemplate is a helper struct for rendering CAPT Template data.
 type WorkflowTemplate struct {
-	Name              string
-	ImageSourceURL    string
-	KubernetesVersion string
-	DestDisk          string
-	DestPartition     string
+	Name          string
+	ImageURL      string
+	DestDisk      string
+	DestPartition string
 }
 
 // Render renders workflow template for a given machine including user-data.
@@ -39,20 +36,11 @@ func (wt WorkflowTemplate) Render() (string, error) {
 		return "", fmt.Errorf("name can't be empty")
 	}
 
-	if wt.KubernetesVersion == "" {
-		return "", fmt.Errorf("kubernetesVersion can't be empty")
+	if wt.ImageURL == "" {
+		return "", fmt.Errorf("imageURL can't be empty")
 	}
 
-	url, err := url.Parse(wt.ImageSourceURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse url: %w", err)
-	}
-
-	imageName := fmt.Sprintf("ubuntu-1804-kube-%s.gz", wt.KubernetesVersion)
-	url.Path = path.Join(url.Path, imageName)
-	imageURL := url.String()
-
-	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, imageURL, wt.DestDisk, wt.DestPartition,
+	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, wt.ImageURL, wt.DestDisk, wt.DestPartition,
 		wt.DestPartition, wt.DestPartition), nil
 }
 

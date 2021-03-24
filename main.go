@@ -16,7 +16,6 @@ limitations under the License.
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -107,20 +106,11 @@ func optionsFromFlags() ctrl.Options {
 
 	flag.Parse()
 
-	return options
-}
-
-func validateOptions(options ctrl.Options) error {
 	if options.Namespace != "" {
 		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", options.Namespace)
 	}
 
-	if options.Port != 0 {
-		// TODO: add the webhook configuration
-		return errors.New("webhook not implemented")
-	}
-
-	return nil
+	return options
 }
 
 func addHealthChecks(mgr ctrl.Manager) error {
@@ -135,20 +125,35 @@ func addHealthChecks(mgr ctrl.Manager) error {
 	return nil
 }
 
-func setupTinkShimControllers(mgr ctrl.Manager) error {
+func addEventWatcher(
+	mgr ctrl.Manager,
+	name string,
+	resourceType tinkevents.ResourceType,
+) (<-chan event.GenericEvent, error) {
+	ch := make(chan event.GenericEvent)
+
+	return ch, mgr.Add(&sources.TinkEventWatcher{
+		EventCh:      ch,
+		Logger:       ctrl.Log.WithName("tinkwatcher").WithName(name),
+		ResourceType: resourceType,
+	})
+}
+
+func setupTinkShimControllers(mgr ctrl.Manager, options ctrl.Options) error {
+	if options.Port != 0 {
+		return nil
+	}
+
+	if err := tinkclient.Setup(); err != nil {
+		return fmt.Errorf("unable to create tinkerbell client: %w", err)
+	}
+
 	hwClient := client.NewHardwareClient(tinkclient.HardwareClient)
 	templateClient := client.NewTemplateClient(tinkclient.TemplateClient)
 	workflowClient := client.NewWorkflowClient(tinkclient.WorkflowClient, hwClient)
 
-	hwChan := make(chan event.GenericEvent)
-	templateChan := make(chan event.GenericEvent)
-	workflowChan := make(chan event.GenericEvent)
-
-	if err := mgr.Add(&sources.TinkEventWatcher{
-		EventCh:      hwChan,
-		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Hardware"),
-		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE,
-	}); err != nil {
+	hwChan, err := addEventWatcher(mgr, "Hardware", tinkevents.ResourceType_RESOURCE_TYPE_HARDWARE)
+	if err != nil {
 		return fmt.Errorf("unable to create tink hardware watcher: %w", err)
 	}
 
@@ -161,11 +166,8 @@ func setupTinkShimControllers(mgr ctrl.Manager) error {
 		return fmt.Errorf("unable to create tink hardware controller: %w", err)
 	}
 
-	if err := mgr.Add(&sources.TinkEventWatcher{
-		EventCh:      templateChan,
-		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Template"),
-		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE,
-	}); err != nil {
+	templateChan, err := addEventWatcher(mgr, "Template", tinkevents.ResourceType_RESOURCE_TYPE_TEMPLATE)
+	if err != nil {
 		return fmt.Errorf("unable to create tink template watcher: %w", err)
 	}
 
@@ -178,11 +180,8 @@ func setupTinkShimControllers(mgr ctrl.Manager) error {
 		return fmt.Errorf("unable to create tink template controller: %w", err)
 	}
 
-	if err := mgr.Add(&sources.TinkEventWatcher{
-		EventCh:      workflowChan,
-		Logger:       ctrl.Log.WithName("tinkwatcher").WithName("Workflow"),
-		ResourceType: tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW,
-	}); err != nil {
+	workflowChan, err := addEventWatcher(mgr, "Workflow", tinkevents.ResourceType_RESOURCE_TYPE_WORKFLOW)
+	if err != nil {
 		return fmt.Errorf("unable to create tink workflow watcher: %w", err)
 	}
 
@@ -198,15 +197,52 @@ func setupTinkShimControllers(mgr ctrl.Manager) error {
 	return nil
 }
 
+func setupReconcilers(mgr ctrl.Manager, options ctrl.Options) error {
+	if options.Port != 0 {
+		return nil
+	}
+
+	if err := (&controllers.TinkerbellClusterReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to setup TinkerbellCluster controller")
+	}
+
+	if err := (&controllers.TinkerbellMachineReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to setup TinkerbellMachine controller")
+	}
+
+	return nil
+}
+
+func setupWebhooks(mgr ctrl.Manager, options ctrl.Options) error {
+	if options.Port == 0 {
+		return nil
+	}
+
+	if err := (&infrastructurev1alpha3.TinkerbellCluster{}).SetupWebhookWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to setup TinkerbellCluster webhook")
+	}
+
+	if err := (&infrastructurev1alpha3.TinkerbellMachine{}).SetupWebhookWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to setup TinkerbellMachine webhook")
+	}
+
+	if err := (&infrastructurev1alpha3.TinkerbellMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to setup TinkerbellMachineTemplate webhook")
+	}
+
+	return nil
+}
+
 func main() {
 	ctrl.SetLogger(klogr.New())
 
 	options := optionsFromFlags()
-
-	if err := validateOptions(options); err != nil {
-		setupLog.Error(err, "validating controllers configuration")
-		os.Exit(1)
-	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
@@ -214,43 +250,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := tinkclient.Setup(); err != nil {
-		setupLog.Error(err, "unable to create tinkerbell client")
-		os.Exit(1)
-	}
-
-	stopCh := ctrl.SetupSignalHandler()
-
-	if err := setupTinkShimControllers(mgr); err != nil {
+	if err := setupTinkShimControllers(mgr, options); err != nil {
 		setupLog.Error(err, "failed to add Tinkerbell Shim Controllers")
 		os.Exit(1)
 	}
 
-	if err = (&controllers.TinkerbellClusterReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellCluster"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellCluster")
+	if err := setupReconcilers(mgr, options); err != nil {
+		setupLog.Error(err, "failed to add Tinkerbell Reconcilers")
 		os.Exit(1)
 	}
 
-	if err = (&controllers.TinkerbellMachineReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("TinkerbellMachine"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TinkerbellMachine")
+	if err := setupWebhooks(mgr, options); err != nil {
+		setupLog.Error(err, "failed to add Tinkerbell Webhooks")
 		os.Exit(1)
 	}
-	// +kubebuilder:scaffold:builder
 
 	if err := addHealthChecks(mgr); err != nil {
 		setupLog.Error(err, "failed to add health checks")
 		os.Exit(1)
 	}
 
+	// +kubebuilder:scaffold:builder
 	setupLog.Info("starting manager")
 
-	if err := mgr.Start(stopCh); err != nil {
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

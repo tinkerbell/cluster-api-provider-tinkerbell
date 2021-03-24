@@ -26,11 +26,10 @@ import (
 
 func validWorkflowTemplate() *templates.WorkflowTemplate {
 	return &templates.WorkflowTemplate{
-		Name:              "foo",
-		ImageSourceURL:    "http://foo.bar.baz/do/it",
-		KubernetesVersion: "bar",
-		DestDisk:          "/dev/sda",
-		DestPartition:     "/dev/sda1",
+		Name:          "foo",
+		ImageURL:      "http://foo.bar.baz/do/it",
+		DestDisk:      "/dev/sda",
+		DestPartition: "/dev/sda1",
 	}
 }
 
@@ -42,9 +41,9 @@ func Test_Cloud_config_template(t *testing.T) {
 		expectError bool
 		validateF   func(*testing.T, *templates.WorkflowTemplate, string)
 	}{
-		"requires_non_empty_Kubernetes_version": {
+		"requires_non_empty_Image_URL": {
 			mutateF: func(wt *templates.WorkflowTemplate) {
-				wt.KubernetesVersion = ""
+				wt.ImageURL = ""
 			},
 			expectError: true,
 		},

@@ -17,12 +17,13 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
+	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -134,6 +135,36 @@ func (mrc *machineReconcileContext) templateExists() (bool, error) {
 	return false, nil
 }
 
+func (mrc *machineReconcileContext) imageURL() (string, error) {
+	imageLookupFormat := mrc.tinkerbellMachine.Spec.ImageLookupFormat
+	if imageLookupFormat == "" {
+		imageLookupFormat = mrc.tinkerbellCluster.Spec.ImageLookupFormat
+	}
+
+	imageLookupBaseURL := mrc.tinkerbellMachine.Spec.ImageLookupBaseURL
+	if imageLookupBaseURL == "" {
+		imageLookupBaseURL = mrc.tinkerbellCluster.Spec.ImageLookupBaseURL
+	}
+
+	imageLookupOSDistro := mrc.tinkerbellMachine.Spec.ImageLookupOSDistro
+	if imageLookupOSDistro == "" {
+		imageLookupOSDistro = mrc.tinkerbellCluster.Spec.ImageLookupOSDistro
+	}
+
+	imageLookupOSVersion := mrc.tinkerbellMachine.Spec.ImageLookupOSVersion
+	if imageLookupOSVersion == "" {
+		imageLookupOSVersion = mrc.tinkerbellCluster.Spec.ImageLookupOSVersion
+	}
+
+	return imageURL(
+		imageLookupFormat,
+		imageLookupBaseURL,
+		imageLookupOSDistro,
+		imageLookupOSVersion,
+		*mrc.machine.Spec.Version,
+	)
+}
+
 func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1alpha1.Hardware) error {
 	if len(hardware.Status.Disks) < 1 {
 		return errors.New("disk configuration is required")
@@ -142,24 +173,16 @@ func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1alpha1.Hardwa
 	targetDisk := hardware.Status.Disks[0].Device
 	targetDevice := firstPartitionFromDevice(targetDisk)
 
-	imageBaseURL := mrc.tinkerbellCluster.Spec.ImageBaseURL
-	if imageBaseURL == "" {
-		grpcAddr := os.Getenv("TINKERBELL_GRPC_AUTHORITY")
-
-		grpcParts := strings.Split(grpcAddr, ":")
-		if len(grpcParts) < 1 {
-			return errors.New("could not determine image base url")
-		}
-
-		imageBaseURL = fmt.Sprintf("http://%s:8080/", grpcParts[0])
+	imageURL, err := mrc.imageURL()
+	if err != nil {
+		return fmt.Errorf("failed to generate imageURL: %w", err)
 	}
 
 	workflowTemplate := templates.WorkflowTemplate{
-		Name:              mrc.tinkerbellMachine.Name,
-		ImageSourceURL:    imageBaseURL,
-		KubernetesVersion: *mrc.machine.Spec.Version,
-		DestDisk:          targetDisk,
-		DestPartition:     targetDevice,
+		Name:          mrc.tinkerbellMachine.Name,
+		ImageURL:      imageURL,
+		DestDisk:      targetDisk,
+		DestPartition: targetDevice,
 	}
 
 	templateData, err := workflowTemplate.Render()
@@ -395,4 +418,33 @@ func (mrc *machineReconcileContext) ensureWorkflow() error {
 	mrc.log.Info("Workflow does not exist, creating")
 
 	return mrc.createWorkflow()
+}
+
+type image struct {
+	BaseURL           string
+	OSDistro          string
+	OSVersion         string
+	KubernetesVersion string
+}
+
+func imageURL(imageFormat, baseURL, osDistro, osVersion, kubernetesVersion string) (string, error) {
+	imageParams := image{
+		BaseURL:           baseURL,
+		OSDistro:          strings.ToLower(osDistro),
+		OSVersion:         strings.ReplaceAll(osVersion, ".", ""),
+		KubernetesVersion: kubernetesVersion,
+	}
+
+	var buf bytes.Buffer
+
+	template, err := template.New("image").Parse(imageFormat)
+	if err != nil {
+		return "", fmt.Errorf("failed to create template from string %q: %w", imageFormat, err)
+	}
+
+	if err := template.Execute(&buf, imageParams); err != nil {
+		return "", fmt.Errorf("failed to populate template %q: %w", imageFormat, err)
+	}
+
+	return buf.String(), nil
 }
