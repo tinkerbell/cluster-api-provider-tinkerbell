@@ -6,17 +6,20 @@ If you have Tinkerbell running in your environment, you can use it for CAPT.
 
 Here is the list of required components to use CAPT:
 
-- Existing Tinkerbell installation running at least versions mentioned in [sandbox](https://github.com/tinkerbell/sandbox/commit/be40a7b371fdab947a413e190cfe99b692651d8e).
+- Existing Tinkerbell installation running at least versions mentioned in [sandbox](https://github.com/tinkerbell/sandbox/tree/v0.5.0), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
 - A Kubernetes cluster which pods has access to your Tinkerbell instance.
-- A Container registry reachable by both your Kubernetes cluster and your workstation with
-  write access.
-- At least one Hardware available with DHCP IP address configured on first interface and with
-  /dev/vda disk.
+- At least one Hardware available with DHCP IP address configured on first interface and with proper metadata configured
 - `git` binary
 - `tilt` binary
 - `kubectl` binary
 - `clusterctl` binary
 - `go` binary
+
+Required metadata for hardware:
+- metadata.facility.facility_code is set (default is "onprem")
+- metadata.instance.id is set (should match the hardware's id)
+- metadata.instance.hostname is set
+- metadata.instance.storage.disks is set and contains at least one device matching an available disk on the system
 
 ### Workaround for 8000 bytes template limit
 
@@ -36,22 +39,36 @@ in your `deploy/` directory:
 PGPASSWORD=tinkerbell docker-compose exec db psql -U tinkerbell -c 'drop trigger events_channel ON events;'
 ```
 
-### Provisioning image
+### Add a link-local address for Hegel
 
-CAPT requires `ubuntu-install` Docker image to provision Kubernetes machines. You should build this image
-yourself from the `Dockerfile` below and push it to your Tinkerbell container registry.
+If your sandbox is running on an Ubuntu system, you can edit `/etc/netplan.<devicename>.yaml`, add `169.254.169.254/16` to the addresses, and run `netplan apply`
 
-```
-FROM alpine:3.13
+### Replace OSIE with Hook
 
-RUN apk add -U qemu-img
-```
+If you can use the default hook image, then copy http://s.gianarb.it/tinkie/tinkie-master.tar.gz to your `deploy/state/webroot/misc/osie/current` directory. Otherwise, follow the directions at: https://github.com/tinkerbell/hook#how-to-use-hook-with-sandbox
 
-You can build and push this image using example commands:
+### Push the necessary Tinkerbell actions to the registry
+
 ```sh
-docker build -t 10.17.3.2/ubuntu-install .
-docker push 10.17.3.2/ubuntu-install
+docker pull quay.io/tinkerbell-actions/image2disk:v1.0.0
+docker tag quay.io/tinkerbell-actions/image2disk:v1.0.0 192.168.1.1/image2disk:v1.0.0
+docker push 192.168.1.1/image2disk:v1.0.0
+docker pull quay.io/tinkerbell-actions/writefile:v1.0.0
+docker tag quay.io/tinkerbell-actions/writefile:v1.0.0 192.168.1.1/writefile:v1.0.0
+docker push 192.168.1.1/writefile:v1.0.0
+docker pull quay.io/tinkerbell-actions/kexec:v1.0.0
+docker tag quay.io/tinkerbell-actions/kexec:v1.0.0 192.168.1.1/kexec:v1.0.0
+docker push 192.168.1.1/kexec:v1.0.0
 ```
+
+### Prebuild the Kubernetes image
+
+git clone https://github.com/detiber/image-builder
+cd image-builder/images/capi
+make build-raw-all
+copy output/ubuntu-1804-kube-v1.18.15.gz to your `deploy/state/webroot` directory
+
+To build a diifferent version, you can modify the image-builder configuration following the documentation here: https://image-builder.sigs.k8s.io/capi/capi.html and here: https://image-builder.sigs.k8s.io/capi/providers/raw.html
 
 ### Deploying CAPT
 
@@ -68,13 +85,9 @@ kubectl config get-contexts  | awk '/^*/ {print $2}'
 
 Then, run the following commands to clone code we're going to run:
 ```sh
-git clone https://github.com/kubernetes-sigs/cluster-api
+git clone https://github.com/kubernetes-sigs/cluster-api -b release-0.3
 git clone git@github.com:tinkerbell/cluster-api-provider-tink.git
-cd cluster-api-provider-tink
-git fetch origin 71d3cae81423b46214f9a303510ee0e2209c37bb
-git checkout 71d3cae81423b46214f9a303510ee0e2209c37bb
 cd ../cluster-api
-git checkout release-0.3
 ```
 
 Now, create a configuration file for Tilt. You can run the command below to create a sample config file,
@@ -84,18 +97,16 @@ cat <<EOF > tilt-settings.json
 {
   "default_registry": "quay.io/<your username>",
   "provider_repos": ["../cluster-api-provider-tink"],
-  "enable_providers": ["tinkerbell", "docker", "kubeadm-bootstrap", "kubeadm-control-plane"],
-  "allowed_contexts": ["<your kubeconfig context to use"]
+  "enable_providers": ["tinkerbell", "kubeadm-bootstrap", "kubeadm-control-plane"],
+  "allowed_contexts": ["<your kubeconfig context to use"],
+  "kustomize_substitutions": {
+    "TINKERBELL_GRPC_AUTHORITY": "192.168.1.1:42113",
+    "TINKERBELL_CERT_URL": "http://192.168.1.1:42114/cert",
+    "TINKERBELL_IP": "192.168.1.1"
+  }
 }
 EOF
 ```
-
-Now, export information about your Tinkerbell instance:
-```sh
-export TINKERBELL_GRPC_AUTHORITY=10.17.3.2:42113 TINKERBELL_CERT_URL=http://10.17.3.2:42114/cert
-```
-
-**NOTE: The IP addresses above must be reachable from Pods running on your Kubernetes cluster.**
 
 Finally, run Tilt to deploy CAPI and CAPT to your cluster using the command below:
 ```sh
@@ -103,39 +114,6 @@ tilt up
 ```
 
 You can now open a webpage printed by Tilt to see the progress on the deployment.
-
-### Generating infrastructure manifests and configuring clusterctl
-
-As CAPT is not yet added in CAPI registry and has no releases yet, we must generate required manifests manually.
-
-To do that, go to cloned `cluster-api-provider-tink` repository from previous step and run the following command:
-```sh
-make release-manifests
-```
-
-It should create `out/release/infrastructure-tinkerbell/v0.0.0-dirty/infrastructure-components.yaml` file for you.
-
-Now, we need to refer this file in `clusterctl` configuration.
-
-If you don't have `clusterctl` configuration yet, you can create one using the following command:
-```sh
-mkdir ~/.cluster-api
-cat <<EOF > ~/.cluster-api/clusterctl.yml
-providers:
-  - name: tinkerbell
-    url: "file://$(realpath out/release/infrastructure-tinkerbell/v0.0.0-dirty/infrastructure-components.yaml)"
-    type: InfrastructureProvider
-EOF
-```
-
-If you already have a configuration file, then add snippet generated by the command below to your `providers` list:
-```sh
-cat <<EOF
-  - name: tinkerbell
-    url: "file://$(realpath out/release/infrastructure-tinkerbell/v0.0.0-dirty/infrastructure-components.yaml)"
-    type: InfrastructureProvider
-EOF
-```
 
 ### Adding Hardware objects to your cluster
 
@@ -177,16 +155,16 @@ kubectl describe hardware
 
 In the output, you should be able to find MAC address and IP addresses of the hardware.
 
-**WARNING: CAPT currently expects hardwares to have /dev/vda disk, where OS will be installed!**
-
 ### Creating workload clusters
 
 With all the steps above, we can now create a workload cluster.
 
 So, let's start with generating the configuration for your cluster using the command below:
 ```sh
-clusterctl config cluster capi-quickstart --infrastructure=tinkerbell:v0.0.0-dirty --kubernetes-version=v1.20.0 --control-plane-machine-count=1 --worker-machine-count=1 > test-cluster.yaml
+POD_CIDR=172.25.0.0/16 clusterctl config cluster capi-quickstart --from templates/cluster-template.yaml --kubernetes-version=v1.18.5 --control-plane-machine-count=1 --worker-machine-count=1 > test-cluster.yaml
 ```
+
+Note, the POD_CIDR is overridden above to avoid conflicting with the default assumed IP address of the Tinkerbell host (192.168.1.1).
 
 Inspect the new configuration generated in `test-cluster.yaml` and modify it as needed.
 
@@ -195,13 +173,13 @@ Finally, run the following command to create a cluster:
 kubectl apply -f test-cluster.yaml
 ```
 
-### Observing clsuter provisioning
+### Observing cluster provisioning
 
 Few seconds after creating a workload cluster, you should see some log messages in Tilt tab with CAPT that IP address has been selected for controlplane machine etc.
 
-If you list your Hardwares now with labels, you should see which Hardware has been selected by CAPT controllers:
+If you list your Hardware now with labels, you should see which Hardware has been selected by CAPT controllers:
 ```sh
-kubectl get hardwares --show-labels
+kubectl get hardware --show-labels
 ```
 
 You should also be able to list and describe the created workflows for machine provisioning using the commands below:
@@ -222,7 +200,7 @@ kubectl get machines
 
 ### Getting access to workload cluster
 
-To finish cluster provisioning, we must get access to it and install a CNI plugin. In this guide we will use Calico.
+To finish cluster provisioning, we must get access to it and install a CNI plugin. In this guide we will use Cilium. Cilium was chosen to avoid conflicts with the default assumed IP address for Tinkerbell (192.168.1.1)
 
 Run the following command to fetch `kubeconfig` for your workload cluster:
 ```sh
@@ -231,7 +209,7 @@ clusterctl get kubeconfig capi-quickstart > kubeconfig-workload
 
 Now you can apply Calico using the command below:
 ```sh
-KUBECONFIG=kubeconfig-workload kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+KUBECONFIG=kubeconfig-workload kubectl create -f https://raw.githubusercontent.com/cilium/cilium/v1.9/install/kubernetes/quick-install.yaml
 ```
 
 At this point your workload cluster should be ready for other deployments.

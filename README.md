@@ -20,16 +20,19 @@ Provider for Tinkerbell.
   and Tinkerbell
 * It simplifies Kubernetes cluster management using Tinkerbell as underline
   infrastructure provider
-* Create, update, delete Kubernetes project in a declarative fashion.
+* Create, update, delete Kubernetes clusters in a declarative fashion.
 
 ## Current state
 
 7th December 2020 marks the first commit for this project, it starts as a
 porting from CAPP (cluster api provider packet).
 
-As it is now it does not do anything useful. It starts the infrastructure
-manager. Just a go binary with all the boilerplate code and controllers
-bootstrapped.
+As it is now it is able to bootstrap single Control Plane instance clusters using hardware
+managed by Tinkerbell. Support for upgrades and multi-instance Control Plane clusters is
+still outstanding.
+
+See [docs/README.md](docs/README.md) for more information on setting up a development
+environment.
 
 ## Technical preview
 
