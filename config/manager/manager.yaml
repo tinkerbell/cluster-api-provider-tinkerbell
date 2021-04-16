@@ -18,6 +18,9 @@ spec:
       containers:
       - command:
         - /manager
+        env:
+          - name: TINKERBELL_IP
+            value: ${TINKERBELL_IP}
         args:
         - --enable-leader-election
         image: tinkerbell-controller

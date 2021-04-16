@@ -9,7 +9,7 @@ commonLabels:
   cluster.x-k8s.io/provider: infrastructure-tinkerbell
 bases:
 - crd
-#- webhook # Disable this if you're not using the webhook functionality.
+- webhook
 - default
 images:
 - name: quay.io/tinkerbell/cluster-api-provider-tinkerbell:e2e # images with this name

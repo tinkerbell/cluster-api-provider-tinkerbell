@@ -42,7 +42,7 @@ func NewFakeTemplateClient(objs ...*template.WorkflowTemplate) *Template {
 			obj.Id = uuid.New().String()
 		}
 
-		f.Objs[obj.Id] = proto.Clone(obj).(*template.WorkflowTemplate)
+		f.Objs[obj.Id], _ = proto.Clone(obj).(*template.WorkflowTemplate)
 	}
 
 	return f
@@ -58,7 +58,7 @@ func (f *Template) Create(ctx context.Context, in *template.WorkflowTemplate) er
 		return errors.New("duplicate")
 	}
 
-	f.Objs[in.Id] = proto.Clone(in).(*template.WorkflowTemplate)
+	f.Objs[in.Id], _ = proto.Clone(in).(*template.WorkflowTemplate)
 
 	return nil
 }
@@ -95,7 +95,7 @@ func (f *Template) Delete(ctx context.Context, id string) error {
 // Update updates a Template from Tinkerbell.
 func (f *Template) Update(ctx context.Context, in *template.WorkflowTemplate) error {
 	if _, ok := f.Objs[in.Id]; ok {
-		f.Objs[in.Id] = proto.Clone(in).(*template.WorkflowTemplate)
+		f.Objs[in.Id], _ = proto.Clone(in).(*template.WorkflowTemplate)
 
 		return nil
 	}

@@ -36,17 +36,35 @@ type HardwareSpec struct {
 	// ID is the ID of the hardware in Tinkerbell
 	// +kubebuilder:validation:MinLength=1
 	ID string `json:"id"`
+
+	// UserData is the user data to configure in the hardware's
+	// metadata
+	//+optional
+	UserData *string `json:"userData,omitempty"`
 }
 
 // HardwareStatus defines the observed state of Hardware.
 type HardwareStatus struct {
+	//+optional
 	TinkMetadata string `json:"tinkMetadata,omitempty"`
 
+	//+optional
 	TinkVersion int64 `json:"tinkVersion,omitempty"`
 
-	TinkInterfaces []Interface `json:"tinkInterfaces,omitempty"`
+	//+optional
+	Interfaces []Interface `json:"interfaces,omitempty"`
 
+	//+optional
+	Disks []Disk `json:"disks,omitempty"`
+
+	//+optional
 	State HardwareState `json:"state,omitempty"`
+}
+
+// Disk represents a disk device for Tinkerbell Hardware.
+type Disk struct {
+	//+optional
+	Device string `json:"device,omitempty"`
 }
 
 // Interface represents a network interface configuration for Hardware.

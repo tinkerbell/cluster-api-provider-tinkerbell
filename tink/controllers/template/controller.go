@@ -134,6 +134,8 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 		tinkTemplate = result
 	case err != nil:
 		return ctrl.Result{}, fmt.Errorf("failed to get template: %w", err)
+	default:
+		templateID = tinkTemplate.Id
 	}
 
 	if err := r.ensureTemplateID(ctx, t, templateID); err != nil {
@@ -142,14 +144,26 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 		return ctrl.Result{}, err
 	}
 
+	if err := r.reconcileTemplateData(ctx, t, tinkTemplate); err != nil {
+		logger.Error(err, "Failed to reconcile template Data")
+
+		return ctrl.Result{}, err
+	}
+
+	return r.reconcileStatus(ctx, t)
+}
+
+func (r *Reconciler) reconcileTemplateData(
+	ctx context.Context,
+	t *tinkv1alpha1.Template,
+	tinkTemplate *template.WorkflowTemplate,
+) error {
 	// If the data is specified and different than what is stored in Tinkerbell,
 	// update the template in Tinkerbell
 	if t.Spec.Data != nil && *t.Spec.Data != tinkTemplate.GetData() {
 		tinkTemplate.Data = *t.Spec.Data
 		if err := r.TemplateClient.Update(ctx, tinkTemplate); err != nil {
-			logger.Error(err, "Failed to update template in Tinkerbell")
-
-			return ctrl.Result{}, fmt.Errorf("failed to update template in Tinkerbell: %w", err)
+			return fmt.Errorf("failed to update template in Tinkerbell: %w", err)
 		}
 	}
 
@@ -161,12 +175,10 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Templa
 	}
 
 	if err := r.Client.Patch(ctx, t, patch); err != nil {
-		logger.Error(err, "Failed to patch template")
-
-		return ctrl.Result{}, fmt.Errorf("failed to patch template: %w", err)
+		return fmt.Errorf("failed to patch template: %w", err)
 	}
 
-	return r.reconcileStatus(ctx, t)
+	return nil
 }
 
 func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {

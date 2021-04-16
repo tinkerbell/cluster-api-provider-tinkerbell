@@ -31,7 +31,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake" //nolint:staticcheck
 
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
@@ -147,7 +147,12 @@ func validHardware(name, uuid, ip string) *tinkv1alpha1.Hardware {
 			ID: uuid,
 		},
 		Status: tinkv1alpha1.HardwareStatus{
-			TinkInterfaces: []tinkv1alpha1.Interface{
+			Disks: []tinkv1alpha1.Disk{
+				{
+					Device: "/dev/sda",
+				},
+			},
+			Interfaces: []tinkv1alpha1.Interface{
 				{
 					DHCP: &tinkv1alpha1.DHCP{
 						IP: &tinkv1alpha1.IP{
@@ -160,7 +165,7 @@ func validHardware(name, uuid, ip string) *tinkv1alpha1.Hardware {
 	}
 }
 
-//nolint:funlen,gocognit
+//nolint:funlen,gocognit,cyclop
 func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	t.Parallel()
 
@@ -778,8 +783,7 @@ func machineReconciliationFailsWhenAssociatedClusterObjectDoesNotExist(t *testin
 		t.Fatalf("Reconciling when owner machine has no version set should fail")
 	}
 
-	expectedError := "not found"
-	if !strings.Contains(err.Error(), expectedError) {
+	if expectedError := "not found"; !strings.Contains(err.Error(), expectedError) {
 		t.Fatalf("Unexpected error. Expected %q, got: %v", expectedError, err)
 	}
 }

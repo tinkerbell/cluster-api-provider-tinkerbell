@@ -30,7 +30,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake" //nolint:staticcheck
 
 	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
@@ -48,7 +48,7 @@ func unreadyTinkerbellCluster(name, namespace string) *infrastructurev1alpha3.Ti
 	return unreadyTinkerbellCluster
 }
 
-//nolint:funlen,gocognit
+//nolint:funlen,gocognit,cyclop
 func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 	t.Parallel()
 
@@ -427,7 +427,7 @@ func clusterReconciliationFailsWhenSelectedhardwareHasNoInterfacesConfigured(t *
 	t.Parallel()
 
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.TinkInterfaces = []tinkv1alpha1.Interface{}
+	hardware.Status.Interfaces = []tinkv1alpha1.Interface{}
 
 	if _, err := reconcileWithHardwares(t, []*tinkv1alpha1.Hardware{hardware}); err == nil {
 		t.Fatalf("Expected reconciliation error")
@@ -438,7 +438,7 @@ func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPConfiguredOnFirstInt
 	t.Parallel()
 
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.TinkInterfaces[0].DHCP = nil
+	hardware.Status.Interfaces[0].DHCP = nil
 
 	if _, err := reconcileWithHardwares(t, []*tinkv1alpha1.Hardware{hardware}); err == nil {
 		t.Fatalf("Expected reconciliation error")
@@ -449,7 +449,7 @@ func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPIPConfiguredOnFirstI
 	t.Parallel()
 
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.TinkInterfaces[0].DHCP.IP = nil
+	hardware.Status.Interfaces[0].DHCP.IP = nil
 
 	if _, err := reconcileWithHardwares(t, []*tinkv1alpha1.Hardware{hardware}); err == nil {
 		t.Fatalf("Expected reconciliation error")
@@ -460,7 +460,7 @@ func clusterReconciliationFailsWhenSelectedhardwareHasEmptyDHCPIPConfiguredOnFir
 	t.Parallel()
 
 	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.TinkInterfaces[0].DHCP.IP.Address = ""
+	hardware.Status.Interfaces[0].DHCP.IP.Address = ""
 
 	if _, err := reconcileWithHardwares(t, []*tinkv1alpha1.Hardware{hardware}); err == nil {
 		t.Fatalf("Expected reconciliation error")
