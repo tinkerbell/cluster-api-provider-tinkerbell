@@ -47,28 +47,33 @@ If your sandbox is running on an Ubuntu system, you can edit `/etc/netplan.<devi
 
 If you can use the default hook image, then copy http://s.gianarb.it/tinkie/tinkie-master.tar.gz to your `deploy/state/webroot/misc/osie/current` directory. Otherwise, follow the directions at: https://github.com/tinkerbell/hook#how-to-use-hook-with-sandbox
 
-### Push the necessary Tinkerbell actions to the registry
+### Mirror the necessary Tinkerbell actions to the registry
 
 ```sh
-docker pull quay.io/tinkerbell-actions/image2disk:v1.0.0
-docker tag quay.io/tinkerbell-actions/image2disk:v1.0.0 192.168.1.1/image2disk:v1.0.0
-docker push 192.168.1.1/image2disk:v1.0.0
-docker pull quay.io/tinkerbell-actions/writefile:v1.0.0
-docker tag quay.io/tinkerbell-actions/writefile:v1.0.0 192.168.1.1/writefile:v1.0.0
-docker push 192.168.1.1/writefile:v1.0.0
-docker pull quay.io/tinkerbell-actions/kexec:v1.0.0
-docker tag quay.io/tinkerbell-actions/kexec:v1.0.0 192.168.1.1/kexec:v1.0.0
-docker push 192.168.1.1/kexec:v1.0.0
+IMAGES=(
+  image2disk:v1.0.0
+  writefile:v1.0.0
+  kexec:v1.0.0
+)
+REGISTRY_IP="192.168.1.1"
+for IMAGE in "${IMAGES[@]}"; do
+  docker pull quay.io/tinkerbell-actions/$IMAGE
+  docker tag quay.io/tinkerbell-actions/$IMAGE $REGISTRY_IP/quay.io/tinkerbell-actions/$IMAGE
+  docker push $REGISTRY_IP/quay.io/tinkerbell-actions/$IMAGE
+done
 ```
 
 ### Prebuild the Kubernetes image
 
+```
 git clone https://github.com/detiber/image-builder
 cd image-builder/images/capi
+# This can take a while. ~30min on an i3 with 32GB memory
 make build-raw-all
-copy output/ubuntu-1804-kube-v1.18.15.gz to your `deploy/state/webroot` directory
+# copy output/ubuntu-1804-kube-v1.18.15.gz to your `deploy/state/webroot` directory
+```
 
-To build a diifferent version, you can modify the image-builder configuration following the documentation here: https://image-builder.sigs.k8s.io/capi/capi.html and here: https://image-builder.sigs.k8s.io/capi/providers/raw.html
+To build a different version, you can modify the image-builder configuration following the documentation here: https://image-builder.sigs.k8s.io/capi/capi.html and here: https://image-builder.sigs.k8s.io/capi/providers/raw.html
 
 ### Deploying CAPT
 
@@ -207,7 +212,7 @@ Run the following command to fetch `kubeconfig` for your workload cluster:
 clusterctl get kubeconfig capi-quickstart > kubeconfig-workload
 ```
 
-Now you can apply Calico using the command below:
+Now you can apply Cilium using the command below:
 ```sh
 KUBECONFIG=kubeconfig-workload kubectl create -f https://raw.githubusercontent.com/cilium/cilium/v1.9/install/kubernetes/quick-install.yaml
 ```
