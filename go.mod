@@ -5,20 +5,16 @@ go 1.15
 require (
 	github.com/go-logr/logr v0.4.0
 	github.com/google/uuid v1.3.0
-	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
-	github.com/onsi/gomega v1.11.0
+	github.com/onsi/gomega v1.14.0
 	github.com/tinkerbell/tink v0.0.0-20210104124527-57eb0efb6dbb
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
-	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
-	google.golang.org/grpc v1.37.0
+	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.26.0
-	k8s.io/api v0.17.16
-	k8s.io/apimachinery v0.17.16
-	k8s.io/client-go v0.17.16
+	k8s.io/api v0.21.3
+	k8s.io/apimachinery v0.21.3
+	k8s.io/client-go v0.21.3
 	k8s.io/klog v1.0.0
-	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
-	sigs.k8s.io/cluster-api v0.3.15
-	sigs.k8s.io/controller-runtime v0.5.14
+	k8s.io/utils v0.0.0-20210722164352-7f3ee0f31471
+	sigs.k8s.io/cluster-api v0.4.2
+	sigs.k8s.io/controller-runtime v0.9.6
 	sigs.k8s.io/yaml v1.2.0
 )
