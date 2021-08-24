@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     steps:
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2.3.4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.4
       - name: Codespell
         uses: codespell-project/actions-codespell@master
         with:
