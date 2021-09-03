@@ -45,7 +45,7 @@ If your sandbox is running on an Ubuntu system, you can edit `/etc/netplan.<devi
 
 ### Replace OSIE with Hook
 
-If you can use the default hook image, then copy http://s.gianarb.it/tinkie/tinkie-master.tar.gz to your `deploy/state/webroot/misc/osie/current` directory. Otherwise, follow the directions at: https://github.com/tinkerbell/hook#how-to-use-hook-with-sandbox
+If you can use the default hook image, then copy http://s.gianarb.it/tinkie/tinkie-main.tar.gz to your `deploy/state/webroot/misc/osie/current` directory. Otherwise, follow the directions at: https://github.com/tinkerbell/hook#how-to-use-hook-with-sandbox
 
 ### Mirror the necessary Tinkerbell actions to the registry
 

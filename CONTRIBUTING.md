@@ -9,7 +9,7 @@ We're so glad you're here.
 
 ### Code of Conduct
 
-Please read and understand the code of conduct found [here](https://github.com/tinkerbell/.github/blob/master/CODE_OF_CONDUCT.md).
+Please read and understand the code of conduct found [here](https://github.com/tinkerbell/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ### DCO Sign Off
 
@@ -17,7 +17,7 @@ Please read and understand the DCO found [here](docs/DCO.md).
 
 ### Environment Details
 
-[https://github.com/tinkerbell/cluster-api-provider-tink/blob/master/Makefile](https://github.com/tinkerbell/cluster-api-provider-tink/blob/master/Makefile)
+[https://github.com/tinkerbell/cluster-api-provider-tink/blob/main/Makefile](https://github.com/tinkerbell/cluster-api-provider-tink/blob/main/Makefile)
 
 ### How to Submit Change Requests
 
