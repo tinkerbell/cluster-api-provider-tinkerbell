@@ -19,7 +19,6 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -29,14 +28,14 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha4"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
-	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 const providerIDPlaceholder = "PROVIDER_ID"
@@ -45,9 +44,13 @@ type machineReconcileContext struct {
 	*baseMachineReconcileContext
 
 	machine              *clusterv1.Machine
-	tinkerbellCluster    *infrastructurev1alpha3.TinkerbellCluster
+	tinkerbellCluster    *infrastructurev1.TinkerbellCluster
 	bootstrapCloudConfig string
 }
+
+// ErrHardwareMissingDiskConfiguration is returned when the referenced hardware is missing
+// disk configuration.
+var ErrHardwareMissingDiskConfiguration = fmt.Errorf("disk configuration is required")
 
 // MachineCreator is a subset of tinkerbellCluster used by machineReconcileContext.
 type MachineCreator interface {
@@ -65,7 +68,7 @@ type MachineCreator interface {
 }
 
 func (mrc *machineReconcileContext) addFinalizer() error {
-	controllerutil.AddFinalizer(mrc.tinkerbellMachine, infrastructurev1alpha3.MachineFinalizer)
+	controllerutil.AddFinalizer(mrc.tinkerbellMachine, infrastructurev1.MachineFinalizer)
 
 	if err := mrc.patch(); err != nil {
 		return fmt.Errorf("patching TinkerbellMachine object with finalizer: %w", err)
@@ -123,7 +126,7 @@ func (mrc *machineReconcileContext) templateExists() (bool, error) {
 		Name: mrc.tinkerbellMachine.Name,
 	}
 
-	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1alpha1.Template{})
+	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1.Template{})
 	if err == nil {
 		return true, nil
 	}
@@ -165,9 +168,9 @@ func (mrc *machineReconcileContext) imageURL() (string, error) {
 	)
 }
 
-func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1alpha1.Hardware) error {
+func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) error {
 	if len(hardware.Status.Disks) < 1 {
-		return errors.New("disk configuration is required")
+		return ErrHardwareMissingDiskConfiguration
 	}
 
 	targetDisk := hardware.Status.Disks[0].Device
@@ -190,19 +193,19 @@ func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1alpha1.Hardwa
 		return fmt.Errorf("rendering template: %w", err)
 	}
 
-	templateObject := &tinkv1alpha1.Template{
+	templateObject := &tinkv1.Template{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: mrc.tinkerbellMachine.Name,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha3",
+					APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha4",
 					Kind:       "TinkerbellMachine",
 					Name:       mrc.tinkerbellMachine.Name,
 					UID:        mrc.tinkerbellMachine.ObjectMeta.UID,
 				},
 			},
 		},
-		Spec: tinkv1alpha1.TemplateSpec{
+		Spec: tinkv1.TemplateSpec{
 			Data: &templateData,
 		},
 	}
@@ -226,7 +229,7 @@ func firstPartitionFromDevice(device string) string {
 	}
 }
 
-func (mrc *machineReconcileContext) ensureTemplate(hardware *tinkv1alpha1.Hardware) error {
+func (mrc *machineReconcileContext) ensureTemplate(hardware *tinkv1.Hardware) error {
 	// TODO: should this reconccile the template instead of just ensuring it exists?
 	templateExists, err := mrc.templateExists()
 	if err != nil {
@@ -242,7 +245,7 @@ func (mrc *machineReconcileContext) ensureTemplate(hardware *tinkv1alpha1.Hardwa
 	return mrc.createTemplate(hardware)
 }
 
-func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1alpha1.Hardware) error {
+func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1.Hardware) error {
 	patchHelper, err := patch.NewHelper(hardware, mrc.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
@@ -256,7 +259,7 @@ func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1alpha1
 	hardware.ObjectMeta.Labels[HardwareOwnerNamespaceLabel] = mrc.tinkerbellMachine.Namespace
 
 	// Add finalizer to hardware as well to make sure we release it before Machine object is removed.
-	controllerutil.AddFinalizer(hardware, infrastructurev1alpha3.MachineFinalizer)
+	controllerutil.AddFinalizer(hardware, infrastructurev1.MachineFinalizer)
 
 	if err := patchHelper.Patch(mrc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
@@ -265,9 +268,9 @@ func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1alpha1
 	return nil
 }
 
-func (mrc *machineReconcileContext) setStatus(hardware *tinkv1alpha1.Hardware) error {
+func (mrc *machineReconcileContext) setStatus(hardware *tinkv1.Hardware) error {
 	if hardware == nil {
-		hardware = &tinkv1alpha1.Hardware{}
+		hardware = &tinkv1.Hardware{}
 
 		namespacedName := types.NamespacedName{
 			Name: mrc.tinkerbellMachine.Spec.HardwareName,
@@ -293,7 +296,7 @@ func (mrc *machineReconcileContext) setStatus(hardware *tinkv1alpha1.Hardware) e
 	return mrc.patch()
 }
 
-func (mrc *machineReconcileContext) ensureHardwareUserData(hardware *tinkv1alpha1.Hardware, providerID string) error {
+func (mrc *machineReconcileContext) ensureHardwareUserData(hardware *tinkv1.Hardware, providerID string) error {
 	userData := strings.ReplaceAll(mrc.bootstrapCloudConfig, providerIDPlaceholder, providerID)
 
 	if hardware.Spec.UserData == nil || *hardware.Spec.UserData != userData {
@@ -312,7 +315,7 @@ func (mrc *machineReconcileContext) ensureHardwareUserData(hardware *tinkv1alpha
 	return nil
 }
 
-func (mrc *machineReconcileContext) ensureHardware() (*tinkv1alpha1.Hardware, error) {
+func (mrc *machineReconcileContext) ensureHardware() (*tinkv1.Hardware, error) {
 	hardware, err := mrc.hardwareForMachine()
 	if err != nil {
 		return nil, fmt.Errorf("getting hardware: %w", err)
@@ -336,7 +339,7 @@ func (mrc *machineReconcileContext) ensureHardware() (*tinkv1alpha1.Hardware, er
 	return hardware, mrc.setStatus(hardware)
 }
 
-func (mrc *machineReconcileContext) hardwareForMachine() (*tinkv1alpha1.Hardware, error) {
+func (mrc *machineReconcileContext) hardwareForMachine() (*tinkv1.Hardware, error) {
 	alreadySelectedHardwareSelector := []string{
 		fmt.Sprintf("%s=%s", HardwareOwnerNameLabel, mrc.tinkerbellMachine.Name),
 		fmt.Sprintf("%s=%s", HardwareOwnerNamespaceLabel, mrc.tinkerbellMachine.Namespace),
@@ -367,7 +370,7 @@ func (mrc *machineReconcileContext) workflowExists() (bool, error) {
 		Name: mrc.tinkerbellMachine.Name,
 	}
 
-	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1alpha1.Workflow{})
+	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1.Workflow{})
 	if err == nil {
 		return true, nil
 	}
@@ -380,19 +383,19 @@ func (mrc *machineReconcileContext) workflowExists() (bool, error) {
 }
 
 func (mrc *machineReconcileContext) createWorkflow() error {
-	workflow := &tinkv1alpha1.Workflow{
+	workflow := &tinkv1.Workflow{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: mrc.tinkerbellMachine.Name,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha3",
+					APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha4",
 					Kind:       "TinkerbellMachine",
 					Name:       mrc.tinkerbellMachine.Name,
 					UID:        mrc.tinkerbellMachine.ObjectMeta.UID,
 				},
 			},
 		},
-		Spec: tinkv1alpha1.WorkflowSpec{
+		Spec: tinkv1.WorkflowSpec{
 			TemplateRef: mrc.tinkerbellMachine.Name,
 			HardwareRef: mrc.tinkerbellMachine.Spec.HardwareName,
 		},

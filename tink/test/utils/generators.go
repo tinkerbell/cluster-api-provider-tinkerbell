@@ -111,7 +111,7 @@ func (m *macGenerator) Get() (string, error) {
 	defer m.lock.Unlock()
 
 	for {
-		mac := net.HardwareAddr(make([]byte, 6))
+		mac := net.HardwareAddr(make([]byte, 6)) //nolint:gomnd
 
 		_, err := rand.Read(mac)
 		if err != nil {

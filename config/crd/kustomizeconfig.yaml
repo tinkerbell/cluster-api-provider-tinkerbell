@@ -6,10 +6,12 @@ nameReference:
   - kind: CustomResourceDefinition
     group: apiextensions.k8s.io
     path: spec/conversion/webhook/ClientConfig/service/name
+
 namespace:
 - kind: CustomResourceDefinition
   group: apiextensions.k8s.io
   path: spec/conversion/webhook/ClientConfig/service/namespace
   create: false
+
 varReference:
 - path: metadata/annotations

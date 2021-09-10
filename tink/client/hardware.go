@@ -39,7 +39,7 @@ func NewHardwareClient(client hardware.HardwareServiceClient) *Hardware {
 // Create Tinkerbell Hardware.
 func (t *Hardware) Create(ctx context.Context, h *hardware.Hardware) error {
 	if h == nil {
-		return errors.New("hardware should not be nil")
+		return errors.New("hardware should not be nil") //nolint:goerr113
 	}
 
 	if h.GetId() == "" {
@@ -79,7 +79,7 @@ func (t *Hardware) Get(ctx context.Context, id, ip, mac string) (*hardware.Hardw
 		req.Ip = ip
 		method = t.client.ByIP
 	default:
-		return nil, errors.New("need to specify either id, ip, or mac")
+		return nil, errors.New("need to specify either id, ip, or mac") //nolint:goerr113
 	}
 
 	tinkHardware, err := method(ctx, req)

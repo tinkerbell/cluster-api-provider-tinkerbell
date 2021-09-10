@@ -28,8 +28,7 @@ import (
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake" //nolint:staticcheck
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkfake "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client/fake"
@@ -109,10 +108,8 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 			fakeTemplateClient := tinkfake.NewFakeTemplateClient(tt.tinkObjs...)
 
 			r := &Reconciler{
-				Client:         fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopy()),
+				Client:         fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.in.DeepCopy()).Build(),
 				TemplateClient: fakeTemplateClient,
-				Log:            log.Log,
-				Scheme:         scheme,
 			}
 
 			got, err := r.reconcileDelete(context.Background(), tt.in)
@@ -128,12 +125,9 @@ func TestTemplateReconciler_reconcileDelete(t *testing.T) {
 			// Verify that the deletion happened in the fakeTemplateServiceClient
 			g.Expect(fakeTemplateClient.Objs).NotTo(HaveKey(tt.in.Name))
 
-			// Check for absence of a finalizer since the fake client doesn't
-			// do automatic deletion
 			key := client.ObjectKey{Name: tt.in.Name}
-			after := &tinkv1alpha1.Template{}
-			g.Expect(r.Client.Get(context.Background(), key, after)).To(Succeed())
-			g.Expect(after.Finalizers).NotTo(ContainElement(tinkv1alpha1.TemplateFinalizer))
+			g.Expect(r.Client.Get(context.Background(), key, new(tinkv1alpha1.Template))).
+				To(MatchError(ContainSubstring("not found")))
 		})
 	}
 }
@@ -213,10 +207,8 @@ func TestTemplateReconciler_reconcileNormal(t *testing.T) {
 			fakeTemplateClient := tinkfake.NewFakeTemplateClient(tt.tinkObjs...)
 
 			r := &Reconciler{
-				Client:         fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopy()),
+				Client:         fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.in.DeepCopy()).Build(),
 				TemplateClient: fakeTemplateClient,
-				Log:            log.Log,
-				Scheme:         scheme,
 			}
 
 			got, err := r.reconcileNormal(context.Background(), tt.in)

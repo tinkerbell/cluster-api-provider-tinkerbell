@@ -19,6 +19,7 @@ package templates_test
 import (
 	"testing"
 
+	. "github.com/onsi/gomega"
 	"sigs.k8s.io/yaml"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
@@ -33,19 +34,30 @@ func validWorkflowTemplate() *templates.WorkflowTemplate {
 	}
 }
 
+//nolint:funlen
 func Test_Cloud_config_template(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		mutateF     func(*templates.WorkflowTemplate)
-		expectError bool
-		validateF   func(*testing.T, *templates.WorkflowTemplate, string)
+		mutateF       func(*templates.WorkflowTemplate)
+		expectError   bool
+		expectedError error
+		validateF     func(*testing.T, *templates.WorkflowTemplate, string)
 	}{
-		"requires_non_empty_Image_URL": {
+		"requires_non_empty_ImageURL": {
 			mutateF: func(wt *templates.WorkflowTemplate) {
 				wt.ImageURL = ""
 			},
-			expectError: true,
+			expectError:   true,
+			expectedError: templates.ErrMissingImageURL,
+		},
+
+		"requires_non_empty_Name": {
+			mutateF: func(wt *templates.WorkflowTemplate) {
+				wt.Name = ""
+			},
+			expectError:   true,
+			expectedError: templates.ErrMissingName,
 		},
 
 		"renders_with_valid_config": {
@@ -54,11 +66,10 @@ func Test_Cloud_config_template(t *testing.T) {
 
 		"rendered_output_should_be_valid_YAML": {
 			validateF: func(t *testing.T, wt *templates.WorkflowTemplate, renderResult string) { //nolint:thelper
+				g := NewWithT(t)
 				x := &map[string]interface{}{}
 
-				if err := yaml.Unmarshal([]byte(renderResult), x); err != nil {
-					t.Fatalf("Should unmarshal successfully, got: %v", err)
-				}
+				g.Expect(yaml.Unmarshal([]byte(renderResult), x)).To(Succeed())
 			},
 		},
 	}
@@ -68,6 +79,7 @@ func Test_Cloud_config_template(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			g := NewWithT(t)
 
 			wt := validWorkflowTemplate()
 
@@ -77,12 +89,14 @@ func Test_Cloud_config_template(t *testing.T) {
 
 			result, err := wt.Render()
 
-			if c.expectError && err == nil {
-				t.Fatalf("Expected error")
-			}
-
-			if !c.expectError && err != nil {
-				t.Fatalf("Did not expect error, got: %v", err)
+			if c.expectError {
+				if c.expectedError != nil {
+					g.Expect(err).To(MatchError(c.expectedError))
+				} else {
+					g.Expect(err).To(HaveOccurred())
+				}
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
 			}
 
 			if c.validateF == nil {

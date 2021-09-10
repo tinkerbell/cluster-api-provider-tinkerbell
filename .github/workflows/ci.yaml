@@ -6,25 +6,19 @@ on:
       - main
 
 jobs:
-  verify:
-    name: Verify
+  validate:
+    name: "Validate ${{ matrix.target }}"
     runs-on: ubuntu-latest
-    container: gcr.io/k8s-staging-releng/releng-ci:latest
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ["verify", "lint", "test"]
     steps:
-
-      - uses: actions/checkout@v2.3.4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - uses: actions/setup-go@v2.1.4
-        with:
-          go-version: '1.15'
-
-      - name: Run verify
-        run: make verify
-
+    - name: checkout
+      uses: actions/checkout@v2.3.4
+    - uses: ./.github/actions/setup-go
+    - name: ${{ matrix.target }}
+      run: make ${{ matrix.target }}
   codespell:
     name: Codespell
     runs-on: ubuntu-latest

@@ -26,33 +26,33 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/patch"
+	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
-	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha4"
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 // TinkerbellClusterReconciler implements Reconciler interface.
 type TinkerbellClusterReconciler struct {
-	Log    logr.Logger
-	Client client.Client
+	client.Client
+	WatchFilterValue string
 }
 
 // validate validates if context configuration has all required fields properly populated.
 func (tcr *TinkerbellClusterReconciler) validate() error {
-	if tcr.Log == nil {
-		return fmt.Errorf("logger is nil")
-	}
-
 	if tcr.Client == nil {
-		return fmt.Errorf("client is nil")
+		return ErrMissingClient
 	}
 
 	return nil
@@ -67,14 +67,16 @@ func (tcr *TinkerbellClusterReconciler) validate() error {
 //
 //nolint:lll
 func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (*clusterReconcileContext, error) {
+	log := ctrl.LoggerFrom(ctx)
+
 	if err := tcr.validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	crc := &clusterReconcileContext{
-		log:               tcr.Log.WithValues("tinkerbellcluster", namespacedName),
+		log:               log.WithValues("tinkerbellcluster", namespacedName),
 		ctx:               ctx,
-		tinkerbellCluster: &infrastructurev1alpha3.TinkerbellCluster{},
+		tinkerbellCluster: &infrastructurev1.TinkerbellCluster{},
 		client:            tcr.Client,
 		namespacedName:    namespacedName,
 	}
@@ -88,8 +90,6 @@ func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context,
 
 		return nil, fmt.Errorf("getting TinkerbellCluster: %w", err)
 	}
-
-	crc.log = crc.log.WithName(crc.tinkerbellCluster.APIVersion)
 
 	patchHelper, err := patch.NewHelper(crc.tinkerbellCluster, crc.client)
 	if err != nil {
@@ -106,7 +106,7 @@ func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context,
 	}
 
 	if cluster == nil {
-		crc.log.Info("OwnerCluster is not set yet. Requeuing...")
+		crc.log.Info("OwnerCluster is not set yet.")
 	}
 
 	crc.cluster = cluster
@@ -117,7 +117,7 @@ func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context,
 // clusterReconcileContext implements ReconcileContext by reconciling TinkerbellCluster object.
 type clusterReconcileContext struct {
 	ctx               context.Context
-	tinkerbellCluster *infrastructurev1alpha3.TinkerbellCluster
+	tinkerbellCluster *infrastructurev1.TinkerbellCluster
 	patchHelper       *patch.Helper
 	cluster           *clusterv1.Cluster
 	log               logr.Logger
@@ -144,21 +144,37 @@ const (
 	KubernetesAPIPort = 6443
 )
 
-func nextAvailableHardware(ctx context.Context, k8sClient client.Client, extraSelectors []string) (*tinkv1alpha1.Hardware, error) { //nolint:lll
+var (
+	// ErrNoHardwareAvailable is the error returned when there is no hardware available for provisioning.
+	ErrNoHardwareAvailable = fmt.Errorf("no hardware available")
+	// ErrHardwareIsNil is the error returned when the given hardware resource is nil.
+	ErrHardwareIsNil = fmt.Errorf("given Hardware object is nil")
+	// ErrHardwareMissingInterfaces is the error returned when the referenced hardware does not have any
+	// network interfaces defined.
+	ErrHardwareMissingInterfaces = fmt.Errorf("hardware has no interfaces defined")
+	// ErrHardwareFirstInterfaceNotDHCP is the error returned when the referenced hardware does not have it's
+	// first network interface configured for DHCP.
+	ErrHardwareFirstInterfaceNotDHCP = fmt.Errorf("hardware's first interface has no DHCP address defined")
+	// ErrHardwareFirstInterfaceDHCPMissingIP is the error returned when the referenced hardware does not have a
+	// DHCP IP address assigned for it's first interface.
+	ErrHardwareFirstInterfaceDHCPMissingIP = fmt.Errorf("hardware's first interface has no DHCP IP address defined")
+)
+
+func nextAvailableHardware(ctx context.Context, k8sClient client.Client, extraSelectors []string) (*tinkv1.Hardware, error) { //nolint:lll
 	hardware, err := nextHardware(ctx, k8sClient, append(extraSelectors, fmt.Sprintf("!%s", HardwareOwnerNameLabel)))
 	if err != nil {
 		return nil, fmt.Errorf("getting next Hardware object: %w", err)
 	}
 
 	if hardware == nil {
-		return nil, fmt.Errorf("no hardware available")
+		return nil, ErrNoHardwareAvailable
 	}
 
 	return hardware, nil
 }
 
-func nextHardware(ctx context.Context, k8sClient client.Client, selectors []string) (*tinkv1alpha1.Hardware, error) { //nolint:lll
-	availableHardwares := &tinkv1alpha1.HardwareList{}
+func nextHardware(ctx context.Context, k8sClient client.Client, selectors []string) (*tinkv1.Hardware, error) { //nolint:lll
+	availableHardwares := &tinkv1.HardwareList{}
 
 	selectorsRaw := strings.Join(selectors, ",")
 
@@ -182,31 +198,31 @@ func nextHardware(ctx context.Context, k8sClient client.Client, selectors []stri
 	return &availableHardwares.Items[0], nil
 }
 
-func hardwareIP(hardware *tinkv1alpha1.Hardware) (string, error) {
+func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	if hardware == nil {
-		return "", fmt.Errorf("given Hardware object is nil")
+		return "", ErrHardwareIsNil
 	}
 
 	if len(hardware.Status.Interfaces) == 0 {
-		return "", fmt.Errorf("hardware has no interfaces defined")
+		return "", ErrHardwareMissingInterfaces
 	}
 
 	if hardware.Status.Interfaces[0].DHCP == nil {
-		return "", fmt.Errorf("hardware's first interface has no DHCP address defined")
+		return "", ErrHardwareFirstInterfaceNotDHCP
 	}
 
 	if hardware.Status.Interfaces[0].DHCP.IP == nil {
-		return "", fmt.Errorf("hardware's first interface has no DHCP IP address defined")
+		return "", ErrHardwareFirstInterfaceDHCPMissingIP
 	}
 
 	if hardware.Status.Interfaces[0].DHCP.IP.Address == "" {
-		return "", fmt.Errorf("hardware's first interface has no DHCP IP address is empty")
+		return "", ErrHardwareFirstInterfaceDHCPMissingIP
 	}
 
 	return hardware.Status.Interfaces[0].DHCP.IP.Address, nil
 }
 
-func (crc *clusterReconcileContext) takeHardwareOwnership(hardware *tinkv1alpha1.Hardware) error {
+func (crc *clusterReconcileContext) takeHardwareOwnership(hardware *tinkv1.Hardware) error {
 	patchHelper, err := patch.NewHelper(hardware, crc.client)
 	if err != nil {
 		return fmt.Errorf("creating patch helper: %w", err)
@@ -219,7 +235,7 @@ func (crc *clusterReconcileContext) takeHardwareOwnership(hardware *tinkv1alpha1
 	hardware.ObjectMeta.Labels[ClusterNameLabel] = crc.tinkerbellCluster.Name
 	hardware.ObjectMeta.Labels[ClusterNamespaceLabel] = crc.tinkerbellCluster.Namespace
 
-	controllerutil.AddFinalizer(hardware, infrastructurev1alpha3.ClusterFinalizer)
+	controllerutil.AddFinalizer(hardware, infrastructurev1.ClusterFinalizer)
 
 	if err := patchHelper.Patch(crc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object with cluster label: %w", err)
@@ -266,7 +282,7 @@ func (crc *clusterReconcileContext) reconcile() error {
 
 	crc.tinkerbellCluster.Status.Ready = true
 
-	controllerutil.AddFinalizer(crc.tinkerbellCluster, infrastructurev1alpha3.ClusterFinalizer)
+	controllerutil.AddFinalizer(crc.tinkerbellCluster, infrastructurev1.ClusterFinalizer)
 
 	crc.log.Info("Setting cluster status to ready")
 
@@ -277,7 +293,7 @@ func (crc *clusterReconcileContext) reconcile() error {
 	return nil
 }
 
-func controlplaneNodeSelector(tinkerbellCluster *infrastructurev1alpha3.TinkerbellCluster) string {
+func controlplaneNodeSelector(tinkerbellCluster *infrastructurev1.TinkerbellCluster) string {
 	return fmt.Sprintf("%s=%s,%s=%s",
 		ClusterNameLabel, tinkerbellCluster.Name,
 		ClusterNamespaceLabel, tinkerbellCluster.Namespace)
@@ -305,7 +321,7 @@ func (crc *clusterReconcileContext) releaseHardware() error {
 	delete(hardware.ObjectMeta.Labels, ClusterNameLabel)
 	delete(hardware.ObjectMeta.Labels, ClusterNamespaceLabel)
 
-	controllerutil.RemoveFinalizer(hardware, infrastructurev1alpha3.ClusterFinalizer)
+	controllerutil.RemoveFinalizer(hardware, infrastructurev1.ClusterFinalizer)
 
 	if err := patchHelper.Patch(crc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object to remove cluster label: %w", err)
@@ -321,7 +337,7 @@ func (crc *clusterReconcileContext) reconcileDelete() error {
 		return fmt.Errorf("releasing Hardware: %w", err)
 	}
 
-	controllerutil.RemoveFinalizer(crc.tinkerbellCluster, infrastructurev1alpha3.ClusterFinalizer)
+	controllerutil.RemoveFinalizer(crc.tinkerbellCluster, infrastructurev1.ClusterFinalizer)
 
 	if err := crc.patchHelper.Patch(crc.ctx, crc.tinkerbellCluster); err != nil {
 		return fmt.Errorf("patching cluster object with removed finalizer: %w", err)
@@ -335,46 +351,67 @@ func (crc *clusterReconcileContext) reconcileDelete() error {
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
 
 // Reconcile ensures state of Tinkerbell clusters.
-func (tcr *TinkerbellClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-
+func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	crc, err := tcr.newReconcileContext(ctx, req.NamespacedName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("creating reconciliation context: %w", err)
 	}
 
 	if crc == nil {
-		return defaultRequeueResult(), nil
+		return ctrl.Result{}, nil
 	}
 
 	if !crc.tinkerbellCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+		if annotations.HasPausedAnnotation(crc.tinkerbellCluster) {
+			crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile deletion")
+
+			return ctrl.Result{}, nil
+		}
+
 		crc.log.Info("Removing cluster")
 
 		return ctrl.Result{}, crc.reconcileDelete()
 	}
 
 	if crc.cluster == nil {
-		return defaultRequeueResult(), nil
+		return ctrl.Result{}, nil
 	}
 
-	if util.IsPaused(crc.cluster, crc.tinkerbellCluster) {
+	if annotations.IsPaused(crc.cluster, crc.tinkerbellCluster) {
 		crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile")
 
-		return defaultRequeueResult(), nil
+		return ctrl.Result{}, nil
 	}
 
 	return ctrl.Result{}, crc.reconcile()
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (tcr *TinkerbellClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&infrastructurev1alpha3.TinkerbellCluster{}).
+func (tcr *TinkerbellClusterReconciler) SetupWithManager(
+	ctx context.Context,
+	mgr ctrl.Manager,
+	options controller.Options,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	builder := ctrl.NewControllerManagedBy(mgr).
+		WithOptions(options).
+		For(&infrastructurev1.TinkerbellCluster{}).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, tcr.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceIsNotExternallyManaged(log)).
 		Watches(
 			&source.Kind{Type: &clusterv1.Cluster{}},
-			&handler.EnqueueRequestsFromMapFunc{
-				ToRequests: util.ClusterToInfrastructureMapFunc(infrastructurev1alpha3.GroupVersion.WithKind("TinkerbellCluster")),
-			},
-		).
-		Complete(tcr)
+			handler.EnqueueRequestsFromMapFunc(
+				util.ClusterToInfrastructureMapFunc(infrastructurev1.GroupVersion.WithKind("TinkerbellCluster")),
+			),
+			builder.WithPredicates(
+				predicates.ClusterUnpaused(log),
+			),
+		)
+
+	if err := builder.Complete(tcr); err != nil {
+		return fmt.Errorf("failed to configure controller: %w", err)
+	}
+
+	return nil
 }

@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake" //nolint:staticcheck
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
@@ -40,7 +40,7 @@ func Test_EnsureFinalizer(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		in        common.Object
+		in        client.Object
 		finalizer string
 		wantErr   bool
 	}{
@@ -74,7 +74,7 @@ func Test_EnsureFinalizer(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			ctx := context.Background()
-			fakeClient := fake.NewFakeClientWithScheme(scheme, tt.in.DeepCopyObject())
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(tt.in.DeepCopyObject()).Build()
 
 			err := common.EnsureFinalizer(ctx, fakeClient, log.Log, tt.in, tt.finalizer)
 			if tt.wantErr {
