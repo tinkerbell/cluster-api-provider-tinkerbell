@@ -23,16 +23,12 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tink/protos/hardware"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
@@ -48,27 +44,21 @@ type hardwareClient interface {
 type Reconciler struct {
 	client.Client
 	HardwareClient hardwareClient
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, hwChan <-chan event.GenericEvent) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&tinkv1alpha1.Hardware{}).
-		Watches(
-			&source.Channel{Source: hwChan},
-			&handler.EnqueueRequestForObject{},
-		).
-		Complete(r)
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
+	return ctrl.NewControllerManagedBy(mgr). //nolint:wrapcheck
+							WithOptions(options).
+							For(&tinkv1alpha1.Hardware{}).
+							Complete(r)
 }
 
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=hardware;hardware/status,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile ensures state of Tinkerbell hardware.
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-	logger := r.Log.WithValues("hardware", req.NamespacedName.Name)
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx).WithValues("hardware", req.NamespacedName.Name)
 
 	// Fetch the hardware.
 	hardware := &tinkv1alpha1.Hardware{}
@@ -91,7 +81,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 func (r *Reconciler) reconcileNormal(ctx context.Context, h *tinkv1alpha1.Hardware) (ctrl.Result, error) {
-	logger := r.Log.WithValues("hardware", h.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("hardware", h.Name)
 
 	tinkHardware, err := r.HardwareClient.Get(ctx, h.Spec.ID, "", "")
 	if err != nil {
@@ -132,7 +122,7 @@ func (r *Reconciler) reconcileUserData(
 	h *tinkv1alpha1.Hardware,
 	tinkHardware *hardware.Hardware,
 ) error {
-	logger := r.Log.WithValues("hardware", h.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("hardware", h.Name)
 
 	// if UserData is nil, skip reconciliation
 	if h.Spec.UserData == nil {
@@ -224,7 +214,7 @@ func (r *Reconciler) reconcileStatus(
 	h *tinkv1alpha1.Hardware,
 	tinkHardware *hardware.Hardware,
 ) (ctrl.Result, error) {
-	logger := r.Log.WithValues("hardware", h.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("hardware", h.Name)
 	patch := client.MergeFrom(h.DeepCopy())
 
 	h.Status.TinkMetadata = tinkHardware.GetMetadata()

@@ -19,7 +19,8 @@ package controllers
 import (
 	"testing"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	. "github.com/onsi/gomega"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 )
 
 func readyMachine() *clusterv1.Machine {
@@ -36,14 +37,15 @@ func readyMachine() *clusterv1.Machine {
 	}
 }
 
-//nolint:funlen,cyclop
+//nolint:funlen
 func Test_Machine(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		mutateF     func(m *clusterv1.Machine) *clusterv1.Machine
-		expectError bool
-		ready       bool
+		mutateF       func(m *clusterv1.Machine) *clusterv1.Machine
+		expectError   bool
+		expectedError error
+		ready         bool
 	}{
 		"is_not_ready_when_it_is_nil": {
 			mutateF: func(m *clusterv1.Machine) *clusterv1.Machine {
@@ -63,7 +65,8 @@ func Test_Machine(t *testing.T) {
 
 				return m
 			},
-			expectError: true,
+			expectError:   true,
+			expectedError: ErrMachineVersionEmpty,
 		},
 		"is_not_valid_when_version_is_empty": {
 			mutateF: func(m *clusterv1.Machine) *clusterv1.Machine {
@@ -72,7 +75,8 @@ func Test_Machine(t *testing.T) {
 
 				return m
 			},
-			expectError: true,
+			expectError:   true,
+			expectedError: ErrMachineVersionEmpty,
 		},
 		"is_ready_when_all_requirements_are_met": {
 			ready: true,
@@ -84,6 +88,7 @@ func Test_Machine(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			g := NewWithT(t)
 
 			m := readyMachine()
 
@@ -92,22 +97,22 @@ func Test_Machine(t *testing.T) {
 			}
 
 			reason, err := isMachineReady(m)
+			if c.expectError {
+				g.Expect(err).To(MatchError(c.expectedError))
 
-			if c.expectError && err == nil {
-				t.Fatalf("Expected error")
+				return
 			}
 
-			if !c.expectError && err != nil {
-				t.Fatalf("Unexpected error: %v", err)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			if c.ready {
+				g.Expect(reason).To(BeEmpty(), "Expected ready machine")
+
+				return
 			}
 
-			if c.ready && reason != "" {
-				t.Fatalf("Expected ready machine, got: %v", reason)
-			}
-
-			if !c.ready && err == nil && reason == "" {
-				t.Fatalf("Expect machine to not be ready")
-			}
+			// TODO: should we match reason here?
+			g.Expect(reason).NotTo(BeEmpty(), "Expect machine to not be ready")
 		})
 	}
 }

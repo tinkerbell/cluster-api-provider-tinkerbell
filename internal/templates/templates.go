@@ -22,6 +22,14 @@ import (
 	"fmt"
 )
 
+var (
+	// ErrMissingName is the error returned when the WorfklowTemplate Name is not specified.
+	ErrMissingName = fmt.Errorf("name can't be empty")
+
+	// ErrMissingImageURL is the error returned when the WorfklowTemplate ImageURL is not specified.
+	ErrMissingImageURL = fmt.Errorf("imageURL can't be empty")
+)
+
 // WorkflowTemplate is a helper struct for rendering CAPT Template data.
 type WorkflowTemplate struct {
 	Name          string
@@ -33,11 +41,11 @@ type WorkflowTemplate struct {
 // Render renders workflow template for a given machine including user-data.
 func (wt WorkflowTemplate) Render() (string, error) {
 	if wt.Name == "" {
-		return "", fmt.Errorf("name can't be empty")
+		return "", ErrMissingName
 	}
 
 	if wt.ImageURL == "" {
-		return "", fmt.Errorf("imageURL can't be empty")
+		return "", ErrMissingImageURL
 	}
 
 	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, wt.ImageURL, wt.DestDisk, wt.DestPartition,

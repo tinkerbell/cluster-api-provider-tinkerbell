@@ -23,17 +23,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tink/protos/workflow"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
@@ -54,27 +50,21 @@ type workflowClient interface {
 type Reconciler struct {
 	client.Client
 	WorkflowClient workflowClient
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, workflowChan <-chan event.GenericEvent) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&tinkv1alpha1.Workflow{}).
-		Watches(
-			&source.Channel{Source: workflowChan},
-			&handler.EnqueueRequestForObject{},
-		).
-		Complete(r)
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
+	return ctrl.NewControllerManagedBy(mgr). //nolint:wrapcheck
+							WithOptions(options).
+							For(&tinkv1alpha1.Workflow{}).
+							Complete(r)
 }
 
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=workflows;workflows/status,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile ensures state of Tinkerbell workflows.
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-	logger := r.Log.WithValues("workflow", req.NamespacedName.Name)
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", req.NamespacedName.Name)
 
 	// Fetch the workflow.
 	workflow := &tinkv1alpha1.Workflow{}
@@ -102,7 +92,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 func (r *Reconciler) reconcileNormal(ctx context.Context, w *tinkv1alpha1.Workflow) (ctrl.Result, error) {
-	logger := r.Log.WithValues("workflow", w.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", w.Name)
 
 	workflowID := w.TinkID()
 
@@ -161,7 +151,7 @@ func eventFromTinkEvent(event *workflow.WorkflowActionStatus) tinkv1alpha1.Event
 }
 
 func (r *Reconciler) reconcileStatusEvents(ctx context.Context, w *tinkv1alpha1.Workflow, id string) error {
-	logger := r.Log.WithValues("workflow", w.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", w.Name)
 
 	events, err := r.WorkflowClient.GetEvents(ctx, id)
 	if err != nil {
@@ -181,7 +171,7 @@ func (r *Reconciler) reconcileStatusEvents(ctx context.Context, w *tinkv1alpha1.
 }
 
 func (r *Reconciler) reconcileStatusActions(ctx context.Context, w *tinkv1alpha1.Workflow, id string) error {
-	logger := r.Log.WithValues("workflow", w.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", w.Name)
 
 	actions, err := r.WorkflowClient.GetActions(ctx, id)
 	if err != nil {
@@ -205,7 +195,7 @@ func (r *Reconciler) reconcileStatus(
 	w *tinkv1alpha1.Workflow,
 	tinkWorkflow *workflow.Workflow,
 ) (ctrl.Result, error) {
-	logger := r.Log.WithValues("workflow", w.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", w.Name)
 	patch := client.MergeFrom(w.DeepCopy())
 
 	// Try to patch what we have even if we hit errors gather additional status information
@@ -254,7 +244,7 @@ func (r *Reconciler) reconcileStatus(
 }
 
 func (r *Reconciler) createWorkflow(ctx context.Context, w *tinkv1alpha1.Workflow) (string, error) {
-	logger := r.Log.WithValues("workflow", w.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", w.Name)
 
 	hw := &tinkv1alpha1.Hardware{}
 	hwKey := client.ObjectKey{Name: w.Spec.HardwareRef}
@@ -291,7 +281,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, w *tinkv1alpha1.Workfl
 	// Create a patch for use later
 	patch := client.MergeFrom(w.DeepCopy())
 
-	logger := r.Log.WithValues("workflow", w.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("workflow", w.Name)
 
 	// If we've recorded an ID for the Workflow, then we should delete it
 	if id := w.TinkID(); id != "" {

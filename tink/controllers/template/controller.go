@@ -22,17 +22,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tink/protos/template"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	tinkclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
@@ -50,27 +46,21 @@ type templateClient interface {
 type Reconciler struct {
 	client.Client
 	TemplateClient templateClient
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, templateChan <-chan event.GenericEvent) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&tinkv1alpha1.Template{}).
-		Watches(
-			&source.Channel{Source: templateChan},
-			&handler.EnqueueRequestForObject{},
-		).
-		Complete(r)
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
+	return ctrl.NewControllerManagedBy(mgr). //nolint:wrapcheck
+							WithOptions(options).
+							For(&tinkv1alpha1.Template{}).
+							Complete(r)
 }
 
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile ensures state of Tinkerbell templates.
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-	logger := r.Log.WithValues("template", req.NamespacedName.Name)
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx).WithValues("template", req.NamespacedName.Name)
 
 	// Fetch the template.
 	template := &tinkv1alpha1.Template{}
@@ -110,7 +100,7 @@ func (r *Reconciler) ensureTemplateID(ctx context.Context, t *tinkv1alpha1.Templ
 }
 
 func (r *Reconciler) reconcileNormal(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
-	logger := r.Log.WithValues("template", t.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("template", t.Name)
 
 	templateID := t.TinkID()
 	if templateID == "" {
@@ -182,7 +172,7 @@ func (r *Reconciler) reconcileTemplateData(
 }
 
 func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Template) (ctrl.Result, error) {
-	logger := r.Log.WithValues("template", t.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("template", t.Name)
 	patch := client.MergeFrom(t.DeepCopy())
 
 	t.Status.State = tinkv1alpha1.TemplateReady
@@ -197,7 +187,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, t *tinkv1alpha1.Templa
 }
 
 func (r *Reconciler) createTemplate(ctx context.Context, t *tinkv1alpha1.Template) (*template.WorkflowTemplate, error) {
-	logger := r.Log.WithValues("template", t.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("template", t.Name)
 
 	tinkTemplate := &template.WorkflowTemplate{
 		Name: t.Name,
@@ -217,7 +207,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, t *tinkv1alpha1.Templa
 	// Create a patch for use later
 	patch := client.MergeFrom(t.DeepCopy())
 
-	logger := r.Log.WithValues("template", t.Name)
+	logger := ctrl.LoggerFrom(ctx).WithValues("template", t.Name)
 
 	// If we've recorded an ID for the Template, then we should delete it
 	if id := t.TinkID(); id != "" {

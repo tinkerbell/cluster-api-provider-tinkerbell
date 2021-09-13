@@ -23,8 +23,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -32,16 +30,15 @@ import (
 // ErrNotImplemented is returned if a requested action is not yet implemented.
 var ErrNotImplemented = errors.New("not implemented")
 
-// Object is a temporary type introduced as a stopgap until we can update
-// controller-runtime to v0.7.x+.
-type Object interface {
-	metav1.Object
-	runtime.Object
-}
-
 // EnsureFinalizer ensures the given finalizer is applied to the resource.
-func EnsureFinalizer(ctx context.Context, c client.Client, logger logr.Logger, obj Object, finalizer string) error {
-	patch := client.MergeFrom(obj.DeepCopyObject())
+func EnsureFinalizer(
+	ctx context.Context,
+	c client.Client,
+	logger logr.Logger,
+	obj client.Object,
+	finalizer string,
+) error {
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
 
 	controllerutil.AddFinalizer(obj, finalizer)
 

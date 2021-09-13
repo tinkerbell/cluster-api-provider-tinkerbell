@@ -1,14 +1,15 @@
 kind: KubeadmControlPlane
-apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha4
 metadata:
   name: "${CLUSTER_NAME}-control-plane"
 spec:
   version: ${KUBERNETES_VERSION}
   replicas: ${CONTROL_PLANE_MACHINE_COUNT}
-  infrastructureTemplate:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
-    kind: TinkerbellMachineTemplate
-    name: "${CLUSTER_NAME}-control-plane"
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha4
+      kind: TinkerbellMachineTemplate
+      name: ${CLUSTER_NAME}-control-plane
   kubeadmConfigSpec:
     # initConfiguration and joinConfiguration must be in sync to have the same features
     # for both cluster bootstrapping and new controller nodes joining.
@@ -30,7 +31,7 @@ spec:
           # until we have Tinkerbell CCM.
           provider-id: "PROVIDER_ID"
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha4
 kind: TinkerbellMachineTemplate
 metadata:
   name: "${CLUSTER_NAME}-control-plane"
@@ -38,7 +39,7 @@ spec:
   template:
     spec: {}
 ---
-apiVersion: cluster.x-k8s.io/v1alpha3
+apiVersion: cluster.x-k8s.io/v1alpha4
 kind: Cluster
 metadata:
   name: "${CLUSTER_NAME}"
@@ -51,21 +52,21 @@ spec:
       cidrBlocks:
         - ${SERVICE_CIDR:=172.26.0.0/16}
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha4
     kind: TinkerbellCluster
     name: "${CLUSTER_NAME}"
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+    apiVersion: controlplane.cluster.x-k8s.io/v1alpha4
     kind: KubeadmControlPlane
     name: "${CLUSTER_NAME}-control-plane"
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha4
 kind: TinkerbellCluster
 metadata:
   name: "${CLUSTER_NAME}"
 spec: {}
 ---
-apiVersion: cluster.x-k8s.io/v1alpha3
+apiVersion: cluster.x-k8s.io/v1alpha4
 kind: MachineDeployment
 metadata:
   name: ${CLUSTER_NAME}-worker-a
@@ -90,14 +91,14 @@ spec:
       bootstrap:
         configRef:
           name: ${CLUSTER_NAME}-worker-a
-          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha4
           kind: KubeadmConfigTemplate
       infrastructureRef:
         name: ${CLUSTER_NAME}-worker-a
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha4
         kind: TinkerbellMachineTemplate
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha4
 kind: TinkerbellMachineTemplate
 metadata:
   name: ${CLUSTER_NAME}-worker-a
@@ -106,7 +107,7 @@ spec:
     spec: {}
 ---
 kind: KubeadmConfigTemplate
-apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha4
 metadata:
   name: "${CLUSTER_NAME}-worker-a"
 spec:

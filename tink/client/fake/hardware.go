@@ -55,7 +55,7 @@ func (f *Hardware) Create(ctx context.Context, in *hardware.Hardware) error {
 	}
 
 	if _, ok := f.Objs[in.Id]; ok {
-		return errors.New("duplicate")
+		return errors.New("duplicate") //nolint:goerr113
 	}
 
 	f.Objs[in.Id], _ = proto.Clone(in).(*hardware.Hardware)
@@ -71,7 +71,7 @@ func (f *Hardware) Update(ctx context.Context, in *hardware.Hardware) error {
 		return nil
 	}
 
-	return errors.New("nobody home")
+	return errors.New("nobody home") //nolint:goerr113
 }
 
 // Get gets a Hardware from Tinkerbell.

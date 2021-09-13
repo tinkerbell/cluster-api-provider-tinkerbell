@@ -12,170 +12,138 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: vendor test manager clusterctl run install deploy crds generate fmt vet run kubebuilder ci cd
+# If you update this file, please follow
+# https://www.thapaliya.com/en/writings/well-documented-makefiles/
 
-GIT_VERSION ?= $(shell git log -1 --format="%H")
-RELEASE_TAG := $(shell git describe --abbrev=0 --tags ${TAG_COMMIT} 2>/dev/null || true)
-RELEASE_VERSION ?= $(shell cat VERSION)
+# Ensure Make is run with bash shell as some syntax below is bash-specific
+SHELL:=/usr/bin/env bash
 
-# are there uncommitted files?
-ifneq ($(shell git status --porcelain),)
-	# next is used by GoReleaser as well when --spanshot is set
-  RELEASE_TAG := $(RELEASE_TAG)-next
-  RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+.DEFAULT_GOAL:=help
+
+GOPATH  := $(shell go env GOPATH)
+GOARCH  := $(shell go env GOARCH)
+GOOS    := $(shell go env GOOS)
+GOPROXY := $(shell go env GOPROXY)
+ifeq ($(GOPROXY),)
+GOPROXY := https://proxy.golang.org
+endif
+export GOPROXY
+
+# Active module mode, as we use go modules to manage dependencies
+export GO111MODULE=on
+
+# Default timeout for starting/stopping the Kubebuilder test control plane
+export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT ?=60s
+export KUBEBUILDER_CONTROLPLANE_STOP_TIMEOUT ?=60s
+
+# This option is for running docker manifest command
+export DOCKER_CLI_EXPERIMENTAL := enabled
+# curl retries
+CURL_RETRIES=3
+
+# Directories.
+ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+TOOLS_DIR := hack/tools
+TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
+BIN_DIR := $(abspath $(ROOT_DIR)/bin)
+GO_INSTALL = ./scripts/go_install.sh
+
+REPO_ROOT := $(shell git rev-parse --show-toplevel)
+# Set --output-base for conversion-gen if we are not within GOPATH
+ifneq ($(abspath $(REPO_ROOT)),$(shell go env GOPATH)/src/github.com/tinkerbell/cluster-api-provider-tinkerbell)
+	GEN_OUTPUT_BASE := --output-base=$(REPO_ROOT)
+else
+	export GOPATH := $(shell go env GOPATH)
 endif
 
-# this is being kept, as in the future, we may check the diff of VERSION from the previous to determine
-# whether or not to cut a release, rather than relying on git tags
-#ifeq ($(shell git diff HEAD~1 VERSION),)
-#  RELEASE_VERSION := $(RELEASE_VERSION)-next
-#endif
+# Binaries.
+CONTROLLER_GEN_VER := v0.6.1
+CONTROLLER_GEN_BIN := controller-gen
+CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
 
-VERSION ?= $(RELEASE_VERSION)
+CONVERSION_GEN_VER := v0.21.2
+CONVERSION_GEN_BIN := conversion-gen
+CONVERSION_GEN := $(TOOLS_BIN_DIR)/$(CONVERSION_GEN_BIN)-$(CONVERSION_GEN_VER)
 
-# which arches can we support
-ARCHES=arm64 amd64
+ENVSUBST_VER := v1.2.0
+ENVSUBST_BIN := envsubst
+ENVSUBST := $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)
 
-QEMU_VERSION?=4.2.0-7
-QEMU_IMAGE?=multiarch/qemu-user-static:$(QEMU_VERSION)
+GOLANGCI_LINT_VER := v1.41.1
+GOLANGCI_LINT_BIN := golangci-lint
+GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
-KUBEBUILDER_VERSION ?= 2.3.1
-# default install location for kubebuilder; can be placed elsewhere
-KUBEBUILDER_DIR ?= /usr/local/kubebuilder
-KUBEBUILDER ?= $(KUBEBUILDER_DIR)/bin/kubebuilder
+KUSTOMIZE_VER := v3.9.1
+KUSTOMIZE_BIN := kustomize
+KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
-CERTMANAGER_URL ?= https://github.com/jetstack/cert-manager/releases/download/v0.14.1/cert-manager.yaml
+GINKGO_VER := v1.16.4
+GINKGO_BIN := ginkgo
+GINKGO := $(TOOLS_BIN_DIR)/$(GINKGO_BIN)-$(GINKGO_VER)
 
-REPO_URL ?= https://github.com/tinkerbell/cluster-api-provider-tinkerbell
+KUBECTL_VER := v1.20.4
+KUBECTL_BIN := kubectl
+KUBECTL := $(TOOLS_BIN_DIR)/$(KUBECTL_BIN)-$(KUBECTL_VER)
 
-# BUILDARCH is the host architecture
-# ARCH is the target architecture
-# we need to keep track of them separately
-BUILDARCH ?= $(shell uname -m)
-BUILDOS ?= $(shell uname -s | tr A-Z a-z)
+KIND_VER := v0.11.1
+KIND_BIN := kind
+KIND := $(TOOLS_BIN_DIR)/$(KIND_BIN)-$(KIND_VER)
+
+TIMEOUT := $(shell command -v timeout || command -v gtimeout)
+
+# Define Docker related variables. Releases should modify and double check these vars.
+REGISTRY ?= ghcr.io
+IMAGE_NAME ?= tinkerbell/cluster-api-provider-tinkerbell
+export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
+export TAG ?= dev
+export ARCH ?= amd64
+ALL_ARCH = amd64 arm64
+
+# Allow overriding manifest generation destination directory
+MANIFEST_ROOT ?= config
+CRD_ROOT ?= $(MANIFEST_ROOT)/crd/bases
+WEBHOOK_ROOT ?= $(MANIFEST_ROOT)/webhook
+RBAC_ROOT ?= $(MANIFEST_ROOT)/rbac
 
 # Allow overriding the imagePullPolicy
 PULL_POLICY ?= Always
 
-E2E_FOCUS := "functional tests"
+# Hosts running SELinux need :z added to volume mounts
+SELINUX_ENABLED := $(shell cat /sys/fs/selinux/enforce 2> /dev/null || echo 0)
 
-# Directories.
-TOOLS_DIR := hack/tools
-TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
-BIN_DIR := bin
-TEST_DIR := test
-TEST_E2E_DIR := $(TEST_DIR)/e2e
-GO_INSTALL = ./scripts/go_install.sh
-
-# canonicalized names for host architecture
-ifeq ($(BUILDARCH),aarch64)
-        BUILDARCH=arm64
-endif
-ifeq ($(BUILDARCH),x86_64)
-        BUILDARCH=amd64
+ifeq ($(SELINUX_ENABLED),1)
+  DOCKER_VOL_OPTS?=:z
 endif
 
-# unless otherwise set, I am building for my own architecture, i.e. not cross-compiling
-ARCH ?= $(BUILDARCH)
+# Build time versioning details.
+LDFLAGS := $(shell hack/version.sh)
 
-# canonicalized names for target architecture
-ifeq ($(ARCH),aarch64)
-        override ARCH=arm64
-endif
-ifeq ($(ARCH),x86_64)
-    override ARCH=amd64
-endif
+GOLANG_VERSION := 1.16.8
 
-# unless otherwise set, I am building for my own OS, i.e. not cross-compiling
-OS ?= $(BUILDOS)
+## --------------------------------------
+## Help
+## --------------------------------------
 
-# Image URL to use all building/pushing image targets
-BUILD_IMAGE ?= tinkerbell/cluster-api-provider-tinkerbell
-BUILD_IMAGE_TAG ?= $(BUILD_IMAGE):latest
-PUSH_IMAGE_TAG ?= $(BUILD_IMAGE):$(IMAGETAG)
-MANAGER ?= bin/manager-$(OS)-$(ARCH)
-KUBECTL ?= kubectl
-FROMTAG ?= latest
+help:  ## Display this help
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-IMAGENAME ?= $(BUILD_IMAGE):$(IMAGETAG)-$(ARCH)
+## --------------------------------------
+## Testing
+## --------------------------------------
 
-# Manifest tool, until `docker manifest` is fully ready. As of this writing, it remains experimental
-MANIFEST_VERSION ?= 1.0.0
-MANIFEST_URL = https://github.com/estesp/manifest-tool/releases/download/v$(MANIFEST_VERSION)/manifest-tool-$(BUILDOS)-$(BUILDARCH)
-
-# these macros create a list of valid architectures for pushing manifests
-space :=
-space +=
-comma := ,
-prefix_linux = $(addprefix linux/,$(strip $1))
-join_platforms = $(subst $(space),$(comma),$(call prefix_linux,$(strip $1)))
-
-GO ?= GO111MODULE=on CGO_ENABLED=0 go
-
-
-# Image URL to use all building/pushing image targets
-IMG ?= quay.io/tinkerbell/cluster-api-provider-tinkerbell:latest
-
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
-
-MANIFEST_TOOL ?= $(GOBIN)/manifest-tool
-
-# where we store downloaded core
-COREPATH ?= out/core
-CORE_VERSION ?= v0.3.8
-CORE_API ?= https://api.github.com/repos/kubernetes-sigs/cluster-api/releases
-CORE_URL ?= https://github.com/kubernetes-sigs/cluster-api/releases/download/$(CORE_VERSION)
-
-# metadata file to be included in releases
-METADATA_YAML ?= metadata.yaml
-
-# actual releases
-RELEASE_BASE := out/release/infrastructure-tinkerbell
-RELEASE_DIR := $(RELEASE_BASE)/$(RELEASE_VERSION)
-FULL_RELEASE_DIR := $(realpath .)/$(RELEASE_DIR)
-RELEASE_MANIFEST := $(RELEASE_DIR)/infrastructure-components.yaml
-RELEASE_METADATA := $(RELEASE_DIR)/metadata.yaml
-RELEASE_CLUSTER_TEMPLATE := $(RELEASE_DIR)/cluster-template.yaml
-FULL_RELEASE_MANIFEST := $(FULL_RELEASE_DIR)/infrastructure-components.yaml
-FULL_RELEASE_MANIFEST_URL := $(REPO_URL)/releases/$(RELEASE_VERSION)/infrastructure-components.yaml
-FULL_RELEASE_CLUSTERCTLYAML := $(FULL_RELEASE_DIR)/clusterctl.yaml
-RELEASE_CLUSTERCTLYAML := $(RELEASE_BASE)/clusterctl-$(RELEASE_VERSION).yaml
-
-# managerless - for running manager locally for testing
-MANAGERLESS_VERSION ?= $(RELEASE_VERSION)
-MANAGERLESS_BASE := out/managerless/infrastructure-tinkerbell
-MANAGERLESS_DIR := $(MANAGERLESS_BASE)/$(RELEASE_VERSION)
-FULL_MANAGERLESS_DIR := $(realpath .)/$(MANAGERLESS_DIR)
-MANAGERLESS_MANIFEST := $(MANAGERLESS_DIR)/infrastructure-components.yaml
-MANAGERLESS_METADATA := $(MANAGERLESS_DIR)/metadata.yaml
-MANAGERLESS_CLUSTER_TEMPLATE := $(MANAGERLESS_DIR)/cluster-template.yaml
-FULL_MANAGERLESS_MANIFEST := $(FULL_MANAGERLESS_DIR)/infrastructure-components.yaml
-MANAGERLESS_CLUSTERCTLYAML := $(MANAGERLESS_BASE)/clusterctl-$(MANAGERLESS_VERSION).yaml
-
-# templates
-CLUSTERCTL_TEMPLATE ?= templates/clusterctl-template.yaml
-CLUSTER_TEMPLATE ?= templates/cluster-template.yaml
-
-# Binaries.
-KUSTOMIZE_VER := v3.9.2
-KUSTOMIZE_BIN := kustomize
-KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
-
-CONTROLLER_GEN_VER := v0.2.9
-CONTROLLER_GEN_BIN := controller-gen
-CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
-
-ENVSUBST_BIN := envsubst
-ENVSUBST := $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)-drone
+.PHONY: test
+test: ## Run tests
+	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; go test -v ./... -coverprofile cover.out
 
 ## --------------------------------------
 ## Tooling Binaries
 ## --------------------------------------
+
+$(ENVSUBST): ## Build envsubst from tools folder.
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/a8m/envsubst/cmd/envsubst $(ENVSUBST_BIN) $(ENVSUBST_VER)
+
+$(GOLANGCI_LINT): ## Build golangci-lint from tools folder.
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
 
 $(KUSTOMIZE): ## Build kustomize from tools folder.
 	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/kustomize/kustomize/v3 $(KUSTOMIZE_BIN) $(KUSTOMIZE_VER)
@@ -183,272 +151,194 @@ $(KUSTOMIZE): ## Build kustomize from tools folder.
 $(CONTROLLER_GEN): ## Build controller-gen from tools folder.
 	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/controller-tools/cmd/controller-gen $(CONTROLLER_GEN_BIN) $(CONTROLLER_GEN_VER)
 
-$(ENVSUBST): ## Build envsubst from tools folder.
-	rm -f $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)*
-	mkdir -p $(TOOLS_DIR) && cd $(TOOLS_DIR) && go build -tags=tools -o $(ENVSUBST) github.com/drone/envsubst/cmd/envsubst
-	ln -sf $(ENVSUBST) $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)
+$(CONVERSION_GEN): ## Build conversion-gen.
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) k8s.io/code-generator/cmd/conversion-gen $(CONVERSION_GEN_BIN) $(CONVERSION_GEN_VER)
 
-.PHONY: $(ENVSUBST_BIN)
-$(ENVSUBST_BIN): $(ENVSUBST) ## Build envsubst from tools folder.
+$(GINKGO): ## Build ginkgo.
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/onsi/ginkgo/ginkgo $(GINKGO_BIN) $(GINKGO_VER)
 
-all: manager
+$(KUBECTL): ## Build kubectl
+	mkdir -p $(TOOLS_BIN_DIR)
+	rm -f "$(KUBECTL)*"
+	curl --retry $(CURL_RETRIES) -fsL https://dl.k8s.io/release/$(KUBECTL_VER)/bin/$(GOOS)/$(GOARCH)/kubectl -o $(KUBECTL)
+	ln -sf "$(KUBECTL)" "$(TOOLS_BIN_DIR)/$(KUBECTL_BIN)"
+	chmod +x "$(TOOLS_BIN_DIR)/$(KUBECTL_BIN)" "$(KUBECTL)"
 
-# 2 separate targets: ci-test does everything locally, does not need docker; ci includes ci-test and building the image
-ci: test image
+$(KIND): ## Build kind
+	mkdir -p $(TOOLS_BIN_DIR)
+	rm -f "$(KIND)*"
+	curl --retry $(CURL_RETRIES) -fsL https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VER}/kind-${GOOS}-${GOARCH} -o ${KIND}
+	ln -sf "$(KIND)" "$(TOOLS_BIN_DIR)/$(KIND_BIN)"
+	chmod +x "$(TOOLS_BIN_DIR)/$(KIND_BIN)" "$(KIND)"
 
-imagetag:
-ifndef IMAGETAG
-	$(error IMAGETAG is undefined - run using make <target> IMAGETAG=X.Y.Z)
-endif
-
-tag-images-all: $(addprefix sub-tag-image-, $(ARCHES))
-sub-tag-image-%:
-	@$(MAKE) ARCH=$* IMAGETAG=$(IMAGETAG) tag-images
-
-tag-image: imagetag
-	docker tag $(BUILD_IMAGE_TAG) $(PUSH_IMAGE_TAG)
-tag-images: imagetag
-	docker tag $(BUILD_IMAGE):$(FROMTAG)-$(ARCH) $(IMAGENAME)
-
-confirm:
-ifndef CONFIRM
-	$(error CONFIRM is undefined - run using make <target> CONFIRM=true)
-endif
-
-.PHONY: branchname
-branchname:
-ifndef BRANCH_NAME
-	$(error BRANCH_NAME is undefined - run using make <target> BRANCH_NAME=var or set an environment variable)
-endif
-
-cd: confirm branchname
-	$(MAKE) tag-images-all push-all push-manifest IMAGETAG=${BRANCH_NAME}
-	$(MAKE) tag-images-all push-all push-manifest IMAGETAG=${GIT_VERSION}
-
-# needed kubebuilder for tests
-kubebuilder: $(KUBEBUILDER)
-$(KUBEBUILDER):
-	curl -sL https://go.kubebuilder.io/dl/$(KUBEBUILDER_VERSION)/$(BUILDOS)/$(BUILDARCH) | tar -xz -C /tmp/
-	# move to a long-term location and put it on your path
-	# (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
-	mv /tmp/kubebuilder_$(KUBEBUILDER_VERSION)_$(BUILDOS)_$(BUILDARCH) $(KUBEBUILDER_DIR)
-
-# Run tests
-test: generate fmt vet crds
-	go test ./... -coverprofile cover.out
-
-.PHONY: e2e-image
-e2e-image:
-	docker build --tag=quay.io/tinkerbell/cluster-api-provider-tinkerbell:e2e .
-
-# Run e2e tests
-.PHONY: e2e
-e2e: e2e-image
-	# This is the name used inside the component.yaml for the container that runs the manager
-	# The image gets loaded inside kind from ./test/e2e/config/tinkerbell-dev.yaml
-	$(E2E_FLAGS) $(MAKE) -C $(TEST_E2E_DIR) run
-
-# Build manager binary
-manager: $(MANAGER)
-$(MANAGER): generate fmt vet
-	GOOS=$(OS) GOARCH=$(ARCH) $(GO) build -o $@ .
-
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet crds
-	go run ./main.go
-
-# Install CRDs into a cluster
-install: $(KUSTOMIZE) crds
-	$(KUSTOMIZE) build config/crd | kubectl apply -f -
-
-# Uninstall CRDs from a cluster
-uninstall: $(KUSTOMIZE) crds
-	$(KUSTOMIZE) build config/crd | kubectl delete -f -
-
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: $(KUSTOMIZE) crds
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/release | kubectl apply -f -
-
-# Run go fmt against code
-fmt:
-	go fmt ./...
-
-# Run go vet against code
-vet:
-	go vet ./...
-
-
-.PHONY: generate
-generate: ## Generate code, manifests etc.
-	$(MAKE) generate-go
-	$(MAKE) generate-manifests
-
-.PHONY: generate-go
-generate-go: $(CONTROLLER_GEN) # Generate Go code.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate/boilerplate.generatego.txt" paths="./..."
-
-.PHONY: generate-manifests
-generate-manifests: $(CONTROLLER_GEN) # Generate manifests e.g. CRD, RBAC etc.
-	$(CONTROLLER_GEN) \
-		paths=./api/... \
-		paths=./controllers/... \
-		paths=./tink/api/... \
-		paths=./tink/controllers/... \
-		crd:crdVersions=v1 \
-		rbac:roleName=manager-role \
-		output:crd:dir=./config/crd/bases \
-		output:webhook:dir=./config/webhook \
-		webhook
-
-## make the images for all supported ARCH
-image-all: $(addprefix sub-image-, $(ARCHES))
-sub-image-%:
-	@$(MAKE) ARCH=$* image
-
-# Build the docker image for a single arch
-image: test
-	docker buildx build --load -t $(IMG)-$(ARCH) -f Dockerfile --build-arg ARCH=$(ARCH) --platform $(OS)/$(ARCH) .
-	echo "Done. image is at $(IMG)-$(ARCH)"
-
-# Targets used when cross building.
-.PHONY: register
-# Enable binfmt adding support for miscellaneous binary formats.
-# This is only needed when running non-native binaries.
-register:
-	docker pull $(QEMU_IMAGE)
-	docker run --rm --privileged $(QEMU_IMAGE) --reset -p yes || true
-
-.PHONY: manifest-tool
-manifest-tool: $(MANIFEST_TOOL)
-$(MANIFEST_TOOL):
-	curl -L -o $@ $(MANIFEST_URL)
-	chmod +x $@
-
-## push the multi-arch manifest
-push-manifest: manifest-tool imagetag
-	# path to credentials based on manifest-tool's requirements here https://github.com/estesp/manifest-tool#sample-usage
-	$(GOBIN)/manifest-tool push from-args --platforms $(call join_platforms,$(ARCHES)) --template $(BUILD_IMAGE):$(IMAGETAG)-ARCH --target $(BUILD_IMAGE):$(IMAGETAG)
-
-push-all: imagetag $(addprefix sub-push-, $(ARCHES))
-sub-push-%:
-	@$(MAKE) ARCH=$* push IMAGETAG=$(IMAGETAG)
-
-# Push the docker image
-push:
-	docker push $(IMAGENAME)
-
-## generate a cluster using clusterctl and setting defaults
-cluster:
-	./scripts/generate-cluster.sh
-
-$(RELEASE_DIR) $(RELEASE_BASE):
-	mkdir -p $@
-
-$(MANAGERLESS_DIR) $(MANAGERLESS_BASE):
-	mkdir -p $@
-
-.PHONY: semver release-clusterctl release-manifests release $(RELEASE_CLUSTERCTLYAML) $(RELEASE_MANIFEST) $(RELEASE_METADATA) $(RELEASE_CLUSTER_TEMPLATE) $(FULL_RELEASE_CLUSTERCTLYAML)
-
-semver:
-ifeq (,$(VERSION))
-	$(error could not determine version to use from file, will not create artifacts)
-endif
-	@echo "release version $(VERSION)"
-
-
-manifest: $(KUSTOMIZE) semver release-manifests release-clusterctl release-cluster-template
-
-release-manifests: $(KUSTOMIZE) semver $(RELEASE_MANIFEST) $(RELEASE_METADATA) $(RELEASE_CLUSTER_TEMPLATE)
-release-version:
-	KUSTOMIZE_ENABLE_ALPHA_COMMANDS=true $(KUSTOMIZE) cfg set config image-tag $(VERSION)
-
-$(RELEASE_MANIFEST): $(KUSTOMIZE) $(RELEASE_DIR) release-version ## Builds the manifests to publish with a release
-	$(KUSTOMIZE) build config > $@
-
-$(RELEASE_METADATA): semver $(RELEASE_DIR)
-	cp $(METADATA_YAML) $@
-
-release-cluster-template: semver $(RELEASE_CLUSTER_TEMPLATE)
-$(RELEASE_CLUSTER_TEMPLATE): $(RELEASE_DIR)
-	cp $(CLUSTER_TEMPLATE) $@
-
-release-clusterctl: semver $(RELEASE_CLUSTERCTLYAML) $(FULL_RELEASE_CLUSTERCTLYAML)
-$(RELEASE_CLUSTERCTLYAML): $(RELEASE_BASE)
-	cat $(CLUSTERCTL_TEMPLATE) | sed 's%URL%$(FULL_RELEASE_MANIFEST)%g' > $@
-
-$(FULL_RELEASE_CLUSTERCTLYAML): $(RELEASE_DIR)
-	cat $(CLUSTERCTL_TEMPLATE) | sed 's%URL%$(FULL_RELEASE_MANIFEST_URL)%g' > $@
-
-.PHONY: managerless-clusterctl managerless-manifests managerless $(MANAGERLESS_CLUSTERCTLYAML) $(MANAGERLESS_MANIFEST) $(MANAGERLESS_METADATA) $(MANAGERLESS_CLUSTER_TEMPLATE)
-managerless: semver managerless-manifests managerless-clusterctl managerless-cluster-template
-managerless-manifests: $(KUSTOMIZE) semver $(MANAGERLESS_MANIFEST) $(MANAGERLESS_METADATA)
-$(MANAGERLESS_MANIFEST): $(MANAGERLESS_DIR)
-	$(KUSTOMIZE) build config/managerless > $@
-
-$(MANAGERLESS_METADATA): semver $(MANAGERLESS_DIR)
-	cp $(METADATA_YAML) $@
-
-managerless-cluster-template: semver $(MANAGERLESS_CLUSTER_TEMPLATE)
-$(MANAGERLESS_CLUSTER_TEMPLATE): $(MANAGERLESS_DIR)
-	cp $(CLUSTER_TEMPLATE) $@
-
-managerless-clusterctl: semver $(MANAGERLESS_CLUSTERCTLYAML)
-$(MANAGERLESS_CLUSTERCTLYAML): $(MANAGERLESS_BASE)
-	@cat $(CLUSTERCTL_TEMPLATE) | sed 's%URL%$(FULL_MANAGERLESS_MANIFEST)%g' > $@
-	@echo "managerless ready, command-line is:"
-	@echo "	clusterctl --config=$@ <commands>"
-
-$(COREPATH):
-	mkdir -p $@
-
-$(COREPATH)/%:
-	curl -s -L -o $@ $(CORE_URL)/$*
-
-core: $(COREPATH)
-	# download from core
-	@$(eval YAMLS := $(shell curl -s -L $(CORE_API) | jq -r '[.[] | select(.tag_name == "$(CORE_VERSION)").assets[] | select(.name | contains("yaml")) | .name] | join(" ")'))
-	@if [ -n "$(YAMLS)" ]; then $(MAKE) $(addprefix $(COREPATH)/,$(YAMLS)); fi
-
-# the standard way to initialize a cluster. If you are using an actually released version,
-# then you can just do "clusterctl init --infrastructure=tinkerbell" without any of this
-cluster-init: managerless release
-	clusterctl init
-	clusterctl init --config=$(MANAGERLESS_CLUSTERCTLYAML) --infrastructure=tinkerbell
-
-# this is just for those who really want to see the manual steps
-cluster-init-manual: core managerless release
-	kubectl apply --validate=false -f $(CERTMANAGER_URL)
-	# because of dependencies, this is allowed to fail once or twice
-	kubectl apply -f $(COREPATH) || kubectl apply -f $(COREPATH) || kubectl apply -f $(COREPATH)
-	kubectl apply -f $(FULL_MANAGERLESS_MANIFEST)
-
-.PHONY: modules
-modules: ## Runs go mod to ensure modules are up to date.
-	go mod tidy
+## --------------------------------------
+## Linting
+## --------------------------------------
 
 .PHONY: lint
-lint:
-	golangci-lint run
+lint: $(GOLANGCI_LINT) ## Lint codebase
+	$(GOLANGCI_LINT) run -v --fast=false
 
-##@ Verify
+## --------------------------------------
+## Generate
+## --------------------------------------
 
-.PHONY: verify verify-boilerplate verify-golangci-lint verify-go-mod verify-gen
+.PHONY: modules
+modules: ## Runs go mod to ensure proper vendoring.
+	go mod tidy
 
-verify: verify-boilerplate verify-golangci-lint verify-go-mod verify-gen ## Runs verification scripts to ensure correct execution
+.PHONY: generate
+generate: ## Generate code
+	$(MAKE) generate-go
+	$(MAKE) generate-manifests
+#	$(MAKE) generate-templates
 
-verify-boilerplate: ## Runs the file header check
+# .PHONY: generate-templates
+# generate-templates: $(KUSTOMIZE) ## Generate cluster templates
+# 	$(KUSTOMIZE) build templates/no-cloud-provider --load_restrictor none > templates/cluster-template-no-cloud-provider.yaml
+# 	$(KUSTOMIZE) build templates/legacy --load_restrictor none > templates/cluster-template-legacy.yaml
+# 	$(KUSTOMIZE) build templates/crs-cni-cpem --load_restrictor none > templates/cluster-template.yaml
+
+.PHONY: generate-go
+generate-go: $(CONTROLLER_GEN) $(CONVERSION_GEN) ## Runs Go related generate targets
+	$(CONTROLLER_GEN) \
+		paths=./api/... \
+		paths=./tink/api/... \
+		object:headerFile=./hack/boilerplate.go.txt
+	go generate ./...
+
+.PHONY: generate-manifests
+generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
+	$(CONTROLLER_GEN) \
+		paths=./api/... \
+		paths=./tink/api/... \
+		crd:crdVersions=v1 \
+		rbac:roleName=manager-role \
+		output:crd:dir=$(CRD_ROOT) \
+		output:webhook:dir=$(WEBHOOK_ROOT) \
+		webhook
+	$(CONTROLLER_GEN) \
+		paths=./controllers/... \
+		paths=./tink/controllers/... \
+		output:rbac:dir=$(RBAC_ROOT) \
+		rbac:roleName=manager-role
+
+## --------------------------------------
+## Docker
+## --------------------------------------
+
+.PHONY: docker-build
+docker-build: ## Build the docker image for controller-manager
+	docker build --pull --build-arg ARCH=$(ARCH) --build-arg LDFLAGS="$(LDFLAGS)" . -t $(CONTROLLER_IMG)-$(ARCH):$(TAG)
+	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
+	$(MAKE) set-manifest-pull-policy
+
+.PHONY: docker-push
+docker-push: ## Push the docker image
+	docker push $(CONTROLLER_IMG)-$(ARCH):$(TAG)
+
+## --------------------------------------
+## Docker — All ARCH
+## --------------------------------------
+
+.PHONY: docker-build-all ## Build all the architecture docker images
+docker-build-all: $(addprefix docker-build-,$(ALL_ARCH))
+
+docker-build-%:
+	$(MAKE) ARCH=$* docker-build
+
+.PHONY: docker-push-all ## Push all the architecture docker images
+docker-push-all: $(addprefix docker-push-,$(ALL_ARCH))
+	$(MAKE) docker-push-manifest
+
+docker-push-%:
+	$(MAKE) ARCH=$* docker-push
+
+.PHONY: docker-push-manifest
+docker-push-manifest: ## Push the fat manifest docker image.
+	## Minimum docker version 18.06.0 is required for creating and pushing manifest images.
+	docker manifest create --amend $(CONTROLLER_IMG):$(TAG) $(shell echo $(ALL_ARCH) | sed -e "s~[^ ]*~$(CONTROLLER_IMG)\-&:$(TAG)~g")
+	@for arch in $(ALL_ARCH); do docker manifest annotate --arch $${arch} ${CONTROLLER_IMG}:${TAG} ${CONTROLLER_IMG}-$${arch}:${TAG}; done
+	docker manifest push --purge ${CONTROLLER_IMG}:${TAG}
+	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
+	$(MAKE) set-manifest-pull-policy
+
+.PHONY: set-manifest-image
+set-manifest-image:
+	$(info Updating kustomize image patch file for default resource)
+	sed -i'' -e 's@image: .*@image: '"${MANIFEST_IMG}:$(MANIFEST_TAG)"'@' ./config/default/manager_image_patch.yaml
+
+.PHONY: set-manifest-pull-policy
+set-manifest-pull-policy:
+	$(info Updating kustomize pull policy file for default resource)
+	sed -i'' -e 's@imagePullPolicy: .*@imagePullPolicy: '"$(PULL_POLICY)"'@' ./config/default/manager_pull_policy.yaml
+
+## --------------------------------------
+## Release
+## --------------------------------------
+
+RELEASE_TAG := $(shell git describe --abbrev=0 2>/dev/null)
+RELEASE_DIR ?= out/release
+
+$(RELEASE_DIR):
+	mkdir -p $(RELEASE_DIR)/
+
+.PHONY: release
+release: clean-release
+	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(IMAGE_NAME) MANIFEST_TAG=$(TAG)
+	$(MAKE) set-manifest-pull-policy PULL_POLICY=IfNotPresent
+	$(MAKE) release-manifests
+	$(MAKE) release-metadata
+	$(MAKE) release-templates
+
+.PHONY: release-manifests
+release-manifests: $(KUSTOMIZE) $(RELEASE_DIR) ## Builds the manifests to publish with a release
+	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/infrastructure-components.yaml
+
+.PHONY: release-metadata
+release-metadata: $(RELEASE_DIR)
+	cp metadata.yaml $(RELEASE_DIR)/metadata.yaml
+
+.PHONY: release-templates
+release-templates: $(RELEASE_DIR)
+	cp templates/cluster-template*.yaml $(RELEASE_DIR)/
+
+## --------------------------------------
+## Cleanup / Verification
+## --------------------------------------
+
+.PHONY: clean
+clean: clean-bin clean-temporary clean-release ## Remove all generated files
+
+.PHONY: clean-bin
+clean-bin: ## Remove all generated binaries
+	rm -rf bin
+	rm -rf hack/tools/bin
+
+.PHONY: clean-temporary
+clean-temporary: ## Remove all temporary files and folders
+	rm -f minikube.kubeconfig
+	rm -f kubeconfig
+
+.PHONY: clean-release
+clean-release: ## Remove the release folder
+	rm -rf $(RELEASE_DIR)
+
+.PHONY: verify
+verify: verify-boilerplate verify-modules verify-gen
+
+.PHONY: verify-boilerplate
+verify-boilerplate:
 	./hack/verify-boilerplate.sh
 
-verify-go-mod: ## Runs the go module linter
-	./hack/verify-go-mod.sh
-
-verify-golangci-lint: ## Runs all golang linters
-	./hack/verify-golangci-lint.sh
+.PHONY: verify-modules
+verify-modules: modules
+	@if !(git diff --quiet HEAD -- go.sum go.mod hack/tools/go.mod hack/tools/go.sum); then \
+		echo "go module files are out of date"; exit 1; \
+	fi
 
 .PHONY: verify-gen
 verify-gen: generate
 	@if !(git diff --quiet HEAD); then \
-		echo "Generated files are out of date, run 'make generate' and commit generated changes."; exit 1; \
+		echo "generated files are out of date, run make generate"; exit 1; \
 	fi
-

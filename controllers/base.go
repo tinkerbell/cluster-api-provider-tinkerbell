@@ -24,15 +24,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	infrastructurev1alpha3 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha3"
-	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha4"
+	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 // ReconcileContext describes functionality required for reconciling Machine or Cluster object
@@ -46,7 +46,7 @@ type ReconcileContext interface {
 type baseMachineReconcileContext struct {
 	log               logr.Logger
 	ctx               context.Context
-	tinkerbellMachine *infrastructurev1alpha3.TinkerbellMachine
+	tinkerbellMachine *infrastructurev1.TinkerbellMachine
 	patchHelper       *patch.Helper
 	client            client.Client
 }
@@ -59,6 +59,21 @@ type BaseMachineReconcileContext interface {
 	IntoMachineReconcileContext() (ReconcileContext, error)
 	Log() logr.Logger
 }
+
+var (
+	// ErrMachineVersionEmpty is the error returned when Version is not set on the parent Machine.
+	ErrMachineVersionEmpty = fmt.Errorf("machine version is empty")
+	// ErrConfigurationNil is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler is nil.
+	ErrConfigurationNil = fmt.Errorf("configuration is nil")
+	// ErrMissingClient is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler do
+	// not have a Client configured.
+	ErrMissingClient = fmt.Errorf("client is nil")
+	// ErrMissingBootstrapDataSecretValueKey is the error returned when the Secret referenced for bootstrap data
+	// is missing the value key.
+	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
+	// ErrBootstrapUserDataEmpty is the error returned when the referenced bootstrap data is empty.
+	ErrBootstrapUserDataEmpty = fmt.Errorf("received bootstrap user data is empty")
+)
 
 // New builds a context for machine reconciliation process, collecting all required
 // information.
@@ -73,24 +88,24 @@ func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context,
 		return nil, ctrl.Result{}, fmt.Errorf("invalid configuration: %w", err)
 	}
 
+	log := ctrl.LoggerFrom(ctx)
+
 	bmrc := &baseMachineReconcileContext{
-		log:               tmr.Log.WithValues("TinkerbellMachine", namespacedName),
+		log:               log.WithValues("TinkerbellMachine", namespacedName),
 		ctx:               ctx,
-		tinkerbellMachine: &infrastructurev1alpha3.TinkerbellMachine{},
+		tinkerbellMachine: &infrastructurev1.TinkerbellMachine{},
 		client:            tmr.Client,
 	}
 
 	if err := bmrc.client.Get(bmrc.ctx, namespacedName, bmrc.tinkerbellMachine); err != nil {
 		if apierrors.IsNotFound(err) {
-			bmrc.log.Info("Machine not found")
+			bmrc.log.Info("TinkerbellMachine not found")
 
-			return nil, defaultRequeueResult(), nil
+			return nil, ctrl.Result{}, nil
 		}
 
 		return nil, ctrl.Result{}, fmt.Errorf("getting TinkerbellMachine: %w", err)
 	}
-
-	bmrc.log = bmrc.log.WithName(bmrc.tinkerbellMachine.APIVersion)
 
 	patchHelper, err := patch.NewHelper(bmrc.tinkerbellMachine, bmrc.client)
 	if err != nil {
@@ -105,15 +120,11 @@ func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context,
 // validate validates if context configuration has all required fields properly populated.
 func (tmr *TinkerbellMachineReconciler) validate() error {
 	if tmr == nil {
-		return fmt.Errorf("configuration is nil")
-	}
-
-	if tmr.Log == nil {
-		return fmt.Errorf("logger is nil")
+		return ErrConfigurationNil
 	}
 
 	if tmr.Client == nil {
-		return fmt.Errorf("client is nil")
+		return ErrMissingClient
 	}
 
 	return nil
@@ -126,7 +137,7 @@ func (bmrc *baseMachineReconcileContext) MachineScheduledForDeletion() bool {
 }
 
 func (bmrc *baseMachineReconcileContext) releaseHardware() error {
-	hardware := &tinkv1alpha1.Hardware{}
+	hardware := &tinkv1.Hardware{}
 
 	namespacedName := types.NamespacedName{
 		Name: bmrc.tinkerbellMachine.Spec.HardwareName,
@@ -144,7 +155,7 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
 
-	controllerutil.RemoveFinalizer(hardware, infrastructurev1alpha3.MachineFinalizer)
+	controllerutil.RemoveFinalizer(hardware, infrastructurev1.MachineFinalizer)
 
 	if err := patchHelper.Patch(bmrc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
@@ -169,7 +180,7 @@ func (bmrc *baseMachineReconcileContext) DeleteMachineWithDependencies() error {
 		return fmt.Errorf("releasing Hardware: %w", err)
 	}
 
-	controllerutil.RemoveFinalizer(bmrc.tinkerbellMachine, infrastructurev1alpha3.MachineFinalizer)
+	controllerutil.RemoveFinalizer(bmrc.tinkerbellMachine, infrastructurev1.MachineFinalizer)
 
 	bmrc.log.Info("Patching Machine object to remove finalizer")
 
@@ -225,7 +236,7 @@ func (bmrc *baseMachineReconcileContext) removeTemplate() error {
 		Namespace: bmrc.tinkerbellMachine.Namespace,
 	}
 
-	template := &tinkv1alpha1.Template{}
+	template := &tinkv1.Template{}
 
 	err := bmrc.client.Get(bmrc.ctx, namespacedName, template)
 	if err != nil {
@@ -254,7 +265,7 @@ func (bmrc *baseMachineReconcileContext) removeWorkflow() error {
 		Namespace: bmrc.tinkerbellMachine.Namespace,
 	}
 
-	workflow := &tinkv1alpha1.Workflow{}
+	workflow := &tinkv1.Workflow{}
 
 	err := bmrc.client.Get(bmrc.ctx, namespacedName, workflow)
 	if err != nil {
@@ -330,7 +341,7 @@ func isMachineReady(machine *clusterv1.Machine) (string, error) {
 	// Spec says this field is optional, but @detiber says it's effectively required,
 	// so treat it as so.
 	if machine.Spec.Version == nil || *machine.Spec.Version == "" {
-		return "", fmt.Errorf("machine version is empty")
+		return "", ErrMachineVersionEmpty
 	}
 
 	return "", nil
@@ -347,26 +358,26 @@ func (bmrc *baseMachineReconcileContext) getReadyBootstrapCloudConfig(machine *c
 		return "", fmt.Errorf("retrieving bootstrap data secret: %w", err)
 	}
 
-	bootstrapCloudConfig, ok := secret.Data["value"]
+	bootstrapUserData, ok := secret.Data["value"]
 	if !ok {
-		return "", fmt.Errorf("retrieving bootstrap data: secret value key is missing")
+		return "", ErrMissingBootstrapDataSecretValueKey
 	}
 
-	if len(bootstrapCloudConfig) == 0 {
-		return "", fmt.Errorf("received bootstrap cloud config is empty")
+	if len(bootstrapUserData) == 0 {
+		return "", ErrBootstrapUserDataEmpty
 	}
 
-	return string(bootstrapCloudConfig), nil
+	return string(bootstrapUserData), nil
 }
 
 // getTinkerbellCluster returns associated TinkerbellCluster object for a given machine.
-func (bmrc *baseMachineReconcileContext) getReadyTinkerbellCluster(machine *clusterv1.Machine) (*infrastructurev1alpha3.TinkerbellCluster, error) { //nolint:lll
+func (bmrc *baseMachineReconcileContext) getReadyTinkerbellCluster(machine *clusterv1.Machine) (*infrastructurev1.TinkerbellCluster, error) { //nolint:lll
 	cluster, err := util.GetClusterFromMetadata(bmrc.ctx, bmrc.client, machine.ObjectMeta)
 	if err != nil {
 		return nil, fmt.Errorf("getting cluster from metadata: %w", err)
 	}
 
-	tinkerbellCluster := &infrastructurev1alpha3.TinkerbellCluster{}
+	tinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
 	tinkerbellClusterNamespacedName := client.ObjectKey{
 		Namespace: bmrc.tinkerbellMachine.Namespace,
 		Name:      cluster.Spec.InfrastructureRef.Name,

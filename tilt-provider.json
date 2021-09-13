@@ -1,7 +1,7 @@
 {
     "name": "tinkerbell",
     "config": {
-        "image": "quay.io/tinkerbell/cluster-api-provider-tinkerbell",
+        "image": "ghcr.io/tinkerbell/cluster-api-provider-tinkerbell:dev",
         "live_reload_deps": [
             "main.go", "go.mod", "go.sum", "api", "controllers", "tink", "internal"
         ]

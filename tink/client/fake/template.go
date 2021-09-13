@@ -55,7 +55,7 @@ func (f *Template) Create(ctx context.Context, in *template.WorkflowTemplate) er
 	}
 
 	if _, ok := f.Objs[in.Id]; ok {
-		return errors.New("duplicate")
+		return errors.New("duplicate") //nolint:goerr113
 	}
 
 	f.Objs[in.Id], _ = proto.Clone(in).(*template.WorkflowTemplate)
@@ -100,5 +100,5 @@ func (f *Template) Update(ctx context.Context, in *template.WorkflowTemplate) er
 		return nil
 	}
 
-	return errors.New("nobody home")
+	return errors.New("nobody home") //nolint:goerr113
 }
