@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
@@ -47,8 +46,7 @@ func unreadyTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbe
 	return unreadyTinkerbellCluster
 }
 
-//nolint:funlen
-func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
+func Test_Cluster_reconciliation_when_controlplane_endpoint_not_set(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -61,7 +59,27 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 	client := kubernetesClientWithObjects(t, objects)
 
 	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Reconciling with available hardware should succeed")
+	g.Expect(err).To(MatchError(controllers.ErrControlPlaneEndpointNotSet))
+}
+
+func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_cluster(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	cluster := validCluster(clusterName, clusterNamespace)
+	cluster.Spec.ControlPlaneEndpoint.Host = "192.168.1.10"
+	cluster.Spec.ControlPlaneEndpoint.Port = 443
+
+	objects := []runtime.Object{
+		validHardware(hardwareName, uuid.New().String(), hardwareIP),
+		cluster.DeepCopy(),
+		unreadyTinkerbellCluster(clusterName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	namespacedName := types.NamespacedName{
 		Name:      clusterName,
@@ -72,85 +90,50 @@ func Test_Cluster_reconciliation_with_available_hardware(t *testing.T) {
 
 	g.Expect(client.Get(context.Background(), namespacedName, updatedTinkerbellCluster)).To(Succeed())
 
-	// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior.
-	t.Run("sets_controlplane_endpoint_host_with_IP_address_of_selected_hardware", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	g.Expect(updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Host).
+		To(BeEquivalentTo(cluster.Spec.ControlPlaneEndpoint.Host), "Expected controlplane endpoint host to be set")
 
-		endpoint := updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Host
-		g.Expect(endpoint).To(BeEquivalentTo(hardwareIP),
-			"Expected controlplane endpoint to be set to %q, got: %q", hardwareIP, endpoint)
-	})
+	g.Expect(updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Port).
+		To(BeEquivalentTo(cluster.Spec.ControlPlaneEndpoint.Port), "Expected controlplane endpoint port to be set")
 
-	// TODO: Verify if we actually need to set port, maybe we can use "default" one?
-	t.Run("sets_controlplane_endpoint_port_with_hardcoded_value", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	g.Expect(updatedTinkerbellCluster.Status.Ready).To(BeTrue(), "Expected infrastructure to be ready")
+}
 
-		g.Expect(updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Port).To(BeEquivalentTo(controllers.KubernetesAPIPort),
-			"Expected port %d, got %d", controllers.KubernetesAPIPort, updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Port)
-	})
+func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_tinkerbellCluster(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
 
-	// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior.
-	t.Run("sets_infrastructure_status_to_ready", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	tinkCluster := unreadyTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.ControlPlaneEndpoint.Host = "192.168.1.10"
+	tinkCluster.Spec.ControlPlaneEndpoint.Port = 443
 
-		g.Expect(updatedTinkerbellCluster.Status.Ready).To(BeTrue(),
-			"Expected infrastructure to be ready when hardware is assigned")
-	})
+	objects := []runtime.Object{
+		validHardware(hardwareName, uuid.New().String(), hardwareIP),
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster.DeepCopy(),
+	}
 
-	// To ensure reconcile runs when cluster is removed to release used hardware.
-	t.Run("sets_tinkerbell_finalizer_on_cluster_object", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	client := kubernetesClientWithObjects(t, objects)
 
-		g.Expect(updatedTinkerbellCluster.ObjectMeta.Finalizers).NotTo(BeEmpty(),
-			"Expected at least one finalizer to be set")
+	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
 
-		g.Expect(updatedTinkerbellCluster.ObjectMeta.Finalizers).To(ContainElement(infrastructurev1.ClusterFinalizer),
-			"Expected finalizers to contain Tinkerbell cluster finalizer")
-	})
+	namespacedName := types.NamespacedName{
+		Name:      clusterName,
+		Namespace: clusterNamespace,
+	}
 
-	t.Run("updates_hardware_selected_for_controlplane_with", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
 
-		updatedHardware := &tinkv1.Hardware{}
+	g.Expect(client.Get(context.Background(), namespacedName, updatedTinkerbellCluster)).To(Succeed())
 
-		namespacedName := types.NamespacedName{
-			Name: hardwareName,
-		}
+	g.Expect(updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Host).
+		To(BeEquivalentTo(tinkCluster.Spec.ControlPlaneEndpoint.Host), "Expected controlplane endpoint host to be set")
 
-		g.Expect(client.Get(context.Background(), namespacedName, updatedHardware)).To(Succeed())
+	g.Expect(updatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Port).
+		To(BeEquivalentTo(tinkCluster.Spec.ControlPlaneEndpoint.Port), "Expected controlplane endpoint port to be set")
 
-		// Cluster controller does not provision machines itself, but must reserve the IP address of the machine
-		// for controlplane endpoint. Reservation is done using "cluster" label together with "owner" label provided
-		// by SHIM on Hardware objects.
-		//
-		// TODO: Make SHIM define and set "owner" label for Hardwares which participated in at least one workflow to
-		// something like "external".
-		t.Run("cluster_labels", func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			g.Expect(updatedHardware.ObjectMeta.Labels).To(HaveKeyWithValue(controllers.ClusterNameLabel, clusterName),
-				"Expected Hardware object to have the cluster name label set")
-
-			g.Expect(updatedHardware.ObjectMeta.Labels).To(HaveKeyWithValue(controllers.ClusterNamespaceLabel, clusterNamespace),
-				"Expected Hardware object to have the cluster namespace label set")
-		})
-
-		t.Run("tinkerbell_cluster_finalizer", func(t *testing.T) {
-			t.Parallel()
-
-			g.Expect(updatedHardware.ObjectMeta.Finalizers).NotTo(BeEmpty(),
-				"Expected at least one finalizer to be set")
-
-			g.Expect(updatedHardware.ObjectMeta.Finalizers).To(ContainElement(infrastructurev1.ClusterFinalizer),
-				"Expected finalizers to contain Tinkerbell cluster finalizer")
-		})
-	})
+	g.Expect(updatedTinkerbellCluster.Status.Ready).To(BeTrue(), "Expected infrastructure to be ready")
 }
 
 func Test_Cluster_reconciliation(t *testing.T) {
@@ -180,177 +163,7 @@ func Test_Cluster_reconciliation(t *testing.T) {
 		t.Parallel()
 
 		t.Run("reconciler_has_no_client_set", clusterReconciliationFailsWhenReconcilerHasNoClientSet)
-
-		// At least one available hardware is required to be reserved for controlplane endpoint.
-		t.Run("there_is_no_hardware_available", clusterReconciliationFailsWhenThereIsNoHardwareAvailable)
-
-		// If all hardwares has owner label set, then we cannot add new clusters.
-		t.Run("all_available_hardware_is_occupied", clusterReconciliationFailsWhenAllAvailableHardwareIsOccupied)
-
-		// Validate against malformed hardware.
-		t.Run("selected_hardware_has_no_interfaces_configured",
-			clusterReconciliationFailsWhenSelectedhardwareHasNoInterfacesConfigured)
-		t.Run("selected_hardware_has_no_DHCP_configured_on_first_interface",
-			clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPConfiguredOnFirstInterface)
-		t.Run("selected_hardware_has_no_DHCP_IP_configured_on_first_interface",
-			clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPIPConfiguredOnFirstInterface)
-		t.Run("selected_hardware_has_empty_DHCP_IP_configured_on_first_interface",
-			clusterReconciliationFailsWhenSelectedhardwareHasEmptyDHCPIPConfiguredOnFirstInterface)
 	})
-
-	// Some sort of locking mechanism must be used so each reconciled cluster gets unique IP address.
-	t.Run("assigns_unique_controlplane_endpoint_for_each_cluster", //nolint:paralleltest
-		clusterReconciliationAssignsUniqueControlplaneEndpointForEachCluster)
-}
-
-//nolint:funlen
-func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	now := metav1.Now()
-
-	tinkerbellClusterScheduledForRemoval := validTinkerbellCluster(clusterName, clusterNamespace)
-	tinkerbellClusterScheduledForRemoval.DeletionTimestamp = &now
-
-	occupiedHardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	occupiedHardware.ObjectMeta.Labels = map[string]string{
-		controllers.ClusterNameLabel:      clusterName,
-		controllers.ClusterNamespaceLabel: clusterNamespace,
-	}
-	occupiedHardware.ObjectMeta.Finalizers = []string{infrastructurev1.ClusterFinalizer}
-
-	objects := []runtime.Object{
-		occupiedHardware,
-		validCluster(clusterName, clusterNamespace),
-		tinkerbellClusterScheduledForRemoval,
-	}
-
-	client := kubernetesClientWithObjects(t, objects)
-
-	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Unexpected error while reconciling")
-
-	t.Run("marks_hardware_as_available_for_other_clusters_by", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		updatedHardware := &tinkv1.Hardware{}
-
-		namespacedName := types.NamespacedName{
-			Name: hardwareName,
-		}
-
-		g.Expect(client.Get(context.Background(), namespacedName, updatedHardware)).To(Succeed())
-
-		t.Run("removing_cluster_labels", func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			g.Expect(updatedHardware.ObjectMeta.Labels).NotTo(HaveKey(controllers.ClusterNameLabel),
-				"Cluster name label has not been removed from Hardware object")
-
-			g.Expect(updatedHardware.ObjectMeta.Labels).NotTo(HaveKey(controllers.ClusterNamespaceLabel),
-				"Cluster namespace label has not been removed from Hardware object")
-		})
-
-		t.Run("removing_tinkerbell_cluster_finalizer", func(t *testing.T) {
-			t.Parallel()
-
-			g.Expect(updatedHardware.ObjectMeta.Finalizers).To(BeEmpty(), "Expected all finalizers to be removed")
-		})
-	})
-
-	// This makes sure that Cluster object can be gracefully removed.
-	//
-	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
-	t.Run("removes_tinkerbell_finalizer_from_cluster_object", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
-
-		namespacedName := types.NamespacedName{
-			Name:      clusterName,
-			Namespace: clusterNamespace,
-		}
-
-		g.Eventually(
-			client.Get(context.Background(), namespacedName, updatedTinkerbellCluster),
-		).Should(MatchError(ContainSubstring("not found")))
-	})
-}
-
-// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
-func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it_removes_finalizer_for_cluster_without_owner(t *testing.T) { //nolint:lll
-	t.Parallel()
-	g := NewWithT(t)
-
-	now := metav1.Now()
-
-	clusterScheduledForRemovalWithoutOwner := validTinkerbellCluster(clusterName, clusterNamespace)
-	clusterScheduledForRemovalWithoutOwner.ObjectMeta.DeletionTimestamp = &now
-	clusterScheduledForRemovalWithoutOwner.ObjectMeta.OwnerReferences = nil
-
-	occupiedHardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	occupiedHardware.ObjectMeta.Labels = map[string]string{
-		controllers.ClusterNameLabel:      clusterName,
-		controllers.ClusterNamespaceLabel: clusterNamespace,
-	}
-	occupiedHardware.ObjectMeta.Finalizers = []string{infrastructurev1.ClusterFinalizer}
-
-	objects := []runtime.Object{
-		validCluster(clusterName, clusterNamespace),
-		clusterScheduledForRemovalWithoutOwner,
-		occupiedHardware,
-	}
-
-	client := kubernetesClientWithObjects(t, objects)
-
-	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Unexpected error while reconciling")
-
-	namespacedName := types.NamespacedName{
-		Name:      clusterName,
-		Namespace: clusterNamespace,
-	}
-
-	updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
-
-	g.Eventually(client.Get(context.Background(), namespacedName, updatedTinkerbellCluster)).
-		Should(MatchError(ContainSubstring("not found")))
-}
-
-// If removal process is interrupted at the moment we released the hardware, but we didn't get a chance to patch the
-// cluster object to remove the finalizer. This prevents removal from getting stuck while interrupted.
-func Test_Cluster_reconciliation_when_cluster_is_scheduled_for_removal_it_removes_finalizer_for_cluster_without_hardware(t *testing.T) { //nolint:lll
-	t.Parallel()
-	g := NewWithT(t)
-
-	now := metav1.Now()
-
-	clusterScheduledForRemoval := validTinkerbellCluster(clusterName, clusterNamespace)
-	clusterScheduledForRemoval.ObjectMeta.DeletionTimestamp = &now
-
-	objects := []runtime.Object{
-		validCluster(clusterName, clusterNamespace),
-		clusterScheduledForRemoval,
-	}
-
-	client := kubernetesClientWithObjects(t, objects)
-
-	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Unexpected error while reconciling")
-
-	namespacedName := types.NamespacedName{
-		Name:      clusterName,
-		Namespace: clusterNamespace,
-	}
-
-	updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
-
-	g.Eventually(client.Get(context.Background(), namespacedName, updatedTinkerbellCluster)).
-		Should(MatchError(ContainSubstring("not found")))
 }
 
 func clusterReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
@@ -368,50 +181,6 @@ func clusterReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
 
 	_, err := clusterController.Reconcile(context.TODO(), request)
 	g.Expect(err).To(MatchError(controllers.ErrMissingClient))
-}
-
-func clusterReconciliationFailsWhenSelectedhardwareHasNoInterfacesConfigured(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.Interfaces = []tinkv1.Interface{}
-
-	_, err := reconcileWithHardwares(t, []*tinkv1.Hardware{hardware})
-	g.Expect(err).To(MatchError(controllers.ErrHardwareMissingInterfaces))
-}
-
-func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPConfiguredOnFirstInterface(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.Interfaces[0].DHCP = nil
-
-	_, err := reconcileWithHardwares(t, []*tinkv1.Hardware{hardware})
-	g.Expect(err).To(MatchError(controllers.ErrHardwareFirstInterfaceNotDHCP))
-}
-
-func clusterReconciliationFailsWhenSelectedhardwareHasNoDHCPIPConfiguredOnFirstInterface(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.Interfaces[0].DHCP.IP = nil
-
-	_, err := reconcileWithHardwares(t, []*tinkv1.Hardware{hardware})
-	g.Expect(err).To(MatchError(controllers.ErrHardwareFirstInterfaceDHCPMissingIP))
-}
-
-func clusterReconciliationFailsWhenSelectedhardwareHasEmptyDHCPIPConfiguredOnFirstInterface(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-	hardware.Status.Interfaces[0].DHCP.IP.Address = ""
-
-	_, err := reconcileWithHardwares(t, []*tinkv1.Hardware{hardware})
-	g.Expect(err).To(MatchError(controllers.ErrHardwareFirstInterfaceDHCPMissingIP))
 }
 
 func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.Client {
@@ -459,20 +228,6 @@ const (
 	hardwareIP       = "1.1.1.1"
 	hardwareName     = "myHardwareName"
 )
-
-func clusterReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	objects := []runtime.Object{
-		validCluster(clusterName, clusterNamespace),
-		unreadyTinkerbellCluster(clusterName, clusterNamespace),
-	}
-
-	_, err := reconcileClusterWithClient(kubernetesClientWithObjects(t, objects), clusterName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrNoHardwareAvailable),
-		"Reconciling new cluster object should fail when there is no hardware available")
-}
 
 func clusterReconciliationIsNotRequeuedWhenClusterHasNoOwnerSet(t *testing.T) {
 	t.Parallel()
@@ -528,92 +283,4 @@ func clusterReconciliationIsNotRequeuedWhenClusterIsPaused(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred(), "Reconciling new cluster object should not fail when tinkerbellCluster is paused")
 
 	g.Expect(result.IsZero()).To(BeTrue(), "Expected result to not request requeue")
-}
-
-func reconcileWithHardwares(t *testing.T, hardwares []*tinkv1.Hardware) (ctrl.Result, error) {
-	t.Helper()
-
-	objects := []runtime.Object{
-		validCluster(clusterName, clusterNamespace),
-		unreadyTinkerbellCluster(clusterName, clusterNamespace),
-	}
-
-	for _, hw := range hardwares {
-		objects = append(objects, hw)
-	}
-
-	return reconcileClusterWithClient(kubernetesClientWithObjects(t, objects), clusterName, clusterNamespace)
-}
-
-func clusterReconciliationFailsWhenAllAvailableHardwareIsOccupied(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	hardware := validHardware(hardwareName, uuid.New().String(), hardwareIP)
-
-	hardware.ObjectMeta.Labels = map[string]string{
-		controllers.HardwareOwnerNameLabel:      "foo",
-		controllers.HardwareOwnerNamespaceLabel: "bar",
-	}
-
-	_, err := reconcileWithHardwares(t, []*tinkv1.Hardware{hardware})
-	g.Expect(err).To(MatchError(controllers.ErrNoHardwareAvailable))
-}
-
-// When multiple clusters are created simultaneously, each should get different IP address.
-func clusterReconciliationAssignsUniqueControlplaneEndpointForEachCluster(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	firstClusterName := "firstClusterName"
-	secondClusterName := "secondClusterName"
-
-	firstHardwareUUID := uuid.New().String()
-	firstHardwareIP := hardwareIP
-	firstHardwareName := hardwareName
-
-	secondHardwareUUID := uuid.New().String()
-	secondHardwareIP := "2.2.2.2"
-	secondHardwareName := "secondHardwareName"
-
-	objects := []runtime.Object{
-		validHardware(firstHardwareName, firstHardwareUUID, firstHardwareIP),
-		validHardware(secondHardwareName, secondHardwareUUID, secondHardwareIP),
-
-		validCluster(firstClusterName, clusterNamespace),
-		validCluster(secondClusterName, clusterNamespace),
-
-		unreadyTinkerbellCluster(firstClusterName, clusterNamespace),
-		unreadyTinkerbellCluster(secondClusterName, clusterNamespace),
-	}
-
-	client := kubernetesClientWithObjects(t, objects)
-
-	_, err := reconcileClusterWithClient(client, firstClusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Reconciling with available hardware should succeed")
-
-	_, err = reconcileClusterWithClient(client, secondClusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Reconciling with available hardware should succeed")
-
-	clusterNamespacedName := types.NamespacedName{
-		Name:      firstClusterName,
-		Namespace: clusterNamespace,
-	}
-
-	firstUpdatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
-
-	g.Expect(client.Get(context.Background(), clusterNamespacedName, firstUpdatedTinkerbellCluster)).To(Succeed(),
-		"Getting first updated Tinkerbell Cluster object")
-
-	secondUpdatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
-
-	clusterNamespacedName.Name = secondClusterName
-
-	g.Expect(client.Get(context.Background(), clusterNamespacedName, secondUpdatedTinkerbellCluster)).To(Succeed(),
-		"Getting second updated Tinkerbell Cluster object")
-
-	firstHost := firstUpdatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Host
-	secondHost := secondUpdatedTinkerbellCluster.Spec.ControlPlaneEndpoint.Host
-
-	g.Expect(firstHost).NotTo(BeEquivalentTo(secondHost), "Each cluster should get unique IP address")
 }

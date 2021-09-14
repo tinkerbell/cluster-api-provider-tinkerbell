@@ -373,17 +373,7 @@ func Test_Machine_reconciliation(t *testing.T) {
 		t.Run("there_is_no_hardware_available", machineReconciliationFailsWhenThereIsNoHardwareAvailable)
 
 		t.Run("selected_hardware_has_no_ip_address_set", machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet)
-
-		// We only support single controlplane node at the moment as we don't have a concept of load balancer, so it's
-		// the role of cluster controller to select which hardware to use for controlplane node.
-		t.Run("reconciling_controlplane_machine_and_there_is_no_hardware_available_labeled_by_cluster_controller",
-			machineReconciliationFailsWhenReconcilingControlplaneMachineAndThereIsNoHardwareAavailableLabeledByClusterController)
 	})
-
-	// We only support single controlplane node at the moment as we don't have a concept of load balancer, so it's
-	// the role of cluster controller to select which hardware to use for controlplane node.
-	t.Run("uses_hardware_selected_by_cluster_controller_for_controlplane_node", //nolint:paralleltest
-		machineReconciliationUsesHardwareSelectedByClusterControllerForControlplaneNode)
 
 	// Single hardware should only ever be used for a single machine.
 	t.Run("selects_unique_and_available_hardware_for_each_machine", //nolint:paralleltest
@@ -724,27 +714,6 @@ func machineReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
 	g.Expect(err).To(MatchError(controllers.ErrNoHardwareAvailable))
 }
 
-func machineReconciliationFailsWhenReconcilingControlplaneMachineAndThereIsNoHardwareAavailableLabeledByClusterController(t *testing.T) { //nolint:lll
-	t.Parallel()
-	g := NewWithT(t)
-
-	hardwareUUID := uuid.New().String()
-	controlplaneMachine := validMachine(machineName, clusterNamespace, clusterName)
-	controlplaneMachine.Labels[clusterv1.MachineControlPlaneLabelName] = "true"
-
-	objects := []runtime.Object{
-		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
-		validCluster(clusterName, clusterNamespace),
-		validTinkerbellCluster(clusterName, clusterNamespace),
-		validHardware(hardwareName, hardwareUUID, hardwareIP),
-		controlplaneMachine,
-		validSecret(machineName, clusterNamespace),
-	}
-
-	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrNoHardwareAvailable))
-}
-
 func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -762,51 +731,6 @@ func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.
 
 	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
 	g.Expect(err).To(MatchError(controllers.ErrHardwareFirstInterfaceDHCPMissingIP))
-}
-
-func machineReconciliationUsesHardwareSelectedByClusterControllerForControlplaneNode(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	controlplaneHardwareUUID := uuid.New().String()
-	controlplaneHardware := validHardware("myhardware", controlplaneHardwareUUID, "2.2.2.2")
-	controlplaneHardware.ObjectMeta.Labels = map[string]string{
-		controllers.ClusterNameLabel:      clusterName,
-		controllers.ClusterNamespaceLabel: clusterNamespace,
-	}
-
-	controlplaneMachine := validMachine(machineName, clusterNamespace, clusterName)
-	controlplaneMachine.Labels[clusterv1.MachineControlPlaneLabelName] = "true"
-
-	hardwareUUID := uuid.New().String()
-	objects := []runtime.Object{
-		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
-		validCluster(clusterName, clusterNamespace),
-		validTinkerbellCluster(clusterName, clusterNamespace),
-		controlplaneHardware,
-		validHardware(hardwareName, hardwareUUID, hardwareIP),
-		controlplaneMachine,
-		validSecret(machineName, clusterNamespace),
-	}
-
-	client := kubernetesClientWithObjects(t, objects)
-
-	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	ctx := context.Background()
-
-	namespacedName := types.NamespacedName{
-		Name:      tinkerbellMachineName,
-		Namespace: clusterNamespace,
-	}
-
-	updatedMachine := &infrastructurev1.TinkerbellMachine{}
-	g.Expect(client.Get(ctx, namespacedName, updatedMachine)).To(Succeed())
-
-	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
-	g.Expect(updatedMachine.Spec.ProviderID).To(HaveSuffix(controlplaneHardwareUUID),
-		"Expected ProviderID field to include %q", controlplaneHardwareUUID)
 }
 
 func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine(t *testing.T) {

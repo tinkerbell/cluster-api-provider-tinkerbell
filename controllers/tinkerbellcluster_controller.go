@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -158,6 +157,10 @@ var (
 	// ErrHardwareFirstInterfaceDHCPMissingIP is the error returned when the referenced hardware does not have a
 	// DHCP IP address assigned for it's first interface.
 	ErrHardwareFirstInterfaceDHCPMissingIP = fmt.Errorf("hardware's first interface has no DHCP IP address defined")
+	// ErrClusterNotReady is returned when trying to reconcile prior to the Cluster resource being ready.
+	ErrClusterNotReady = fmt.Errorf("cluster resource not ready")
+	// ErrControlPlaneEndpointNotSet is returned when trying to reconcile when the ControlPlane Endpoint is not defined.
+	ErrControlPlaneEndpointNotSet = fmt.Errorf("controlplane endpoint is not set")
 )
 
 func nextAvailableHardware(ctx context.Context, k8sClient client.Client, extraSelectors []string) (*tinkv1.Hardware, error) { //nolint:lll
@@ -222,67 +225,57 @@ func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	return hardware.Status.Interfaces[0].DHCP.IP.Address, nil
 }
 
-func (crc *clusterReconcileContext) takeHardwareOwnership(hardware *tinkv1.Hardware) error {
-	patchHelper, err := patch.NewHelper(hardware, crc.client)
-	if err != nil {
-		return fmt.Errorf("creating patch helper: %w", err)
+func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoint, error) {
+	switch {
+	case crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.IsValid():
+		// If the ControlPlaneEndpoint on tinkCluster is already configured, return it.
+		return crc.tinkerbellCluster.Spec.ControlPlaneEndpoint, nil
+	case crc.cluster == nil:
+		// If the owning cluster has not been set yet, error.
+		return clusterv1.APIEndpoint{}, ErrClusterNotReady
+	case crc.cluster.Spec.ControlPlaneEndpoint.IsValid():
+		// If the ControlPlaneEndpoint on the cluster is already configured, return it.
+		return crc.cluster.Spec.ControlPlaneEndpoint, nil
 	}
 
-	if len(hardware.ObjectMeta.Labels) == 0 {
-		hardware.ObjectMeta.Labels = map[string]string{}
+	endpoint := clusterv1.APIEndpoint{
+		Host: crc.cluster.Spec.ControlPlaneEndpoint.Host,
+		Port: crc.cluster.Spec.ControlPlaneEndpoint.Port,
 	}
 
-	hardware.ObjectMeta.Labels[ClusterNameLabel] = crc.tinkerbellCluster.Name
-	hardware.ObjectMeta.Labels[ClusterNamespaceLabel] = crc.tinkerbellCluster.Namespace
-
-	controllerutil.AddFinalizer(hardware, infrastructurev1.ClusterFinalizer)
-
-	if err := patchHelper.Patch(crc.ctx, hardware); err != nil {
-		return fmt.Errorf("patching Hardware object with cluster label: %w", err)
+	if endpoint.Host == "" {
+		endpoint.Host = crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Host
 	}
 
-	return nil
-}
-
-func (crc *clusterReconcileContext) populateControlplaneHost() error {
-	hardware, err := nextAvailableHardware(crc.ctx, crc.client, []string{fmt.Sprintf("!%s", ClusterNameLabel)})
-	if err != nil {
-		return fmt.Errorf("getting next available hardware: %w", err)
+	if endpoint.Port == 0 {
+		endpoint.Port = crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Port
 	}
 
-	ip, err := hardwareIP(hardware)
-	if err != nil {
-		return fmt.Errorf("getting Hardware IP address: %w", err)
+	if endpoint.Host == "" {
+		return endpoint, ErrControlPlaneEndpointNotSet
 	}
 
-	crc.log.Info("Assigning IP to cluster", "ip", ip, "clusterName", crc.tinkerbellCluster.Name)
-
-	crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Host = ip
-
-	if err := crc.takeHardwareOwnership(hardware); err != nil {
-		return fmt.Errorf("taking Hardware ownership: %w", err)
+	if endpoint.Port == 0 {
+		endpoint.Port = KubernetesAPIPort
 	}
 
-	return nil
+	return endpoint, nil
 }
 
 // Reconcile implements ReconcileContext interface by ensuring that all TinkerbellCluster object
 // fields are properly populated.
 func (crc *clusterReconcileContext) reconcile() error {
-	if crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Host == "" {
-		if err := crc.populateControlplaneHost(); err != nil {
-			return fmt.Errorf("populating controlplane host: %w", err)
-		}
+	controlPlaneEndpoint, err := crc.controlPlaneEndpoint()
+	if err != nil {
+		return err
 	}
 
-	// TODO: How can we support changing that?
-	if crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Port != KubernetesAPIPort {
-		crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Port = KubernetesAPIPort
-	}
+	// Ensure that we are setting the ControlPlaneEndpoint on the TinkerbellCluster
+	// in the event that it was defined on the Cluster resource instead
+	crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Host = controlPlaneEndpoint.Host
+	crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Port = controlPlaneEndpoint.Port
 
 	crc.tinkerbellCluster.Status.Ready = true
-
-	controllerutil.AddFinalizer(crc.tinkerbellCluster, infrastructurev1.ClusterFinalizer)
 
 	crc.log.Info("Setting cluster status to ready")
 
@@ -293,56 +286,7 @@ func (crc *clusterReconcileContext) reconcile() error {
 	return nil
 }
 
-func controlplaneNodeSelector(tinkerbellCluster *infrastructurev1.TinkerbellCluster) string {
-	return fmt.Sprintf("%s=%s,%s=%s",
-		ClusterNameLabel, tinkerbellCluster.Name,
-		ClusterNamespaceLabel, tinkerbellCluster.Namespace)
-}
-
-func (crc *clusterReconcileContext) releaseHardware() error {
-	selector := []string{controlplaneNodeSelector(crc.tinkerbellCluster)}
-
-	hardware, err := nextHardware(crc.ctx, crc.client, selector)
-	if err != nil {
-		return fmt.Errorf("getting controlplane Hardware: %w", err)
-	}
-
-	if hardware == nil {
-		crc.log.Info("Hardware has already been released")
-
-		return nil
-	}
-
-	patchHelper, err := patch.NewHelper(hardware, crc.client)
-	if err != nil {
-		return fmt.Errorf("creating patch helper to release Hardware: %w", err)
-	}
-
-	delete(hardware.ObjectMeta.Labels, ClusterNameLabel)
-	delete(hardware.ObjectMeta.Labels, ClusterNamespaceLabel)
-
-	controllerutil.RemoveFinalizer(hardware, infrastructurev1.ClusterFinalizer)
-
-	if err := patchHelper.Patch(crc.ctx, hardware); err != nil {
-		return fmt.Errorf("patching Hardware object to remove cluster label: %w", err)
-	}
-
-	return nil
-}
-
 func (crc *clusterReconcileContext) reconcileDelete() error {
-	crc.log.Info("Releasing owned Hardware")
-
-	if err := crc.releaseHardware(); err != nil {
-		return fmt.Errorf("releasing Hardware: %w", err)
-	}
-
-	controllerutil.RemoveFinalizer(crc.tinkerbellCluster, infrastructurev1.ClusterFinalizer)
-
-	if err := crc.patchHelper.Patch(crc.ctx, crc.tinkerbellCluster); err != nil {
-		return fmt.Errorf("patching cluster object with removed finalizer: %w", err)
-	}
-
 	return nil
 }
 
