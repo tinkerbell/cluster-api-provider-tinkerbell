@@ -90,7 +90,7 @@ kubectl config get-contexts  | awk '/^*/ {print $2}'
 
 Then, run the following commands to clone code we're going to run:
 ```sh
-git clone https://github.com/kubernetes-sigs/cluster-api -b release-0.3
+git clone https://github.com/kubernetes-sigs/cluster-api
 git clone git@github.com:tinkerbell/cluster-api-provider-tink.git
 cd ../cluster-api
 ```
