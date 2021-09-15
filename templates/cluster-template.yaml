@@ -11,6 +11,11 @@ spec:
       kind: TinkerbellMachineTemplate
       name: ${CLUSTER_NAME}-control-plane
   kubeadmConfigSpec:
+    preKubeadmCommands:
+      - echo "127.0.1.1 {{ ds.meta_data.hostname }}" >> /etc/hosts
+      - if [ -f "/run/kubeadm/kubeadm.yaml" ]; then mkdir -p /etc/kubernetes/manifests && ctr images pull ghcr.io/kube-vip/kube-vip:v0.3.8 && ctr run --rm --net-host ghcr.io/kube-vip/kube-vip:v0.3.8 vip /kube-vip manifest pod --arp --interface $(ip -4 -j route list default | jq -r .[0].dev) --address ${CONTROL_PLANE_VIP} --controlplane --leaderElection > /etc/kubernetes/manifests/kube-vip.yaml; fi
+    postKubeadmCommands:
+      - 'if [ -f "/run/kubeadm/kubeadm.yaml" ]; then kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f https://kube-vip.io/manifests/rbac.yaml && ctr run --rm --net-host ghcr.io/kube-vip/kube-vip:v0.3.8 vip /kube-vip manifest daemonset --arp --interface $(ip -4 -j route list default | jq -r .[0].dev) --address ${CONTROL_PLANE_VIP} --controlplane --leaderElection --inCluster --taint | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f - && rm /etc/kubernetes/manifests/kube-vip.yaml; fi'
     # initConfiguration and joinConfiguration must be in sync to have the same features
     # for both cluster bootstrapping and new controller nodes joining.
     #
@@ -44,6 +49,9 @@ kind: Cluster
 metadata:
   name: "${CLUSTER_NAME}"
 spec:
+  controlPlaneEndpoint:
+    host: "${CONTROL_PLANE_VIP}"
+    port: 6443
   clusterNetwork:
     pods:
       cidrBlocks:
