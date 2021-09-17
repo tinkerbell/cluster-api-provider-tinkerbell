@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha4
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -65,12 +64,11 @@ func defaultVersionForOSDistro(distro string) string {
 // Default implements webhookutil.defaulter so a webhook will be registered for the type.
 func (c *TinkerbellCluster) Default() {
 	if c.Spec.ImageLookupFormat == "" {
-		c.Spec.ImageLookupFormat = "{{.BaseURL}}{{.OSDistro}}-{{.OSVersion}}-kube-{{.KubernetesVersion}}.gz"
+		c.Spec.ImageLookupFormat = "{{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz"
 	}
 
-	if c.Spec.ImageLookupBaseURL == "" {
-		tinkIP := os.Getenv("TINKERBELL_IP")
-		c.Spec.ImageLookupBaseURL = fmt.Sprintf("http://%s:8080/", tinkIP)
+	if c.Spec.ImageLookupBaseRegistry == "" {
+		c.Spec.ImageLookupBaseRegistry = os.Getenv("TINKERBELL_IP")
 	}
 
 	if c.Spec.ImageLookupOSDistro == "" {
