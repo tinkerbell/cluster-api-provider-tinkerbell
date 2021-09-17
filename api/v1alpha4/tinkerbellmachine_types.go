@@ -28,30 +28,27 @@ const (
 	MachineFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
 type TinkerbellMachineSpec struct {
 	// ImageLookupFormat is the URL naming format to use for machine images when
 	// a machine does not specify. When set, this will be used for all cluster machines
 	// unless a machine specifies a different ImageLookupFormat. Supports substitutions
-	// for {{.BaseURL}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
+	// for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
 	// the basse URL, OS distribution, OS version, and kubernetes version, respectively.
-	// BaseURL will be the value in ImageLookupBaseURL or http://$TINKERBELL_IP:8080/
+	// BaseRegistry will be the value in ImageLookupBaseRegistry or $TINKERBELL_IP
 	// (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
 	// OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
 	// (if known), and the kubernetes version as defined by the packages produced by
 	// kubernetes/release: v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
-	// image format of {{.BaseURL}}{{.OSDistro}}-{{.OSVersion}}-kube-{{.K8sVersion}}.gz will
+	// image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz will
 	// attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/
 	// +optional
 	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
 
-	// ImageLookupBaseURL is the base URL that is used for pulling images, if not set,
-	// the default will be to use http://$TINKERBELL_IP:8080/.
+	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
+	// if not set, the default will be to use $TINKERBELL_IP.
 	// +optional
-	ImageLookupBaseURL string `json:"imageLookupBaseURL,omitempty"`
+	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
 
 	// ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
 	// if not set it will default to ubuntu.

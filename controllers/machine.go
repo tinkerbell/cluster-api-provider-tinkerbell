@@ -143,9 +143,9 @@ func (mrc *machineReconcileContext) imageURL() (string, error) {
 		imageLookupFormat = mrc.tinkerbellCluster.Spec.ImageLookupFormat
 	}
 
-	imageLookupBaseURL := mrc.tinkerbellMachine.Spec.ImageLookupBaseURL
-	if imageLookupBaseURL == "" {
-		imageLookupBaseURL = mrc.tinkerbellCluster.Spec.ImageLookupBaseURL
+	imageLookupBaseRegistry := mrc.tinkerbellMachine.Spec.ImageLookupBaseRegistry
+	if imageLookupBaseRegistry == "" {
+		imageLookupBaseRegistry = mrc.tinkerbellCluster.Spec.ImageLookupBaseRegistry
 	}
 
 	imageLookupOSDistro := mrc.tinkerbellMachine.Spec.ImageLookupOSDistro
@@ -160,7 +160,7 @@ func (mrc *machineReconcileContext) imageURL() (string, error) {
 
 	return imageURL(
 		imageLookupFormat,
-		imageLookupBaseURL,
+		imageLookupBaseRegistry,
 		imageLookupOSDistro,
 		imageLookupOSVersion,
 		*mrc.machine.Spec.Version,
@@ -417,15 +417,15 @@ func (mrc *machineReconcileContext) ensureWorkflow() error {
 }
 
 type image struct {
-	BaseURL           string
+	BaseRegistry      string
 	OSDistro          string
 	OSVersion         string
 	KubernetesVersion string
 }
 
-func imageURL(imageFormat, baseURL, osDistro, osVersion, kubernetesVersion string) (string, error) {
+func imageURL(imageFormat, baseRegistry, osDistro, osVersion, kubernetesVersion string) (string, error) {
 	imageParams := image{
-		BaseURL:           baseURL,
+		BaseRegistry:      baseRegistry,
 		OSDistro:          strings.ToLower(osDistro),
 		OSVersion:         strings.ReplaceAll(osVersion, ".", ""),
 		KubernetesVersion: kubernetesVersion,

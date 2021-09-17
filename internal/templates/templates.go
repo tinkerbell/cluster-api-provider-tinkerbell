@@ -66,7 +66,7 @@ tasks:
       - /lib/firmware:/lib/firmware:ro
     actions:
       - name: "stream-image"
-        image: image2disk:v1.0.0
+        image: oci2disk:v1.0.0
         timeout: 360
         environment:
           IMG_URL: %s

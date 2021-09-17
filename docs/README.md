@@ -29,28 +29,30 @@ If your sandbox is running on an Ubuntu system, you can edit `/etc/netplan.<devi
 ### Mirror the necessary Tinkerbell actions to the registry
 
 ```sh
-# TODO: update for the latest sandbox setup
 IMAGES=(
-  image2disk:v1.0.0
+  oci2disk:v1.0.0
   writefile:v1.0.0
   kexec:v1.0.0
 )
 REGISTRY_IP="192.168.1.1"
 for IMAGE in "${IMAGES[@]}"; do
-  docker pull quay.io/tinkerbell-actions/$IMAGE
-  docker tag quay.io/tinkerbell-actions/$IMAGE $REGISTRY_IP/quay.io/tinkerbell-actions/$IMAGE
-  docker push $REGISTRY_IP/quay.io/tinkerbell-actions/$IMAGE
+  docker run -it --rm quay.io/containers/skopeo:latest copy --all --dest-tls-verify=false --dest-creds=admin:Admin1234 docker://quay.io/tinkerbell-actions/"${IMAGE}" docker://${REGISTRY_IP}/"${IMAGE}"
 done
 ```
 
-### Prebuild the Kubernetes image
+### (OPTIONAL) Prebuild the Kubernetes image
 
 ```
-git clone https://github.com/detiber/image-builder
+git clone https://github.com/kubernetes-sigs/image-builder
 cd image-builder/images/capi
 # This can take a while. ~30min on an i3 with 32GB memory
 make build-raw-all
-# copy output/ubuntu-2004-kube-v1.20.10.gz to your `deploy/compose/state/webroot` directory
+
+# Now push the image to an ORAS compatible OCI Registry
+BASE_REGISTRY_URL="ghcr.io/detiber/cluster-api-provider-tinkerbell"
+REGISTRY_USERNAME=detiber
+REGISTRY_PASSWORD=<REDACTED>
+docker run -it --rm -v $(pwd):/workspace ghcr.io/oras-project/oras:v0.12.0 push -u ${REGISTRY_USERNAME} -p ${REGISTRY_PASSWORD} ${BASE_REGISTRY_URL}/ubuntu-2004:v1.20.10.gz --manifest-config /dev/null:application/vnd.acme.rocket.config output/ubuntu-2004-kube-v1.20.10.gz
 ```
 
 To build a different version, you can modify the image-builder configuration following the documentation here: https://image-builder.sigs.k8s.io/capi/capi.html and here: https://image-builder.sigs.k8s.io/capi/providers/raw.html
@@ -143,6 +145,13 @@ In the output, you should be able to find MAC address and IP addresses of the ha
 ### Creating workload clusters
 
 With all the steps above, we can now create a workload cluster.
+
+Set the BASE_REGISTRY_URL to use for looking up images for deployment, if you created your own image above,
+you should replace this value with the registry you pushed your image(s) to.
+
+```sh
+export BASE_REGISTRY_URL=ghcr.io/detiber/cluster-api-provider-tinkerbell
+```
 
 So, let's start with generating the configuration for your cluster using the command below:
 ```sh
