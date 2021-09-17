@@ -1,0 +1,54 @@
+name: Build Image
+on:
+  workflow_dispatch:
+    inputs:
+      kubernetesDebVersion:
+        description: 'Kubernetes Deb Version'
+        required: true
+      kubernetesRPMVersion:
+        description: 'Kubernetes RPM Version'
+        required: true
+      kubernetesSemanticVersion:
+        description: 'Kubernetes Semantic Version'
+        required: true
+      kubernetesSeries:
+        description: 'Kubernetes Series'
+        required: true
+env:
+  REGISTRY: ghcr.io
+  KUBERNETES_DEB_VERSION: ${{ github.event.inputs.kubernetesDebVersion }}"
+  KUBERNETES_RPM_VERSION: ${{ github.event.inputs.kubernetesRPMVersion }}"
+  KUBERNETES_SEM_VERSION: ${{ github.event.inputs.kubernetesSemanticVersion }}"
+  KUBERNETES_SERIES: ${{ github.event.inputs.kubernetesSeries }}"
+jobs:
+  printInputs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: kubernetes-sigs/image-builder
+    - name: Build the images
+      run: |
+        # TODO: use the right kubernetes version here
+        export PATH=$PWD/.bin:$PATH
+        cd image-builder/images/capi
+        cat << EOF > packer/raw/overwrite-kubernetes.json
+        {
+          "kubernetes_deb_version": "${KUBERNETES_DEB_VERSION}",
+          "kubernetes_rpm_version": "${KUBERNETES_RPM_VERSION}",
+          "kubernetes_semver": "${KUBERNETES_SEM_VERSION",
+          "kuberneetes_series": "${KUBERNETES_SERIES}"
+        }
+        EOF
+        PACKER_VAR_FILES=packer/raw/overwrite-kubernetes.json make build-raw-all
+    - name: Log in to the Container registry
+      uses: docker/login-action@v1
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Push the images
+      run: |
+        oras push ${REGISTRY}/${{ github.repository }}/ubuntu-1804:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config output/ubuntu-1804-kube-${KUBERNETES_SEM_VERSION}.gz
+        oras push ${REGISTRY}/${{ github.repository }}/ubuntu-2004:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config output/ubuntu-2004-kube-${KUBERNETES_SEM_VERSION}.gz
