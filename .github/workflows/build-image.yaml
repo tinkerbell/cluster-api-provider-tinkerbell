@@ -21,7 +21,7 @@ env:
   KUBERNETES_SEM_VERSION: ${{ github.event.inputs.kubernetesSemanticVersion }}"
   KUBERNETES_SERIES: ${{ github.event.inputs.kubernetesSeries }}"
 jobs:
-  printInputs:
+  buildImage:
     runs-on: ubuntu-latest
     steps:
     - name: checkout
@@ -38,7 +38,7 @@ jobs:
         {
           "kubernetes_deb_version": "${KUBERNETES_DEB_VERSION}",
           "kubernetes_rpm_version": "${KUBERNETES_RPM_VERSION}",
-          "kubernetes_semver": "${KUBERNETES_SEM_VERSION",
+          "kubernetes_semver": "${KUBERNETES_SEM_VERSION}",
           "kuberneetes_series": "${KUBERNETES_SERIES}"
         }
         EOF
