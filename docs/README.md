@@ -7,6 +7,7 @@ If you have Tinkerbell running in your environment, you can use it for CAPT.
 Here is the list of required components to use CAPT:
 
 - Existing Tinkerbell installation running at least versions mentioned in [sandbox](https://github.com/tinkerbell/sandbox/tree/v0.5.0), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
+  - This also assumes that the hegel port is exposed in your environment, if running a version of the sandbox prior to https://github.com/tinkerbell/sandbox/pull/106 merging, this will need to be done manually.
 - A Kubernetes cluster which pods has access to your Tinkerbell instance.
 - At least one Hardware available with DHCP IP address configured on first interface and with proper metadata configured
 - `git` binary
@@ -21,35 +22,14 @@ Required metadata for hardware:
 - metadata.instance.hostname is set
 - metadata.instance.storage.disks is set and contains at least one device matching an available disk on the system
 
-### Workaround for 8000 bytes template limit
-
-CAPT creates rather large templates for machine provisioning, so with regular Tinkerbell
-installation you will probably hit this [limit](https://github.com/tinkerbell/tink/issues).
-
-To workaround that, run the following SQL command in your Tinkerbell database:
-```sql
-drop trigger events_channel ON events;
-```
-
-**WARNING: This will disable events streaming feature!**
-
-If you use Tinkerbell [sandbox](https://github.com/tinkerbell/sandbox), you can run the following command
-in your `deploy/` directory:
-```sh
-PGPASSWORD=tinkerbell docker-compose exec db psql -U tinkerbell -c 'drop trigger events_channel ON events;'
-```
-
 ### Add a link-local address for Hegel
 
 If your sandbox is running on an Ubuntu system, you can edit `/etc/netplan.<devicename>.yaml`, add `169.254.169.254/16` to the addresses, and run `netplan apply`
 
-### Replace OSIE with Hook
-
-If you can use the default hook image, then copy http://s.gianarb.it/tinkie/tinkie-main.tar.gz to your `deploy/state/webroot/misc/osie/current` directory. Otherwise, follow the directions at: https://github.com/tinkerbell/hook#how-to-use-hook-with-sandbox
-
 ### Mirror the necessary Tinkerbell actions to the registry
 
 ```sh
+# TODO: update for the latest sandbox setup
 IMAGES=(
   image2disk:v1.0.0
   writefile:v1.0.0
@@ -70,7 +50,7 @@ git clone https://github.com/detiber/image-builder
 cd image-builder/images/capi
 # This can take a while. ~30min on an i3 with 32GB memory
 make build-raw-all
-# copy output/ubuntu-1804-kube-v1.18.15.gz to your `deploy/state/webroot` directory
+# copy output/ubuntu-2004-kube-v1.20.10.gz to your `deploy/compose/state/webroot` directory
 ```
 
 To build a different version, you can modify the image-builder configuration following the documentation here: https://image-builder.sigs.k8s.io/capi/capi.html and here: https://image-builder.sigs.k8s.io/capi/providers/raw.html
@@ -90,7 +70,7 @@ kubectl config get-contexts  | awk '/^*/ {print $2}'
 
 Then, run the following commands to clone code we're going to run:
 ```sh
-git clone https://github.com/kubernetes-sigs/cluster-api
+git clone https://github.com/kubernetes-sigs/cluster-api -b release-0.4
 git clone git@github.com:tinkerbell/cluster-api-provider-tink.git
 cd ../cluster-api
 ```
@@ -166,7 +146,7 @@ With all the steps above, we can now create a workload cluster.
 
 So, let's start with generating the configuration for your cluster using the command below:
 ```sh
-POD_CIDR=172.25.0.0/16 clusterctl config cluster capi-quickstart --from templates/cluster-template.yaml --kubernetes-version=v1.18.5 --control-plane-machine-count=1 --worker-machine-count=1 > test-cluster.yaml
+CONTROL_PLANE_VIP=192.168.1.110 POD_CIDR=172.25.0.0/16 clusterctl config cluster capi-quickstart --from templates/cluster-template.yaml --kubernetes-version=v1.20.10 --control-plane-machine-count=1 --worker-machine-count=1 > test-cluster.yaml
 ```
 
 Note, the POD_CIDR is overridden above to avoid conflicting with the default assumed IP address of the Tinkerbell host (192.168.1.1).
