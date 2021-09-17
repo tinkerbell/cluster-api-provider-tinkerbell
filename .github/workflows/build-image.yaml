@@ -16,10 +16,10 @@ on:
         required: true
 env:
   REGISTRY: ghcr.io
-  KUBERNETES_DEB_VERSION: ${{ github.event.inputs.kubernetesDebVersion }}"
-  KUBERNETES_RPM_VERSION: ${{ github.event.inputs.kubernetesRPMVersion }}"
-  KUBERNETES_SEM_VERSION: ${{ github.event.inputs.kubernetesSemanticVersion }}"
-  KUBERNETES_SERIES: ${{ github.event.inputs.kubernetesSeries }}"
+  KUBERNETES_DEB_VERSION: ${{ github.event.inputs.kubernetesDebVersion }}
+  KUBERNETES_RPM_VERSION: ${{ github.event.inputs.kubernetesRPMVersion }}
+  KUBERNETES_SEM_VERSION: ${{ github.event.inputs.kubernetesSemanticVersion }}
+  KUBERNETES_SERIES: ${{ github.event.inputs.kubernetesSeries }}
 jobs:
   buildImage:
     runs-on: ubuntu-latest
@@ -31,7 +31,6 @@ jobs:
         path: image-builder
     - name: Build the images
       run: |
-        # TODO: use the right kubernetes version here
         export PATH=$PWD/.bin:$PATH
         cd image-builder/images/capi
         cat << EOF > packer/raw/overwrite-kubernetes.json
@@ -39,7 +38,7 @@ jobs:
           "kubernetes_deb_version": "${KUBERNETES_DEB_VERSION}",
           "kubernetes_rpm_version": "${KUBERNETES_RPM_VERSION}",
           "kubernetes_semver": "${KUBERNETES_SEM_VERSION}",
-          "kuberneetes_series": "${KUBERNETES_SERIES}"
+          "kubernetes_series": "${KUBERNETES_SERIES}"
         }
         EOF
         PACKER_VAR_FILES=packer/raw/overwrite-kubernetes.json make build-raw-all
