@@ -27,7 +27,10 @@ jobs:
     - name: checkout
       uses: actions/checkout@v2.3.4
       with:
-        repository: kubernetes-sigs/image-builder
+        # Overriding upstream until https://github.com/kubernetes-sigs/image-builder/pull/697 merges
+        #repository: kubernetes-sigs/image-builder
+        repository: detiber/image-builder
+        ref: bumpUbuntuISO
         path: image-builder
     - name: Install QEMU
       run: |
