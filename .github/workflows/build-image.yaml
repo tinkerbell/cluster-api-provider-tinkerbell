@@ -29,12 +29,16 @@ jobs:
       with:
         repository: kubernetes-sigs/image-builder
         path: image-builder
+    - name: Install QEMU
+      run: |
+        sudo -i apt install qemu
     - name: Build the images
       run: |
         export PATH=$PWD/.bin:$PATH
         cd image-builder/images/capi
         cat << EOF > packer/raw/overwrite-kubernetes.json
         {
+          "accelerator": "none",
           "kubernetes_deb_version": "${KUBERNETES_DEB_VERSION}",
           "kubernetes_rpm_version": "${KUBERNETES_RPM_VERSION}",
           "kubernetes_semver": "${KUBERNETES_SEM_VERSION}",
