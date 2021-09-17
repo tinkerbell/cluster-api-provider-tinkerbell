@@ -31,7 +31,7 @@ jobs:
         path: image-builder
     - name: Install QEMU
       run: |
-        sudo -i apt install qemu
+        sudo -i apt install qemu-system-x86
     - name: Build the images
       run: |
         export PATH=$PWD/.bin:$PATH
