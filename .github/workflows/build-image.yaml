@@ -27,10 +27,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v2.3.4
       with:
-        # Overriding upstream until https://github.com/kubernetes-sigs/image-builder/pull/697 merges
-        #repository: kubernetes-sigs/image-builder
-        repository: detiber/image-builder
-        ref: bumpUbuntuISO
+        repository: kubernetes-sigs/image-builder
         path: image-builder
     - name: Install QEMU
       run: |
@@ -41,7 +38,7 @@ jobs:
         cd image-builder/images/capi
         cat << EOF > packer/raw/overwrite-kubernetes.json
         {
-          "accelerator": "none",
+          "accelerator": "tcg",
           "kubernetes_deb_version": "${KUBERNETES_DEB_VERSION}",
           "kubernetes_rpm_version": "${KUBERNETES_RPM_VERSION}",
           "kubernetes_semver": "${KUBERNETES_SEM_VERSION}",
