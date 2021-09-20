@@ -55,11 +55,13 @@ type TinkerbellClusterSpec struct {
 	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
 	// if not set, the default will be to use $TINKERBELL_IP.
 	// +optional
+	// +kubebuilder:default=ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
 	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
 
 	// ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
 	// if not set it will default to ubuntu.
 	// +optional
+	// +kubebuilder:default=ubuntu
 	ImageLookupOSDistro string `json:"imageLookupOSDistro,omitempty"`
 
 	// ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
