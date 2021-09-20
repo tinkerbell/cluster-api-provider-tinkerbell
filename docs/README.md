@@ -6,8 +6,8 @@ If you have Tinkerbell running in your environment, you can use it for CAPT.
 
 Here is the list of required components to use CAPT:
 
-- Existing Tinkerbell installation running at least versions mentioned in [sandbox](https://github.com/tinkerbell/sandbox/tree/v0.5.0), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
-  - This also assumes that the hegel port is exposed in your environment, if running a version of the sandbox prior to https://github.com/tinkerbell/sandbox/pull/106 merging, this will need to be done manually.
+- Existing Tinkerbell installation running at least versions mentioned in [sandbox](https://github.com/tinkerbell/sandbox/commit/8256ad1e8515c2a97a27091c0f5c12e42f083748), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
+  - This also assumes that the hegel port is exposed in your environment, if running a version of the sandbox prior to https://github.com/tinkerbell/sandbox/commit/8256ad1e8515c2a97a27091c0f5c12e42f083748, this will need to be done manually.
 - A Kubernetes cluster which pods has access to your Tinkerbell instance.
 - At least one Hardware available with DHCP IP address configured on first interface and with proper metadata configured
 - `git` binary
@@ -39,23 +39,6 @@ for IMAGE in "${IMAGES[@]}"; do
   docker run -it --rm quay.io/containers/skopeo:latest copy --all --dest-tls-verify=false --dest-creds=admin:Admin1234 docker://quay.io/tinkerbell-actions/"${IMAGE}" docker://${REGISTRY_IP}/"${IMAGE}"
 done
 ```
-
-### (OPTIONAL) Prebuild the Kubernetes image
-
-```
-git clone https://github.com/kubernetes-sigs/image-builder
-cd image-builder/images/capi
-# This can take a while. ~30min on an i3 with 32GB memory
-make build-raw-all
-
-# Now push the image to an ORAS compatible OCI Registry
-BASE_REGISTRY_URL="ghcr.io/detiber/cluster-api-provider-tinkerbell"
-REGISTRY_USERNAME=detiber
-REGISTRY_PASSWORD=<REDACTED>
-docker run -it --rm -v $(pwd):/workspace ghcr.io/oras-project/oras:v0.12.0 push -u ${REGISTRY_USERNAME} -p ${REGISTRY_PASSWORD} ${BASE_REGISTRY_URL}/ubuntu-2004:v1.20.10.gz --manifest-config /dev/null:application/vnd.acme.rocket.config output/ubuntu-2004-kube-v1.20.10.gz
-```
-
-To build a different version, you can modify the image-builder configuration following the documentation here: https://image-builder.sigs.k8s.io/capi/capi.html and here: https://image-builder.sigs.k8s.io/capi/providers/raw.html
 
 ### Deploying CAPT
 
@@ -146,16 +129,9 @@ In the output, you should be able to find MAC address and IP addresses of the ha
 
 With all the steps above, we can now create a workload cluster.
 
-Set the BASE_REGISTRY_URL to use for looking up images for deployment, if you created your own image above,
-you should replace this value with the registry you pushed your image(s) to.
-
-```sh
-export BASE_REGISTRY_URL=ghcr.io/detiber/cluster-api-provider-tinkerbell
-```
-
 So, let's start with generating the configuration for your cluster using the command below:
 ```sh
-CONTROL_PLANE_VIP=192.168.1.110 POD_CIDR=172.25.0.0/16 clusterctl config cluster capi-quickstart --from templates/cluster-template.yaml --kubernetes-version=v1.20.10 --control-plane-machine-count=1 --worker-machine-count=1 > test-cluster.yaml
+CONTROL_PLANE_VIP=192.168.1.110 POD_CIDR=172.25.0.0/16 clusterctl config cluster capi-quickstart --from templates/cluster-template.yaml --kubernetes-version=v1.20.11 --control-plane-machine-count=1 --worker-machine-count=1 > test-cluster.yaml
 ```
 
 Note, the POD_CIDR is overridden above to avoid conflicting with the default assumed IP address of the Tinkerbell host (192.168.1.1).

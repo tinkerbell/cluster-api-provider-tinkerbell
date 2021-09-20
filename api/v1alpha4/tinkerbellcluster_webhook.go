@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha4
 
 import (
-	"os"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,7 +26,6 @@ import (
 const (
 	osUbuntu             = "ubuntu"
 	defaultUbuntuVersion = "20.04"
-	defaultOSDistro      = osUbuntu
 )
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
@@ -65,14 +63,6 @@ func defaultVersionForOSDistro(distro string) string {
 func (c *TinkerbellCluster) Default() {
 	if c.Spec.ImageLookupFormat == "" {
 		c.Spec.ImageLookupFormat = "{{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz"
-	}
-
-	if c.Spec.ImageLookupBaseRegistry == "" {
-		c.Spec.ImageLookupBaseRegistry = os.Getenv("TINKERBELL_IP")
-	}
-
-	if c.Spec.ImageLookupOSDistro == "" {
-		c.Spec.ImageLookupOSDistro = defaultOSDistro
 	}
 
 	if c.Spec.ImageLookupOSVersion == "" {

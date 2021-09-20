@@ -64,6 +64,7 @@ spec:
                 - port
                 type: object
               imageLookupBaseRegistry:
+                default: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
                 description: ImageLookupBaseRegistry is the base Registry URL that
                   is used for pulling images, if not set, the default will be to use
                   $TINKERBELL_IP.
@@ -85,6 +86,7 @@ spec:
                   will attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/'
                 type: string
               imageLookupOSDistro:
+                default: ubuntu
                 description: ImageLookupOSDistro is the name of the OS distro to use
                   when fetching machine images, if not set it will default to ubuntu.
                 type: string
