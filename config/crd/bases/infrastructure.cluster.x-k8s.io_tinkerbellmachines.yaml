@@ -67,7 +67,7 @@ spec:
               imageLookupBaseRegistry:
                 description: ImageLookupBaseRegistry is the base Registry URL that
                   is used for pulling images, if not set, the default will be to use
-                  $TINKERBELL_IP.
+                  ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
                 type: string
               imageLookupFormat:
                 description: 'ImageLookupFormat is the URL naming format to use for
@@ -77,12 +77,13 @@ spec:
                   {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with the
                   basse URL, OS distribution, OS version, and kubernetes version,
                   respectively. BaseRegistry will be the value in ImageLookupBaseRegistry
-                  or $TINKERBELL_IP (the default), OSDistro will be the value in ImageLookupOSDistro
-                  or ubuntu (the default), OSVersion will be the value in ImageLookupOSVersion
-                  or default based on the OSDistro (if known), and the kubernetes
-                  version as defined by the packages produced by kubernetes/release:
-                  v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
-                  image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz
+                  or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell (the default),
+                  OSDistro will be the value in ImageLookupOSDistro or ubuntu (the
+                  default), OSVersion will be the value in ImageLookupOSVersion or
+                  default based on the OSDistro (if known), and the kubernetes version
+                  as defined by the packages produced by kubernetes/release: v1.13.0,
+                  v1.12.5-mybuild.1, or v1.17.3. For example, the default image format
+                  of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz
                   will attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/'
                 type: string
               imageLookupOSDistro:

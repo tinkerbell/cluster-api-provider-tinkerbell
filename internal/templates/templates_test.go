@@ -28,6 +28,7 @@ import (
 func validWorkflowTemplate() *templates.WorkflowTemplate {
 	return &templates.WorkflowTemplate{
 		Name:          "foo",
+		MetadataURL:   "http://10.10.10.10",
 		ImageURL:      "http://foo.bar.baz/do/it",
 		DestDisk:      "/dev/sda",
 		DestPartition: "/dev/sda1",

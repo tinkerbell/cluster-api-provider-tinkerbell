@@ -42,7 +42,7 @@ type TinkerbellClusterSpec struct {
 	// unless a machine specifies a different ImageLookupFormat. Supports substitutions
 	// for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
 	// the basse URL, OS distribution, OS version, and kubernetes version, respectively.
-	// BaseRegistry will be the value in ImageLookupBaseRegistry or $TINKERBELL_IP
+	// BaseRegistry will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
 	// (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
 	// OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
 	// (if known), and the kubernetes version as defined by the packages produced by
@@ -53,7 +53,7 @@ type TinkerbellClusterSpec struct {
 	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
 
 	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
-	// if not set, the default will be to use $TINKERBELL_IP.
+	// if not set, the default will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
 	// +optional
 	// +kubebuilder:default=ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
 	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
