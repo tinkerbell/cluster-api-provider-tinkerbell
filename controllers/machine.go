@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"text/template"
@@ -180,8 +181,16 @@ func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) er
 		return fmt.Errorf("failed to generate imageURL: %w", err)
 	}
 
+	metadataIP := os.Getenv("TINKERBELL_IP")
+	if metadataIP == "" {
+		metadataIP = "192.168.1.1"
+	}
+
+	metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
+
 	workflowTemplate := templates.WorkflowTemplate{
 		Name:          mrc.tinkerbellMachine.Name,
+		MetadataURL:   metadataURL,
 		ImageURL:      imageURL,
 		DestDisk:      targetDisk,
 		DestPartition: targetDevice,

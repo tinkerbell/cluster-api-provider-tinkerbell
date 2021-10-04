@@ -33,6 +33,7 @@ var (
 // WorkflowTemplate is a helper struct for rendering CAPT Template data.
 type WorkflowTemplate struct {
 	Name          string
+	MetadataURL   string
 	ImageURL      string
 	DestDisk      string
 	DestPartition string
@@ -49,7 +50,7 @@ func (wt WorkflowTemplate) Render() (string, error) {
 	}
 
 	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, wt.ImageURL, wt.DestDisk, wt.DestPartition,
-		wt.DestPartition, wt.DestPartition), nil
+		wt.MetadataURL, wt.DestPartition, wt.DestPartition), nil
 }
 
 const (
@@ -86,7 +87,7 @@ tasks:
           CONTENTS: |
             datasource:
               Ec2:
-                metadata_urls: ["http://169.254.169.254:50061"]
+                metadata_urls: ["%s"]
                 strict_id: false
             system_info:
               default_user:
