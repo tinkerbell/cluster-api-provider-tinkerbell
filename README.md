@@ -27,9 +27,11 @@ Provider for Tinkerbell.
 7th December 2020 marks the first commit for this project, it starts as a
 porting from CAPP (cluster api provider packet).
 
-As it is now it is able to bootstrap single Control Plane instance clusters using hardware
-managed by Tinkerbell. Support for upgrades and multi-instance Control Plane clusters is
-still outstanding.
+Currently, it is possible to bootstrap both single instance and HA Control Plane workload 
+clusters using hardware managed by Tinkerbell.
+
+Integration with [PBnJ](https://github.com/tinkerbell/pbnj) for remote power management
+and secure deprovisioning of instances is still outstanding and must be handled externally.
 
 See [docs/README.md](docs/README.md) for more information on setting up a development
 environment.
@@ -40,6 +42,3 @@ This project is under active development and you should expect issues, pull
 requests and conversation ongoing in the [bi-weekly community
 meeting](https://github.com/tinkerbell/.github/blob/main/COMMUNICATION.md#contributors-mailing-list).
 Feel free to join if you are curious or if you have any question.
-
-There is a milestone called `v0.1.0 tech preview`. Have a look at issues
-assigned to that label to know more about what it will contain.

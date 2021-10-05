@@ -6,8 +6,8 @@ If you have Tinkerbell running in your environment, you can use it for CAPT.
 
 Here is the list of required components to use CAPT:
 
-- Existing Tinkerbell installation running at least versions mentioned in [sandbox](https://github.com/tinkerbell/sandbox/commit/8256ad1e8515c2a97a27091c0f5c12e42f083748), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
-  - This also assumes that the hegel port is exposed in your environment, if running a version of the sandbox prior to https://github.com/tinkerbell/sandbox/commit/8256ad1e8515c2a97a27091c0f5c12e42f083748, this will need to be done manually.
+- Existing Tinkerbell installation running at least versions mentioned in v0.6.0 of [sandbox](https://github.com/tinkerbell/sandbox/tree/v0.6.0), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
+  - This also assumes that the hegel port is exposed in your environment, if running a version of the sandbox prior to https://github.com/tinkerbell/sandbox/tree/v0.6.0, this will need to be done manually.
 - A Kubernetes cluster which pods has access to your Tinkerbell instance.
 - At least one Hardware available with DHCP IP address configured on first interface and with proper metadata configured
 - `git` binary
@@ -21,10 +21,6 @@ Required metadata for hardware:
 - metadata.instance.id is set (should match the hardware's id)
 - metadata.instance.hostname is set
 - metadata.instance.storage.disks is set and contains at least one device matching an available disk on the system
-
-### Add a link-local address for Hegel
-
-If your sandbox is running on an Ubuntu system, you can edit `/etc/netplan.<devicename>.yaml`, add `169.254.169.254/16` to the addresses, and run `netplan apply`
 
 ### Mirror the necessary Tinkerbell actions to the registry
 
@@ -56,7 +52,7 @@ kubectl config get-contexts  | awk '/^*/ {print $2}'
 Then, run the following commands to clone code we're going to run:
 ```sh
 git clone https://github.com/kubernetes-sigs/cluster-api -b release-0.4
-git clone git@github.com:tinkerbell/cluster-api-provider-tink.git
+git clone git@github.com:tinkerbell/cluster-api-provider-tinkerbell.git
 cd ../cluster-api
 ```
 
@@ -66,7 +62,7 @@ then replace placeholders with actual values:
 cat <<EOF > tilt-settings.json
 {
   "default_registry": "quay.io/<your username>",
-  "provider_repos": ["../cluster-api-provider-tink"],
+  "provider_repos": ["../cluster-api-provider-tinkerbell"],
   "enable_providers": ["tinkerbell", "kubeadm-bootstrap", "kubeadm-control-plane"],
   "allowed_contexts": ["<your kubeconfig context to use"],
   "kustomize_substitutions": {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package utils contains test utilities for cluster-api-provider-tink.
+// Package utils contains test utilities for cluster-api-provider-tinkerbell.
 package utils
 
 import (
