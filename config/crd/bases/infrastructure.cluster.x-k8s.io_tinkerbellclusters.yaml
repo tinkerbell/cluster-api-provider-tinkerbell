@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.6.1
+    controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
   name: tinkerbellclusters.infrastructure.cluster.x-k8s.io
 spec:
@@ -27,7 +27,7 @@ spec:
       jsonPath: .status.ready
       name: Ready
       type: string
-    name: v1alpha4
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: TinkerbellCluster is the Schema for the tinkerbellclusters API.
@@ -49,7 +49,7 @@ spec:
             properties:
               controlPlaneEndpoint:
                 description: "ControlPlaneEndpoint is a required field by ClusterAPI
-                  v1alpha4. \n See https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
+                  v1beta1. \n See https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
                   for more details."
                 properties:
                   host:
