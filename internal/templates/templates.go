@@ -95,6 +95,7 @@ tasks:
                 groups: [wheel, adm]
                 sudo: ["ALL=(ALL) NOPASSWD:ALL"]
                 shell: /bin/bash
+            manage_etc_hosts: localhost
             warnings:
               dsid_missing_source: off
       - name: "add-tink-cloud-init-ds-config"
