@@ -14,22 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha4
+// +kubebuilder:object:generate=true
+// +groupName=infrastructure.cluster.x-k8s.io
+
+package v1beta1
 
 import (
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
-func aggregateObjErrors(gk schema.GroupKind, name string, allErrs field.ErrorList) error {
-	if len(allErrs) == 0 {
-		return nil
-	}
+//nolint:gochecknoglobals
+var (
+	// GroupVersion is group version used to register these objects.
+	GroupVersion = schema.GroupVersion{Group: "infrastructure.cluster.x-k8s.io", Version: "v1beta1"}
 
-	return apierrors.NewInvalid(
-		gk,
-		name,
-		allErrs,
-	)
-}
+	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+
+	// AddToScheme adds the types in this group-version to the given scheme.
+	AddToScheme = SchemeBuilder.AddToScheme
+)

@@ -27,11 +27,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha4"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
 	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
@@ -52,7 +52,7 @@ func validTinkerbellMachine(name, namespace, machineName, hardwareUUID string) *
 			UID:       types.UID(hardwareUUID),
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "cluster.x-k8s.io/v1alpha4",
+					APIVersion: "cluster.x-k8s.io/v1beta1",
 					Kind:       "Machine",
 					Name:       machineName,
 					UID:        types.UID(hardwareUUID),
@@ -86,7 +86,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 			Finalizers: []string{infrastructurev1.ClusterFinalizer},
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "cluster.x-k8s.io/v1alpha4",
+					APIVersion: "cluster.x-k8s.io/v1beta1",
 					Kind:       "Cluster",
 					Name:       name,
 				},

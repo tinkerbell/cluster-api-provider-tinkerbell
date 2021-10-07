@@ -29,11 +29,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1alpha4"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
 	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
@@ -206,7 +206,7 @@ func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) er
 			Name: mrc.tinkerbellMachine.Name,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha4",
+					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
 					Kind:       "TinkerbellMachine",
 					Name:       mrc.tinkerbellMachine.Name,
 					UID:        mrc.tinkerbellMachine.ObjectMeta.UID,
@@ -390,7 +390,7 @@ func (mrc *machineReconcileContext) createWorkflow() error {
 			Name: mrc.tinkerbellMachine.Name,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha4",
+					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
 					Kind:       "TinkerbellMachine",
 					Name:       mrc.tinkerbellMachine.Name,
 					UID:        mrc.tinkerbellMachine.ObjectMeta.UID,

@@ -11,7 +11,6 @@ require (
 	github.com/tinkerbell/tink v0.0.0-20210910200746-3743d31e0cf0
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/net v0.0.0-20210825183410-e898025ed96a // indirect
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
 	google.golang.org/grpc v1.41.0
 	google.golang.org/protobuf v1.27.1
 	k8s.io/api v0.22.2
@@ -19,8 +18,8 @@ require (
 	k8s.io/client-go v0.22.2
 	k8s.io/component-base v0.22.2
 	k8s.io/klog/v2 v2.10.0
-	k8s.io/utils v0.0.0-20210819203725-bdf08cb9a70a
-	sigs.k8s.io/cluster-api v0.4.3
-	sigs.k8s.io/controller-runtime v0.9.7
+	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b
+	sigs.k8s.io/cluster-api v1.0.0
+	sigs.k8s.io/controller-runtime v0.10.2
 	sigs.k8s.io/yaml v1.3.0
 )
