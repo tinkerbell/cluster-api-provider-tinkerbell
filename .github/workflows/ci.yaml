@@ -15,7 +15,7 @@ jobs:
         target: ["verify", "lint", "test"]
     steps:
     - name: checkout
-      uses: actions/checkout@v2.3.4
+      uses: actions/checkout@v2.3.5
     - uses: ./.github/actions/setup-go
     - name: ${{ matrix.target }}
       run: make ${{ matrix.target }}
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2.3.5
       - name: Codespell
         uses: codespell-project/actions-codespell@master
         with:
