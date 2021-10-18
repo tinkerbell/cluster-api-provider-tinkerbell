@@ -15,8 +15,23 @@ jobs:
         target: ["verify", "lint", "test"]
     steps:
     - name: checkout
-      uses: actions/checkout@v2.3.4
+      uses: actions/checkout@v2.3.5
     - uses: ./.github/actions/setup-go
+    - uses: actions/cache@v2
+      with:
+        path: hack/tools/bin
+        key: ${{ runner.os }}-tools-bin-${{ matrix.target }}-${{ hashFiles('Makefile') }}
+        restore-keys: |
+          ${{ runner.os }}-tools-bin-${{ matrix.target }}-
+          ${{ runner.os }}-tools-bin-
+    - uses: actions/cache@v2
+      if: ${{ matrix.target == 'test' }}
+      with:
+        path: /tmp/kubebuilder-tools-*.tar.gz
+        key: ${{ runner.os }}-tmp-${{ matrix.target }}-${{ hashFiles('scripts/fetch_ext_bins.sh') }}
+        restore-keys: |
+          ${{ runner.os }}-tmp-${{ matrix.target }}-
+          ${{ runner.os }}-tmp-
     - name: ${{ matrix.target }}
       run: make ${{ matrix.target }}
   codespell:
@@ -24,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2.3.5
       - name: Codespell
         uses: codespell-project/actions-codespell@master
         with:
