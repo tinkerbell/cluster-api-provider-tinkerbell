@@ -4,6 +4,8 @@
         "image": "ghcr.io/tinkerbell/cluster-api-provider-tinkerbell:dev",
         "live_reload_deps": [
             "main.go", "go.mod", "go.sum", "api", "controllers", "tink", "internal"
-        ]
+        ],
+        "label": "tinkerbell",
+        "manager_name": "capt-controller-manager"
     }
 }
