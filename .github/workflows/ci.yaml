@@ -15,7 +15,7 @@ jobs:
         target: ["verify", "lint", "test"]
     steps:
     - name: checkout
-      uses: actions/checkout@v2.3.5
+      uses: actions/checkout@v2.4.0
     - uses: ./.github/actions/setup-go
     - uses: actions/cache@v2
       with:
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2.3.5
+        uses: actions/checkout@v2.4.0
       - name: Codespell
         uses: codespell-project/actions-codespell@master
         with:
