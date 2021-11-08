@@ -204,6 +204,7 @@ generate-go: $(CONTROLLER_GEN) $(CONVERSION_GEN) ## Runs Go related generate tar
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
 		paths=./tink/api/... \
+		paths=./pbnj/api/... \
 		object:headerFile=./hack/boilerplate.go.txt
 	go generate ./...
 
@@ -212,6 +213,7 @@ generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
 		paths=./tink/api/... \
+		paths=./pbnj/api/... \
 		crd:crdVersions=v1 \
 		rbac:roleName=manager-role \
 		output:crd:dir=$(CRD_ROOT) \
@@ -220,6 +222,7 @@ generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
 	$(CONTROLLER_GEN) \
 		paths=./controllers/... \
 		paths=./tink/controllers/... \
+		paths=./pbnj/controllers/... \
 		output:rbac:dir=$(RBAC_ROOT) \
 		rbac:roleName=manager-role
 

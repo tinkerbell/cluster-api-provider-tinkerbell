@@ -8,6 +8,7 @@ require (
 	github.com/onsi/gomega v1.19.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
+	github.com/tinkerbell/pbnj v0.0.0-20211027151347-2fb19ffbe7ad // indirect
 	github.com/tinkerbell/tink v0.0.0-20210910200746-3743d31e0cf0
 	google.golang.org/grpc v1.46.0
 	google.golang.org/protobuf v1.28.0

@@ -74,6 +74,19 @@ rules:
 - apiGroups:
   - tinkerbell.org
   resources:
+  - bmc
+  - bmc/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tinkerbell.org
+  resources:
   - hardware
   - hardware/status
   verbs:

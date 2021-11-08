@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+	pbnjv1 "github.com/tinkerbell/pbnj/api/v1"
 	tinkclient "github.com/tinkerbell/tink/client"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -38,6 +39,9 @@ import (
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	pbnjv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/pbnj/api/v1alpha1"
+	pbnjclient "github.com/tinkerbell/cluster-api-provider-tinkerbell/pbnj/client"
+	pbnjcontroller "github.com/tinkerbell/cluster-api-provider-tinkerbell/pbnj/controllers"
 	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
 	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
@@ -60,6 +64,7 @@ func init() {
 	_ = infrastructurev1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
 	_ = tinkv1.AddToScheme(scheme)
+	_ = pbnjv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -78,6 +83,7 @@ var (
 	tinkerbellHardwareConcurrency int
 	tinkerbellTemplateConcurrency int
 	tinkerbellWorkflowConcurrency int
+	pbnjBmcConcurrency            int
 	webhookPort                   int
 	syncPeriod                    time.Duration
 	leaderElectionLeaseDuration   time.Duration
@@ -179,6 +185,12 @@ func initFlags(fs *pflag.FlagSet) { //nolint:funlen
 		"Number of Tinkerbell Workflow resources to process simultaneously",
 	)
 
+	fs.IntVar(&pbnjBmcConcurrency,
+		"pbnj-bmc-concurrency",
+		10, //nolint:gomnd
+		"Number of PBNJ BMC resources to process simultaneously",
+	)
+
 	fs.DurationVar(&syncPeriod,
 		"sync-period",
 		10*time.Minute, //nolint:gomnd
@@ -244,6 +256,26 @@ func setupTinkShimControllers(ctx context.Context, mgr ctrl.Manager) error {
 		WorkflowClient: workflowClient,
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellWorkflowConcurrency}); err != nil {
 		return fmt.Errorf("unable to create tink workflow controller: %w", err)
+	}
+
+	return nil
+}
+
+func setupPbnjShimControllers(ctx context.Context, mgr ctrl.Manager) error {
+	conn, err := pbnjclient.SetupConnection()
+	if err != nil {
+		return fmt.Errorf("unable to connect to PBNJ server: %w", err)
+	}
+
+	mClient := pbnjv1.NewMachineClient(conn)
+	tClient := pbnjv1.NewTaskClient(conn)
+	pbnjClient := pbnjclient.NewPbnjClient(mClient, tClient)
+
+	if err := (&pbnjcontroller.Reconciler{
+		Client:     mgr.GetClient(),
+		PbnjClient: pbnjClient,
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: pbnjBmcConcurrency}); err != nil {
+		return fmt.Errorf("unable to create pbnj controller: %w", err)
 	}
 
 	return nil
@@ -337,6 +369,11 @@ func main() { //nolint:funlen
 
 	if err := setupTinkShimControllers(ctx, mgr); err != nil {
 		setupLog.Error(err, "failed to add Tinkerbell Shim Controllers")
+		os.Exit(1)
+	}
+
+	if err := setupPbnjShimControllers(ctx, mgr); err != nil {
+		setupLog.Error(err, "failed to add PBNJ Shim Controllers")
 		os.Exit(1)
 	}
 

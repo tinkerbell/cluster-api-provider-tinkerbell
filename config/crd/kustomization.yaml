@@ -10,6 +10,7 @@ resources:
 - bases/tinkerbell.org_hardware.yaml
 - bases/tinkerbell.org_templates.yaml
 - bases/tinkerbell.org_workflows.yaml
+- bases/tinkerbell.org_bmc.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
