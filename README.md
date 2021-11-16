@@ -11,7 +11,7 @@
 ---
 
 > This repository is
-[Experimental](https://github.com/packethost/standards/blob/main/experimental-statement.md)
+[Experimental](https://github.com/equinix-labs/equinix-labs/blob/main/experimental-statement.md)
 meaning that it's based on untested ideas or techniques and not yet established
 or finalized or involves a radically new and innovative style! This means that
 support is best effort (at best!) and we strongly encourage you to NOT use this
@@ -49,11 +49,9 @@ This provider's versions are compatible with the following versions of Cluster A
 
 This provider's versions are able to install and manage the following versions of Kubernetes:
 
-|                              | v1.19 | v1.20 | v1.21 | v1.22 |
-| ---------------------------- | ----- | ----- | ----- | ----- |
-| AWS Provider v1beta1 (v0.1)  | ✓     | ✓     | ✓     | ✓     |
-
-\* Not management clusters
+|                                     | v1.19 | v1.20 | v1.21 | v1.22 |
+| ----------------------------------- | ----- | ----- | ----- | ----- |
+| Tinkerbell Provider v1beta1 (v0.1)  | ✓     | ✓     | ✓     | ✓     |
 
 Each version of Cluster API for Tinkerbell will attempt to support all community supported Kubernetes versions during it's maintenance cycle; e.g., Cluster API for Tinkerbell `v0.1` supports Kubernetes 1.19, 1.20, 1.21, 1.22 etc.
 
@@ -64,12 +62,10 @@ policy may be made to more closely align with other providers in the Cluster API
 
 ## Kubernetes versions with published Images
 
-pre-built images are pushed to the github container registry. We currently publish images for Ubuntu 18.04 and Ubuntu 20.04.
-
-- [Ubuntu 18.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-1804)
-- [Ubuntu 20.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-2004)
+Pre-built images are pushed to the [GitHub Container Registry](https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell). We currently publish images for [Ubuntu 18.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-1804) and [Ubuntu 20.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-2004).
 
 ---
+
 ## Current state
 
 Currently, it is possible to bootstrap both single instance and multiple instance Control Plane
@@ -82,9 +78,13 @@ See [docs/README.md](docs/README.md) for more information on setting up a develo
 environment.
 
 ---
+
 ## Technical preview
 
 This project is under active development and you should expect issues, pull
 requests and conversation ongoing in the [bi-weekly community
 meeting](https://github.com/tinkerbell/.github/blob/main/COMMUNICATION.md#contributors-mailing-list).
 Feel free to join if you are curious or if you have any question.
+
+<!-- links -->
+[cluster_api]: https://cluster-api.sigs.k8s.io
