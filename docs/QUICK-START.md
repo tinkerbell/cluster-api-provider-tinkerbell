@@ -16,6 +16,7 @@ In this tutorial we’ll cover the basics of how to use Cluster API to create on
     - metadata.instance.hostname is set
     - metadata.instance.storage.disks is set and contains at least one device matching an available disk on the system
   - An example of a valid hardware definition for use with the Tinkerbell provider:
+
     ```json
     {
       "id": "3f0c4d3d-00ef-4e46-983d-0e6b38da827a",
@@ -53,7 +54,7 @@ In this tutorial we’ll cover the basics of how to use Cluster API to create on
                 "netmask": "255.255.255.0"
               },
               "mac": "a8:a1:59:66:42:89",
-      "name_servers": ["8.8.8.8"],
+              "name_servers": ["8.8.8.8"],
               "uefi": true
             },
             "netboot": {
@@ -95,10 +96,13 @@ Choose one of the options below:
    the creation of a temporary [bootstrap cluster] used to provision a target [management cluster] on the selected infrastructure provider.
 
    Create the kind cluster:
+
    ```bash
    kind create cluster
    ```
+
    Test to ensure the local kind cluster is ready:
+
    ```
    kubectl cluster-info
    ```
@@ -110,18 +114,25 @@ The clusterctl CLI tool handles the lifecycle of a Cluster API management cluste
 #### Install clusterctl binary with curl on linux
 
 Download the latest release; on linux, type:
+
 ```
 curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.0/clusterctl-linux-amd64 -o clusterctl
 ```
+
 Make the clusterctl binary executable.
+
 ```
 chmod +x ./clusterctl
 ```
+
 Move the binary in to your PATH.
+
 ```
 sudo mv ./clusterctl /usr/local/bin/clusterctl
 ```
+
 Test to ensure the version you installed is up-to-date:
+
 ```
 clusterctl version
 ```
@@ -129,24 +140,31 @@ clusterctl version
 #### Install clusterctl binary with curl on macOS
 
 Download the latest release; on macOS, type:
+
 ```
 curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.0/clusterctl-darwin-amd64 -o clusterctl
 ```
 
 Or if your Mac has an M1 CPU ("Apple Silicon"):
+
 ```
 curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.0/clusterctl-darwin-arm64 -o clusterctl
 ```
 
 Make the clusterctl binary executable.
+
 ```
 chmod +x ./clusterctl
 ```
+
 Move the binary in to your PATH.
+
 ```
 sudo mv ./clusterctl /usr/local/bin/clusterctl
 ```
+
 Test to ensure the version you installed is up-to-date:
+
 ```
 clusterctl version
 ```
@@ -160,6 +178,7 @@ brew install clusterctl
 ```
 
 Test to ensure the version you installed is up-to-date:
+
 ```
 clusterctl version
 ```
@@ -219,6 +238,7 @@ Cluster API Provider Tinkerbell does not assume all hardware configured in Tinke
 management cluster.
 
 An example of a valid Hardware resource definition:
+
 ```yaml
 ---
 kind: Hardware
@@ -248,6 +268,7 @@ Otherwise, you can look at the `clusterctl generate cluster` [command][clusterct
 discover the list of variables required by a cluster templates.
 
 To see all required OpenStack environment variables execute:
+
 ```bash
 clusterctl generate cluster --infrastructure tinkerbell --list-variables capi-quickstart
 ```
@@ -356,6 +377,7 @@ kubectl --kubeconfig=capi-quickstart.kubeconfig create -f https://raw.githubuser
 ### Clean Up
 
 Delete workload cluster.
+
 ```bash
 kubectl delete cluster capi-quickstart
 ```
@@ -363,6 +385,7 @@ kubectl delete cluster capi-quickstart
 **NOTE** IMPORTANT: In order to ensure a proper cleanup of your infrastructure you must always delete the cluster object. Deleting the entire cluster template with `kubectl delete -f capi-quickstart.yaml` might lead to pending resources to be cleaned up manually.
 
 Delete management cluster
+
 ```bash
 kind delete cluster
 ```
