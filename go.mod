@@ -13,10 +13,10 @@ require (
 	golang.org/x/net v0.0.0-20210825183410-e898025ed96a // indirect
 	google.golang.org/grpc v1.41.0
 	google.golang.org/protobuf v1.27.1
-	k8s.io/api v0.22.3
-	k8s.io/apimachinery v0.22.3
-	k8s.io/client-go v0.22.3
-	k8s.io/component-base v0.22.3
+	k8s.io/api v0.22.4
+	k8s.io/apimachinery v0.22.4
+	k8s.io/client-go v0.22.4
+	k8s.io/component-base v0.22.4
 	k8s.io/klog/v2 v2.10.0
 	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b
 	sigs.k8s.io/cluster-api v1.0.1
