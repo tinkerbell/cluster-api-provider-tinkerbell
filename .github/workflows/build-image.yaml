@@ -29,6 +29,8 @@ jobs:
       with:
         repository: kubernetes-sigs/image-builder
         path: image-builder
+        # Workaround for breaking changes in upstream image-builder that need to be verified
+        ref: 9eea1153526d37969e96697cb1dacd15e28dbccf
     - name: Install QEMU
       run: |
         sudo apt update
