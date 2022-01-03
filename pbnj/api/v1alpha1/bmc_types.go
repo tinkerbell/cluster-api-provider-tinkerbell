@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -18,13 +19,9 @@ type BMCSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Host string `json:"host"`
 
-	// Username is the username to authenticate with the BMC
-	// +kubebuilder:validation:MinLength=1
-	Username string `json:"username"`
-
-	// Password is the password to authenticate with the BMC
-	// +kubebuilder:validation:MinLength=1
-	Password string `json:"password"`
+	// AuthSecretRef is the SecretReference that contains authentication information of the BMC.
+	// The Secret must contain username and password keys.
+	AuthSecretRef corev1.SecretReference `json:"authSecretRef"`
 
 	// Vendor is the vendor name of the BMC
 	// +kubebuilder:validation:MinLength=1

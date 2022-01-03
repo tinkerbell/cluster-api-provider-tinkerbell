@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	v1 "github.com/tinkerbell/pbnj/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -60,6 +62,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx).WithValues("bmc", bmc.Name)
 
+	username, password, err := r.resolveAuthSecretRef(ctx, bmc.Spec.AuthSecretRef)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error resolving authentication from Secret: %w", err)
+	}
+
 	// Power on the machine with bmc.
 	powerRequest := &v1.PowerRequest{
 		Authn: &v1.Authn{
@@ -68,8 +75,8 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC)
 					Host: &v1.Host{
 						Host: bmc.Spec.Host,
 					},
-					Username: bmc.Spec.Username,
-					Password: bmc.Spec.Password,
+					Username: username,
+					Password: password,
 				},
 			},
 		},
@@ -79,7 +86,7 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC)
 		PowerAction: v1.PowerAction_POWER_ACTION_ON,
 	}
 
-	_, err := r.PbnjClient.MachinePower(ctx, powerRequest)
+	_, err = r.PbnjClient.MachinePower(ctx, powerRequest)
 	if err != nil {
 		logger.Error(err, "Failed to power on machine with bmc")
 
@@ -87,6 +94,31 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC)
 	}
 
 	return r.reconcileStatus(ctx, bmc)
+}
+
+func (r *Reconciler) resolveAuthSecretRef(ctx context.Context, secretRef corev1.SecretReference) (string, string, error) { //nolint:lll
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Namespace: secretRef.Namespace, Name: secretRef.Name}
+
+	if err := r.Client.Get(ctx, key, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", "", fmt.Errorf("error secret %s not found: %w", key, err)
+		}
+
+		return "", "", fmt.Errorf("failed to retrieve secret %s : %w", secretRef, err)
+	}
+
+	username, ok := secret.Data["username"]
+	if !ok {
+		return "", "", fmt.Errorf("non-existent secret key username") //nolint:goerr113
+	}
+
+	password, ok := secret.Data["password"]
+	if !ok {
+		return "", "", fmt.Errorf("non-existent secret key password") //nolint:goerr113
+	}
+
+	return string(username), string(password), nil
 }
 
 func (r *Reconciler) reconcileStatus(ctx context.Context, bmc *pbnjv1alpha1.BMC) (ctrl.Result, error) {

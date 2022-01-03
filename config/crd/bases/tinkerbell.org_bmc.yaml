@@ -38,16 +38,22 @@ spec:
           spec:
             description: BMCSpec defines the desired state of BMC.
             properties:
+              authSecretRef:
+                description: AuthSecretRef is the SecretReference that contains authentication
+                  information of the BMC. The Secret must contain username and password
+                  keys.
+                properties:
+                  name:
+                    description: Name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: Namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
               host:
                 description: Host is the host IP address of the BMC
-                minLength: 1
-                type: string
-              password:
-                description: Password is the password to authenticate with the BMC
-                minLength: 1
-                type: string
-              username:
-                description: Username is the username to authenticate with the BMC
                 minLength: 1
                 type: string
               vendor:
@@ -55,9 +61,8 @@ spec:
                 minLength: 1
                 type: string
             required:
+            - authSecretRef
             - host
-            - password
-            - username
             - vendor
             type: object
           status:
