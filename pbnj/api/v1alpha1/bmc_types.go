@@ -8,11 +8,6 @@ import (
 // BMCState represents the template state.
 type BMCState string
 
-const (
-	// BMCPowerOn represents a bmc that is in Power On state.
-	BMCPowerOn = BMCState("PowerOn")
-)
-
 // BMCSpec defines the desired state of BMC.
 type BMCSpec struct {
 	// Host is the host IP address of the BMC
@@ -26,11 +21,16 @@ type BMCSpec struct {
 	// Vendor is the vendor name of the BMC
 	// +kubebuilder:validation:MinLength=1
 	Vendor string `json:"vendor"`
+
+	// PowerAction is the machine power action for PBNJ to run.
+	// The value must be one of the supported machine PowerAction names for PBNJ.
+	// +kubebuilder:validation:MinLength=1
+	PowerAction string `json:"powerAction,omitempty"`
 }
 
 // BMCStatus defines the observed state of BMC.
 type BMCStatus struct {
-	State BMCState `json:"state,omitempty"`
+	PowerState BMCState `json:"powerState,omitempty"`
 }
 
 // +kubebuilder:subresource:status

@@ -52,7 +52,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to get bmc: %w", err)
 	}
 
-	if bmc.Status.State == pbnjv1alpha1.BMCPowerOn {
+	if bmc.Status.PowerState == pbnjv1alpha1.BMCState(bmc.Spec.PowerAction) {
 		return ctrl.Result{}, nil
 	}
 
@@ -62,12 +62,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx).WithValues("bmc", bmc.Name)
 
+	if bmc.Spec.PowerAction == "" {
+		return r.reconcileStatus(ctx, bmc)
+	}
+
 	username, password, err := r.resolveAuthSecretRef(ctx, bmc.Spec.AuthSecretRef)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error resolving authentication from Secret: %w", err)
 	}
 
-	// Power on the machine with bmc.
+	err = r.powerAction(ctx, username, password, bmc)
+	if err != nil {
+		logger.Error(err, "Failed to perform power action with bmc", "PowerAction", bmc.Spec.PowerAction)
+
+		return ctrl.Result{}, fmt.Errorf("failed to perform PowerAction: %s", bmc.Spec.PowerAction) //nolint:goerr113
+	}
+
+	return r.reconcileStatus(ctx, bmc)
+}
+
+func (r *Reconciler) powerAction(ctx context.Context, username, password string, bmc *pbnjv1alpha1.BMC) error {
+	powerActionValue, ok := v1.PowerAction_value[bmc.Spec.PowerAction]
+	if !ok {
+		return fmt.Errorf("invalid PowerAction: %s", bmc.Spec.PowerAction) //nolint:goerr113
+	}
+
 	powerRequest := &v1.PowerRequest{
 		Authn: &v1.Authn{
 			Authn: &v1.Authn_DirectAuthn{
@@ -83,17 +102,15 @@ func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC)
 		Vendor: &v1.Vendor{
 			Name: bmc.Spec.Vendor,
 		},
-		PowerAction: v1.PowerAction_POWER_ACTION_ON,
+		PowerAction: v1.PowerAction(powerActionValue),
 	}
 
-	_, err = r.PbnjClient.MachinePower(ctx, powerRequest)
+	_, err := r.PbnjClient.MachinePower(ctx, powerRequest)
 	if err != nil {
-		logger.Error(err, "Failed to power on machine with bmc")
-
-		return ctrl.Result{}, fmt.Errorf("error calling MachinePower: %w", err)
+		return fmt.Errorf("error calling PBNJ MachinePower: %w", err)
 	}
 
-	return r.reconcileStatus(ctx, bmc)
+	return nil
 }
 
 func (r *Reconciler) resolveAuthSecretRef(ctx context.Context, secretRef corev1.SecretReference) (string, string, error) { //nolint:lll
@@ -125,7 +142,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, bmc *pbnjv1alpha1.BMC)
 	logger := ctrl.LoggerFrom(ctx).WithValues("bmc", bmc.Name)
 	patch := client.MergeFrom(bmc.DeepCopy())
 
-	bmc.Status.State = pbnjv1alpha1.BMCPowerOn
+	bmc.Status.PowerState = pbnjv1alpha1.BMCState(bmc.Spec.PowerAction)
 	if err := r.Client.Status().Patch(ctx, bmc, patch); err != nil {
 		logger.Error(err, "Failed to patch bmc")
 

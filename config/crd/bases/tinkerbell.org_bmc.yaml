@@ -56,6 +56,12 @@ spec:
                 description: Host is the host IP address of the BMC
                 minLength: 1
                 type: string
+              powerAction:
+                description: PowerAction is the machine power action for PBNJ to run.
+                  The value must be one of the supported machine PowerAction names
+                  for PBNJ.
+                minLength: 1
+                type: string
               vendor:
                 description: Vendor is the vendor name of the BMC
                 minLength: 1
@@ -68,7 +74,7 @@ spec:
           status:
             description: BMCStatus defines the observed state of BMC.
             properties:
-              state:
+              powerState:
                 description: BMCState represents the template state.
                 type: string
             type: object
