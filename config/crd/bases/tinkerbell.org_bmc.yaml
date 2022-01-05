@@ -52,6 +52,11 @@ spec:
                       name must be unique.
                     type: string
                 type: object
+              bootDevice:
+                description: BootDevice is the machine boot device to set. The value
+                  must be one of the supported machine BootDevice names by PBNJ.
+                minLength: 1
+                type: string
               host:
                 description: Host is the host IP address of the BMC
                 minLength: 1
@@ -59,7 +64,7 @@ spec:
               powerAction:
                 description: PowerAction is the machine power action for PBNJ to run.
                   The value must be one of the supported machine PowerAction names
-                  for PBNJ.
+                  by PBNJ.
                 minLength: 1
                 type: string
               vendor:
@@ -74,6 +79,9 @@ spec:
           status:
             description: BMCStatus defines the observed state of BMC.
             properties:
+              bootState:
+                description: BMCState represents the template state.
+                type: string
               powerState:
                 description: BMCState represents the template state.
                 type: string

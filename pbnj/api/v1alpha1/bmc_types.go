@@ -23,14 +23,20 @@ type BMCSpec struct {
 	Vendor string `json:"vendor"`
 
 	// PowerAction is the machine power action for PBNJ to run.
-	// The value must be one of the supported machine PowerAction names for PBNJ.
+	// The value must be one of the supported machine PowerAction names by PBNJ.
 	// +kubebuilder:validation:MinLength=1
 	PowerAction string `json:"powerAction,omitempty"`
+
+	// BootDevice is the machine boot device to set.
+	// The value must be one of the supported machine BootDevice names by PBNJ.
+	// +kubebuilder:validation:MinLength=1
+	BootDevice string `json:"bootDevice,omitempty"`
 }
 
 // BMCStatus defines the observed state of BMC.
 type BMCStatus struct {
 	PowerState BMCState `json:"powerState,omitempty"`
+	BootState  BMCState `json:"bootState,omitempty"`
 }
 
 // +kubebuilder:subresource:status

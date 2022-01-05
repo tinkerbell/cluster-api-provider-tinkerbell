@@ -50,3 +50,14 @@ func (pc *PbnjClient) MachinePower(ctx context.Context, powerRequest *v1.PowerRe
 
 	return response, nil
 }
+
+// MachineBootDev performs a PBNJ machine boot device request.
+func (pc *PbnjClient) MachineBootDev(ctx context.Context, deviceRequest *v1.DeviceRequest) (*v1.StatusResponse, error) {
+	response, err := v1Client.MachineBootDev(ctx, pc.machineClient, pc.taskClient, deviceRequest)
+	if err != nil {
+		return nil, fmt.Errorf("error making pbnj DeviceRequest with boot device %s: %w",
+			deviceRequest.GetBootDevice().String(), err)
+	}
+
+	return response, nil
+}

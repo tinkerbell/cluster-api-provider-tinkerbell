@@ -18,6 +18,7 @@ import (
 
 type pbnjClient interface {
 	MachinePower(ctx context.Context, powerRequest *v1.PowerRequest) (*v1.StatusResponse, error)
+	MachineBootDev(ctx context.Context, deviceRequest *v1.DeviceRequest) (*v1.StatusResponse, error)
 }
 
 // Reconciler implements the Reconciler interface for managing BMC state.
@@ -52,7 +53,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to get bmc: %w", err)
 	}
 
-	if bmc.Status.PowerState == pbnjv1alpha1.BMCState(bmc.Spec.PowerAction) {
+	if bmc.Status.PowerState == pbnjv1alpha1.BMCState(bmc.Spec.PowerAction) &&
+		bmc.Status.BootState == pbnjv1alpha1.BMCState(bmc.Spec.BootDevice) {
 		return ctrl.Result{}, nil
 	}
 
@@ -62,20 +64,29 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) reconcileNormal(ctx context.Context, bmc *pbnjv1alpha1.BMC) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx).WithValues("bmc", bmc.Name)
 
-	if bmc.Spec.PowerAction == "" {
-		return r.reconcileStatus(ctx, bmc)
-	}
-
 	username, password, err := r.resolveAuthSecretRef(ctx, bmc.Spec.AuthSecretRef)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error resolving authentication from Secret: %w", err)
 	}
 
-	err = r.powerAction(ctx, username, password, bmc)
-	if err != nil {
-		logger.Error(err, "Failed to perform power action with bmc", "PowerAction", bmc.Spec.PowerAction)
+	if bmc.Spec.BootDevice != "" &&
+		bmc.Status.BootState != pbnjv1alpha1.BMCState(bmc.Spec.BootDevice) {
+		err = r.setBootDevice(ctx, username, password, bmc)
+		if err != nil {
+			logger.Error(err, "Failed to set boot device", "BootDevice", bmc.Spec.BootDevice)
 
-		return ctrl.Result{}, fmt.Errorf("failed to perform PowerAction: %s", bmc.Spec.PowerAction) //nolint:goerr113
+			return ctrl.Result{}, fmt.Errorf("failed to set boot device: %s", bmc.Spec.BootDevice) //nolint:goerr113
+		}
+	}
+
+	if bmc.Spec.PowerAction != "" &&
+		bmc.Status.PowerState != pbnjv1alpha1.BMCState(bmc.Spec.PowerAction) {
+		err = r.powerAction(ctx, username, password, bmc)
+		if err != nil {
+			logger.Error(err, "Failed to perform power action with bmc", "PowerAction", bmc.Spec.PowerAction)
+
+			return ctrl.Result{}, fmt.Errorf("failed to perform PowerAction: %s", bmc.Spec.PowerAction) //nolint:goerr113
+		}
 	}
 
 	return r.reconcileStatus(ctx, bmc)
@@ -113,6 +124,38 @@ func (r *Reconciler) powerAction(ctx context.Context, username, password string,
 	return nil
 }
 
+func (r *Reconciler) setBootDevice(ctx context.Context, username, password string, bmc *pbnjv1alpha1.BMC) error {
+	bootDeviceValue, ok := v1.BootDevice_value[bmc.Spec.BootDevice]
+	if !ok {
+		return fmt.Errorf("invalid BootDevice: %s", bmc.Spec.BootDevice) //nolint:goerr113
+	}
+
+	deviceRequest := &v1.DeviceRequest{
+		Authn: &v1.Authn{
+			Authn: &v1.Authn_DirectAuthn{
+				DirectAuthn: &v1.DirectAuthn{
+					Host: &v1.Host{
+						Host: bmc.Spec.Host,
+					},
+					Username: username,
+					Password: password,
+				},
+			},
+		},
+		Vendor: &v1.Vendor{
+			Name: bmc.Spec.Vendor,
+		},
+		BootDevice: v1.BootDevice(bootDeviceValue),
+	}
+
+	_, err := r.PbnjClient.MachineBootDev(ctx, deviceRequest)
+	if err != nil {
+		return fmt.Errorf("error calling PBNJ MachineBootDev: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Reconciler) resolveAuthSecretRef(ctx context.Context, secretRef corev1.SecretReference) (string, string, error) { //nolint:lll
 	secret := &corev1.Secret{}
 	key := types.NamespacedName{Namespace: secretRef.Namespace, Name: secretRef.Name}
@@ -143,6 +186,8 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, bmc *pbnjv1alpha1.BMC)
 	patch := client.MergeFrom(bmc.DeepCopy())
 
 	bmc.Status.PowerState = pbnjv1alpha1.BMCState(bmc.Spec.PowerAction)
+	bmc.Status.BootState = pbnjv1alpha1.BMCState(bmc.Spec.BootDevice)
+
 	if err := r.Client.Status().Patch(ctx, bmc, patch); err != nil {
 		logger.Error(err, "Failed to patch bmc")
 
