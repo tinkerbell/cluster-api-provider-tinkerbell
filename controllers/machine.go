@@ -169,36 +169,39 @@ func (mrc *machineReconcileContext) imageURL() (string, error) {
 }
 
 func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) error {
-	if len(hardware.Status.Disks) < 1 {
-		return ErrHardwareMissingDiskConfiguration
-	}
+	templateData := mrc.tinkerbellMachine.Spec.TemplateOverride
+	if templateData == "" {
+		if len(hardware.Status.Disks) < 1 {
+			return ErrHardwareMissingDiskConfiguration
+		}
 
-	targetDisk := hardware.Status.Disks[0].Device
-	targetDevice := firstPartitionFromDevice(targetDisk)
+		targetDisk := hardware.Status.Disks[0].Device
+		targetDevice := firstPartitionFromDevice(targetDisk)
 
-	imageURL, err := mrc.imageURL()
-	if err != nil {
-		return fmt.Errorf("failed to generate imageURL: %w", err)
-	}
+		imageURL, err := mrc.imageURL()
+		if err != nil {
+			return fmt.Errorf("failed to generate imageURL: %w", err)
+		}
 
-	metadataIP := os.Getenv("TINKERBELL_IP")
-	if metadataIP == "" {
-		metadataIP = "192.168.1.1"
-	}
+		metadataIP := os.Getenv("TINKERBELL_IP")
+		if metadataIP == "" {
+			metadataIP = "192.168.1.1"
+		}
 
-	metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
+		metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
 
-	workflowTemplate := templates.WorkflowTemplate{
-		Name:          mrc.tinkerbellMachine.Name,
-		MetadataURL:   metadataURL,
-		ImageURL:      imageURL,
-		DestDisk:      targetDisk,
-		DestPartition: targetDevice,
-	}
+		workflowTemplate := templates.WorkflowTemplate{
+			Name:          mrc.tinkerbellMachine.Name,
+			MetadataURL:   metadataURL,
+			ImageURL:      imageURL,
+			DestDisk:      targetDisk,
+			DestPartition: targetDevice,
+		}
 
-	templateData, err := workflowTemplate.Render()
-	if err != nil {
-		return fmt.Errorf("rendering template: %w", err)
+		templateData, err = workflowTemplate.Render()
+		if err != nil {
+			return fmt.Errorf("rendering template: %w", err)
+		}
 	}
 
 	templateObject := &tinkv1.Template{

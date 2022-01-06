@@ -88,6 +88,10 @@ spec:
                         type: string
                       providerID:
                         type: string
+                      templateOverride:
+                        description: TemplateOverride overrides the default CAPT hardware
+                          template
+                        type: string
                     type: object
                 required:
                 - spec
