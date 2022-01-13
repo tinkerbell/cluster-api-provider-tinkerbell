@@ -37,6 +37,10 @@ spec:
           spec:
             description: HardwareSpec defines the desired state of Hardware.
             properties:
+              bmcRef:
+                description: BmcRef is BMC that corresponds to the Hardware
+                minLength: 1
+                type: string
               id:
                 description: ID is the ID of the hardware in Tinkerbell
                 minLength: 1

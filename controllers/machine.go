@@ -39,6 +39,7 @@ import (
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
+	pbnjv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/pbnj/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
@@ -351,6 +352,10 @@ func (mrc *machineReconcileContext) ensureHardware() (*tinkv1.Hardware, error) {
 		return nil, fmt.Errorf("ensuring Hardware user data: %w", err)
 	}
 
+	if err := mrc.ensureHardwarePowerOn(hardware); err != nil {
+		return nil, fmt.Errorf("ensuring Hardware Power On actionL %w", err)
+	}
+
 	return hardware, mrc.setStatus(hardware)
 }
 
@@ -467,6 +472,40 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 
 		return hardware[i].Name < hardware[j].Name
 	}, nil
+}
+
+func (mrc *machineReconcileContext) ensureHardwarePowerOn(hardware *tinkv1.Hardware) error {
+	if hardware.Spec.BmcRef == "" {
+		mrc.log.Info("Skipping PowerOn for hardware", "BMC Ref", hardware.Spec.BmcRef, "Hardware name", hardware.Name)
+
+		return nil
+	}
+	// Fetch the bmc.
+	bmc := &pbnjv1.BMC{}
+	namespacedName := types.NamespacedName{
+		Name: hardware.Spec.BmcRef,
+	}
+
+	if err := mrc.client.Get(mrc.ctx, namespacedName, bmc); err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("BMC not found: %w", err)
+		}
+
+		return fmt.Errorf("failed to get bmc: %w", err)
+	}
+
+	patchHelper, err := patch.NewHelper(bmc, mrc.client)
+	if err != nil {
+		return fmt.Errorf("initializing patch helper for bmc: %w", err)
+	}
+
+	bmc.Spec.PowerAction = "POWER_ACTION_ON"
+
+	if err := patchHelper.Patch(mrc.ctx, bmc); err != nil {
+		return fmt.Errorf("patching BMC object: %w", err)
+	}
+
+	return nil
 }
 
 func (mrc *machineReconcileContext) workflowExists() (bool, error) {

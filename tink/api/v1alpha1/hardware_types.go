@@ -41,6 +41,10 @@ type HardwareSpec struct {
 	// metadata
 	//+optional
 	UserData *string `json:"userData,omitempty"`
+
+	// BmcRef is BMC that corresponds to the Hardware
+	// +kubebuilder:validation:MinLength=1
+	BmcRef string `json:"bmcRef,omitempty"`
 }
 
 // HardwareStatus defines the observed state of Hardware.
