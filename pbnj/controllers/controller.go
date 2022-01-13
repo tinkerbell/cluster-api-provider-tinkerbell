@@ -146,6 +146,8 @@ func (r *Reconciler) setBootDevice(ctx context.Context, username, password strin
 			Name: bmc.Spec.Vendor,
 		},
 		BootDevice: v1.BootDevice(bootDeviceValue),
+		Persistent: false,
+		EfiBoot:    true,
 	}
 
 	_, err := r.PbnjClient.MachineBootDev(ctx, deviceRequest)

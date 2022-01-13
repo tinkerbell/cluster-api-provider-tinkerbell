@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	pbnjv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/pbnj/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
@@ -159,6 +160,42 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 
 	if err := patchHelper.Patch(bmrc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
+	}
+
+	return bmrc.deprovisionHardware(hardware)
+}
+
+func (bmrc *baseMachineReconcileContext) deprovisionHardware(hardware *tinkv1.Hardware) error {
+	if hardware.Spec.BmcRef == "" {
+		bmrc.log.Info("Skipping deprovision for hardware", "BMC Ref", hardware.Spec.BmcRef, "Hardware name", hardware.Name)
+
+		return nil
+	}
+
+	// Fetch the bmc.
+	bmc := &pbnjv1.BMC{}
+	namespacedName := types.NamespacedName{
+		Name: hardware.Spec.BmcRef,
+	}
+
+	if err := bmrc.client.Get(bmrc.ctx, namespacedName, bmc); err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("BMC not found: %w", err)
+		}
+
+		return fmt.Errorf("failed to get bmc: %w", err)
+	}
+
+	patchHelper, err := patch.NewHelper(bmc, bmrc.client)
+	if err != nil {
+		return fmt.Errorf("initializing patch helper for bmc: %w", err)
+	}
+
+	bmc.Spec.BootDevice = "BOOT_DEVICE_PXE"
+	bmc.Spec.PowerAction = "POWER_ACTION_HARDOFF"
+
+	if err := patchHelper.Patch(bmrc.ctx, bmc); err != nil {
+		return fmt.Errorf("patching BMC object: %w", err)
 	}
 
 	return nil
