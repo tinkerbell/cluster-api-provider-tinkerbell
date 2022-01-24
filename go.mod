@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/go-logr/logr v0.4.0
 	github.com/google/uuid v1.3.0
-	github.com/onsi/gomega v1.17.0
+	github.com/onsi/gomega v1.18.0
 	github.com/prometheus/common v0.30.0 // indirect
 	github.com/spf13/pflag v1.0.5
 	github.com/tinkerbell/tink v0.0.0-20210910200746-3743d31e0cf0
