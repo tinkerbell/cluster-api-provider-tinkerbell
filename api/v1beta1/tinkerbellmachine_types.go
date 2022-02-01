@@ -60,6 +60,11 @@ type TinkerbellMachineSpec struct {
 	// +optional
 	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
 
+	// TemplateOverride overrides the default Tinkerbell template used by CAPT.
+	// You can learn more about Tinkerbell templates here: https://docs.tinkerbell.org/templates/
+	// +optional
+	TemplateOverride string `json:"templateOverride,omitempty"`
+
 	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
 	// we put them in spec instead of status.
 	HardwareName string `json:"hardwareName,omitempty"`

@@ -88,6 +88,11 @@ spec:
                         type: string
                       providerID:
                         type: string
+                      templateOverride:
+                        description: 'TemplateOverride overrides the default Tinkerbell
+                          template used by CAPT. You can learn more about Tinkerbell
+                          templates here: https://docs.tinkerbell.org/templates/'
+                        type: string
                     type: object
                 required:
                 - spec
