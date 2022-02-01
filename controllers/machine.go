@@ -169,12 +169,12 @@ func (mrc *machineReconcileContext) imageURL() (string, error) {
 }
 
 func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) error {
+	if len(hardware.Status.Disks) < 1 {
+		return ErrHardwareMissingDiskConfiguration
+	}
+
 	templateData := mrc.tinkerbellMachine.Spec.TemplateOverride
 	if templateData == "" {
-		if len(hardware.Status.Disks) < 1 {
-			return ErrHardwareMissingDiskConfiguration
-		}
-
 		targetDisk := hardware.Status.Disks[0].Device
 		targetDevice := firstPartitionFromDevice(targetDisk)
 
