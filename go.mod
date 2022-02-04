@@ -10,7 +10,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/tinkerbell/tink v0.0.0-20210910200746-3743d31e0cf0
 	go.uber.org/atomic v1.9.0 // indirect
-	google.golang.org/grpc v1.41.0
+	google.golang.org/grpc v1.44.0
 	google.golang.org/protobuf v1.27.1
 	k8s.io/api v0.22.6
 	k8s.io/apimachinery v0.22.6
