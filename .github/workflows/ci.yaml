@@ -17,14 +17,14 @@ jobs:
     - name: checkout
       uses: actions/checkout@v3
     - uses: ./.github/actions/setup-go
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       with:
         path: hack/tools/bin
         key: ${{ runner.os }}-tools-bin-${{ matrix.target }}-${{ hashFiles('Makefile') }}
         restore-keys: |
           ${{ runner.os }}-tools-bin-${{ matrix.target }}-
           ${{ runner.os }}-tools-bin-
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       if: ${{ matrix.target == 'test' }}
       with:
         path: /tmp/kubebuilder-tools-*.tar.gz
