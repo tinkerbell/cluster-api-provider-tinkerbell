@@ -83,7 +83,7 @@ environment.
 
 This project is under active development and you should expect issues, pull
 requests and conversation ongoing in the [bi-weekly community
-meeting](https://github.com/tinkerbell/.github/blob/main/COMMUNICATION.md#contributors-mailing-list).
+meeting](https://github.com/tinkerbell/org/blob/main/COMMUNICATION.md#contributors-mailing-list).
 Feel free to join if you are curious or if you have any question.
 
 <!-- links -->
