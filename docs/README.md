@@ -18,9 +18,9 @@ Here is the list of required components to use CAPT:
 
 Required metadata for hardware:
 - metadata.facility.facility_code is set (default is "onprem")
-- metadata.instance.id is set (should match the hardware's id)
+- metadata.instance.id is set (should be a MAC address)
 - metadata.instance.hostname is set
-- metadata.instance.storage.disks is set and contains at least one device matching an available disk on the system
+- metadata.spec.disks is set and contains at least one device matching an available disk on the system
 
 ### Mirror the necessary Tinkerbell actions to the registry
 
@@ -64,12 +64,7 @@ cat <<EOF > tilt-settings.json
   "default_registry": "quay.io/<your username>",
   "provider_repos": ["../cluster-api-provider-tinkerbell"],
   "enable_providers": ["tinkerbell", "kubeadm-bootstrap", "kubeadm-control-plane"],
-  "allowed_contexts": ["<your kubeconfig context to use"],
-  "kustomize_substitutions": {
-    "TINKERBELL_GRPC_AUTHORITY": "192.168.1.1:42113",
-    "TINKERBELL_CERT_URL": "http://192.168.1.1:42114/cert",
-    "TINKERBELL_IP": "192.168.1.1"
-  }
+  "allowed_contexts": ["<your kubeconfig context to use"]
 }
 EOF
 ```
@@ -83,33 +78,48 @@ You can now open a webpage printed by Tilt to see the progress on the deployment
 
 ### Adding Hardware objects to your cluster
 
-Before we create a workload cluster, we must register some of Tinkerbell Hardware in Kubernetes to make it visible
-by CAPT controllers.
-
-List hardware you have available in Tinkerbell e.g. using `tink hardware list` command and save Hardware UUIDs which
-you would like to use.
-
-Then, create similar YAML file, which we later apply on the cluster:
+Create YAML files, which we can apply on the cluster:
 ```yaml
+apiVersion: "tinkerbell.org/v1alpha1"
 kind: Hardware
-apiVersion: tinkerbell.org/v1alpha1
 metadata:
-  name: first-hardware
+  name: node-1
+  namespace: default
 spec:
-  id: <put hardware ID here>
----
-kind: Hardware
-apiVersion: tinkerbell.org/v1alpha1
-metadata:
-  name: second-hardware
-spec:
-  id: <put hardware ID here>
+  disks:
+    - device: /dev/sda
+  metadata:
+    facility:
+      facility_code: onprem
+    instance:
+      userdata: ""
+      hostname: "node-1"
+      id: "xx:xx:xx:xx:xx:xx"
+      operating_system:
+        distro: "ubuntu"
+        os_slug: "ubuntu_20_04"
+        version: "20.04"
+  interfaces:
+    - dhcp:
+        arch: x86_64
+        hostname: node-1
+        ip:
+          address: 0.0.0.0
+          gateway: 0.0.0.1
+          netmask: 255.255.255.0
+        lease_time: 86400
+        mac: xx:xx:xx:xx:xx
+        name_servers:
+          - 8.8.8.8
+        uefi: true
+      netboot:
+        allowPXE: true
+        allowWorkflow: true
 ```
 
-Now, apply created YAML file on your cluster.
+Now, apply created YAML files on your cluster.
 
-At least one Hardware is required to create a controlplane machine. This guide uses 2 Hardwares, one for controlplane
-machine and one for worker machine.
+At least one Hardware is required to create a controlplane machine. 
 
 **NOTE: CAPT expects Hardware to have DHCP IP address configured on first interface of the Hardware. This IP will
 be then used for Node Internal IP.**

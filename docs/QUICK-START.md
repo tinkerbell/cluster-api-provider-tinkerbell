@@ -9,63 +9,6 @@ In this tutorial we’ll cover the basics of how to use Cluster API to create on
 - Install and setup [kubectl] in your local environment
 - Install [Kind] and [Docker]
 - An existing [Tinkerbell] installation running at least versions mentioned in v0.6.0 of [sandbox](https://github.com/tinkerbell/sandbox/tree/v0.6.0), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
-- One or more [Hardware](https://docs.tinkerbell.org/hardware-data/) resources defined in Tinkerbell with a DHCP IP address configured on first interface and with proper metadata configured
-  - Required metadata for hardware:
-    - metadata.facility.facility_code is set (default is "onprem")
-    - metadata.instance.id is set (should match the hardware's id)
-    - metadata.instance.hostname is set
-    - metadata.instance.storage.disks is set and contains at least one device matching an available disk on the system
-  - An example of a valid hardware definition for use with the Tinkerbell provider:
-
-    ```json
-    {
-      "id": "3f0c4d3d-00ef-4e46-983d-0e6b38da827a",
-      "metadata": {
-        "facility": {
-          "facility_code": "onprem"
-        },
-        "instance": {
-          "id": "3f0c4d3d-00ef-4e46-983d-0e6b38da827a",
-          "hostname": "hw-a",
-          "network": {
-            "addresses": [
-              {
-                "address_family": 4,
-                "public": false,
-                "address": "192.168.1.105"
-              }
-            ]
-          },
-          "storage": {
-            "disks": [{"device": "/dev/sda"}]
-          }
-        },
-        "state": ""
-      },
-      "network": {
-        "interfaces": [
-          {
-            "dhcp": {
-              "arch": "x86_64",
-              "hostname": "hw-a",
-              "ip": {
-                "address": "192.168.1.105",
-                "gateway": "192.168.1.254",
-                "netmask": "255.255.255.0"
-              },
-              "mac": "a8:a1:59:66:42:89",
-              "name_servers": ["8.8.8.8"],
-              "uefi": true
-            },
-            "netboot": {
-              "allow_pxe": true,
-              "allow_workflow": true
-            }
-          }
-        ]
-      }
-    }
-    ```
 
 ### Install and/or configure a Kubernetes cluster
 
@@ -203,13 +146,6 @@ providers:
     type: "InfrastructureProvider"
 EOF
 
-# If Tinkerbell is not configured to listen on 192.168.1.1 or
-# is configured for different GRPC/HTTP ports, make the appropriate
-# changes below
-export TINKERBELL_IP=192.168.1.1
-export TINKERBELL_GRPC_AUTHORITY=${TINKERBELL_IP}:42113
-export TINKERBELL_CERT_URL=http://${TINKERBELL_IP}:42114/cert
-
 # Finally, initialize the management cluster
 clusterctl init --infrastructure tinkerbell
 ```
@@ -239,22 +175,57 @@ management cluster.
 
 An example of a valid Hardware resource definition:
 
-```yaml
----
-kind: Hardware
-apiVersion: tinkerbell.org/v1alpha1
-metadata:
-  name: hw-a
-  labels: # Labels are optional, and can be used for machine selection later
-    manufacturer: dell
-    idrac-version: 8
-    rack: 1
-    room: 2
-spec:
-  id: 3f0c4d3d-00ef-4e46-983d-0e6b38da827a
-```
+- Required metadata for hardware:
+    - metadata.facility.facility_code is set (default is "onprem")
+    - metadata.instance.id is set (should be a MAC address)
+    - metadata.instance.hostname is set
+    - metadata.spec.disks is set and contains at least one device matching an available disk on the system
+  - An example of a valid hardware definition for use with the Tinkerbell provider:
 
-**NOTE:** The id should match the id of the Tinkerbell Hardware resource and the name will need to be unique.
+    ```yaml
+    apiVersion: "tinkerbell.org/v1alpha1"
+    kind: Hardware
+    metadata:
+      name: node-1
+      namespace: default
+      labels: # Labels are optional, and can be used for machine selection later
+        manufacturer: dell
+        idrac-version: 8
+        rack: 1
+        room: 2
+    spec:
+      disks:
+        - device: /dev/sda
+      metadata:
+        facility:
+          facility_code: onprem
+        instance:
+          userdata: ""
+          hostname: "node-1"
+          id: "xx:xx:xx:xx:xx:xx"
+          operating_system:
+            distro: "ubuntu"
+            os_slug: "ubuntu_20_04"
+            version: "20.04"
+      interfaces:
+        - dhcp:
+            arch: x86_64
+            hostname: node-1
+            ip:
+              address: 0.0.0.0
+              gateway: 0.0.0.1
+              netmask: 255.255.255.0
+            lease_time: 86400
+            mac: xx:xx:xx:xx:xx
+            name_servers:
+              - 8.8.8.8
+            uefi: true
+          netboot:
+            allowPXE: true
+            allowWorkflow: true
+      ```
+
+**NOTE:** The name and id in each hardware YAML file will need to be unique.
 
 ### Create your first workload cluster
 

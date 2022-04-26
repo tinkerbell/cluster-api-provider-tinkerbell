@@ -31,8 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 // ReconcileContext describes functionality required for reconciling Machine or Cluster object
@@ -140,7 +141,8 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 	hardware := &tinkv1.Hardware{}
 
 	namespacedName := types.NamespacedName{
-		Name: bmrc.tinkerbellMachine.Spec.HardwareName,
+		Name:      bmrc.tinkerbellMachine.Spec.HardwareName,
+		Namespace: bmrc.tinkerbellMachine.Namespace,
 	}
 
 	if err := bmrc.client.Get(bmrc.ctx, namespacedName, hardware); err != nil {
