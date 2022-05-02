@@ -44,9 +44,15 @@ func notImplemented(t *testing.T) {
 	t.Skip("not implemented")
 }
 
+type testOptions struct {
+	// Labels allow providing labels for the machine
+	Labels           map[string]string
+	HardwareAffinity *infrastructurev1.HardwareAffinity
+}
+
 //nolint:unparam
-func validTinkerbellMachine(name, namespace, machineName, hardwareUUID string) *infrastructurev1.TinkerbellMachine {
-	return &infrastructurev1.TinkerbellMachine{
+func validTinkerbellMachine(name, namespace, machineName, hardwareUUID string, options ...testOptions) *infrastructurev1.TinkerbellMachine {
+	m := &infrastructurev1.TinkerbellMachine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -61,6 +67,22 @@ func validTinkerbellMachine(name, namespace, machineName, hardwareUUID string) *
 			},
 		},
 	}
+
+	for _, o := range options {
+		for k, v := range o.Labels {
+			if m.Labels == nil {
+				m.Labels = map[string]string{}
+			}
+
+			m.Labels[k] = v
+		}
+
+		if o.HardwareAffinity != nil {
+			m.Spec.HardwareAffinity = o.HardwareAffinity
+		}
+	}
+
+	return m
 }
 
 //nolint:unparam
@@ -141,8 +163,8 @@ func validSecret(name, namespace string) *corev1.Secret {
 	}
 }
 
-func validHardware(name, uuid, ip string) *tinkv1.Hardware {
-	return &tinkv1.Hardware{
+func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardware {
+	hw := &tinkv1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -166,6 +188,18 @@ func validHardware(name, uuid, ip string) *tinkv1.Hardware {
 			},
 		},
 	}
+
+	for _, o := range options {
+		for k, v := range o.Labels {
+			if hw.Labels == nil {
+				hw.Labels = map[string]string{}
+			}
+
+			hw.Labels[k] = v
+		}
+	}
+
+	return hw
 }
 
 //nolint:funlen
@@ -379,6 +413,15 @@ func Test_Machine_reconciliation(t *testing.T) {
 	// Single hardware should only ever be used for a single machine.
 	t.Run("selects_unique_and_available_hardware_for_each_machine", //nolint:paralleltest
 		machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine)
+
+	t.Run("selects_unique_and_available_hardware_for_each_machine_filtering_by_required_hardware_affinity", //nolint:paralleltest
+		machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByRequiredHardwareAffinity)
+
+	t.Run("selects_unique_and_available_hardware_for_each_machine_filtering_by_preferred_hardware_affinity", //nolint:paralleltest
+		machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByPreferredHardwareAffinity)
+
+	t.Run("selects_unique_and_available_hardware_for_each_machine_filtering_by_required_and_preferred_hardware_affinity", //nolint:paralleltest
+		machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByRequiredAndPreferredHardwareAffinity)
 
 	// Patching Hardware and TinkerbellMachine are not atomic operations, so we should handle situation, when
 	// misspelling process is aborted in the middle.
@@ -830,4 +873,379 @@ func machineReconciliationUsesAlreadySelectedHardwareIfPatchingTinkerbellMachine
 
 	g.Expect(updatedMachine.Spec.HardwareName).To(BeEquivalentTo(expectedHardwareName),
 		"Wrong hardware selected. Expected %q", expectedHardwareName)
+}
+
+func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByRequiredHardwareAffinity(t *testing.T) {
+	machineReconciliationHardwareAffinityHelper(t, testOptions{
+		HardwareAffinity: &infrastructurev1.HardwareAffinity{
+			Required: []infrastructurev1.HardwareAffinityTerm{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "rack",
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{"foo"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, testOptions{
+		HardwareAffinity: &infrastructurev1.HardwareAffinity{
+			Required: []infrastructurev1.HardwareAffinityTerm{
+				{
+					LabelSelector: metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "rack",
+								Operator: metav1.LabelSelectorOpNotIn,
+								Values:   []string{"foo", "baz"},
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+		testOptions{
+			HardwareAffinity: &infrastructurev1.HardwareAffinity{
+				Required: []infrastructurev1.HardwareAffinityTerm{
+					// required terms are OR'd, so this one shouldn't affect the results
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "non-existent"},
+						},
+					},
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "baz"},
+						},
+					},
+				},
+			},
+		})
+}
+
+//nolint:funlen
+func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByPreferredHardwareAffinity(t *testing.T) {
+	machineReconciliationHardwareAffinityHelper(t, testOptions{
+		HardwareAffinity: &infrastructurev1.HardwareAffinity{
+			Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+				{
+					Weight: 12,
+					HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "foo"},
+						},
+					},
+				},
+				{
+					Weight: 10,
+					HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "bar"},
+						},
+					},
+				},
+				{
+					Weight: 11,
+					HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "baz"},
+						},
+					},
+				},
+			},
+		},
+	},
+		testOptions{
+			HardwareAffinity: &infrastructurev1.HardwareAffinity{
+				Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+					{
+						Weight: 50,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{"rack": "bar"},
+							},
+						},
+					},
+					{
+						Weight: 49,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{"rack": "baz"},
+							},
+						},
+					},
+					{
+						Weight: 49,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      "rack",
+										Operator: metav1.LabelSelectorOpIn,
+										Values:   []string{"foo"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, testOptions{
+			HardwareAffinity: &infrastructurev1.HardwareAffinity{
+				Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+					{
+						Weight: 91,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      "rack",
+										Operator: metav1.LabelSelectorOpNotIn,
+										Values:   []string{"bar", "foo"},
+									},
+								},
+							},
+						},
+					},
+					{
+						Weight: 90,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      "rack",
+										Operator: metav1.LabelSelectorOpIn,
+										Values:   []string{"foo"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+}
+
+//nolint:funlen
+func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByRequiredAndPreferredHardwareAffinity(t *testing.T) {
+	machineReconciliationHardwareAffinityHelper(t,
+		testOptions{
+			HardwareAffinity: &infrastructurev1.HardwareAffinity{
+				// least preferred per preferences, but required so we must pick it
+				Required: []infrastructurev1.HardwareAffinityTerm{
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "foo"},
+						},
+					},
+				},
+				Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+					{
+						Weight: 50,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{"rack": "bar"},
+							},
+						},
+					},
+					{
+						Weight: 50,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{"rack": "baz"},
+							},
+						},
+					},
+					{
+						Weight: 0,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      "rack",
+										Operator: metav1.LabelSelectorOpIn,
+										Values:   []string{"foo"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, testOptions{
+			HardwareAffinity: &infrastructurev1.HardwareAffinity{
+				// these are OR'd so it should select everything, but we select for 'bar' via preferences
+				Required: []infrastructurev1.HardwareAffinityTerm{
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "non-existent"},
+						},
+					},
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "something-else"},
+						},
+					},
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "foo"},
+						},
+					},
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "bar"},
+						},
+					},
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"rack": "baz"},
+						},
+					},
+				},
+				Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+					{
+						Weight: 91,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      "rack",
+										Operator: metav1.LabelSelectorOpNotIn,
+										Values:   []string{"foo", "baz"},
+									},
+								},
+							},
+						},
+					},
+					{
+						Weight: 90,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      "rack",
+										Operator: metav1.LabelSelectorOpIn,
+										Values:   []string{"foo"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		testOptions{
+			HardwareAffinity: &infrastructurev1.HardwareAffinity{
+				Required: []infrastructurev1.HardwareAffinityTerm{
+					{
+						LabelSelector: metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      "non-existent-key",
+									Operator: metav1.LabelSelectorOpDoesNotExist,
+								},
+							},
+						},
+					},
+				},
+				Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+					{
+						Weight: 50,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{"rack": "baz"},
+							},
+						},
+					},
+					{
+						Weight: 10,
+						HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{"rack": "foo"},
+							},
+						},
+					},
+				},
+			},
+		})
+}
+
+//nolint:funlen
+func machineReconciliationHardwareAffinityHelper(t *testing.T, fooOptions testOptions, barOptions testOptions, bazOptions testOptions) {
+	t.Helper()
+	t.Parallel()
+	g := NewWithT(t)
+
+	fooMachineName := "fooMachineName"
+	barMachineName := "barMachineName"
+	bazMachineName := "bazMachineName"
+
+	firstHardwareUUID := uuid.New().String()
+	secondHardwareUUID := uuid.New().String()
+	thirdHardwareUUID := uuid.New().String()
+
+	fooTinkerbellMachineName := "machineInRackFoo"
+	barTinkerbellMachineName := "machineInRackBar"
+	bazTinkerbellMachineName := "machineInRackBaz"
+	fooHardwareName := "hwInRackFoo"
+	barHardwareName := "hwInRackBar"
+	bazHardwareName := "hwInRackBaz"
+	objects := []runtime.Object{
+		validTinkerbellMachine(bazTinkerbellMachineName, clusterNamespace, bazMachineName, thirdHardwareUUID, bazOptions),
+		validTinkerbellMachine(fooTinkerbellMachineName, clusterNamespace, fooMachineName, firstHardwareUUID, fooOptions),
+		validTinkerbellMachine(barTinkerbellMachineName, clusterNamespace, barMachineName, secondHardwareUUID, barOptions),
+
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+
+		validHardware(bazHardwareName, thirdHardwareUUID, "3.3.3.3", testOptions{Labels: map[string]string{"rack": "baz"}}),
+		validHardware(barHardwareName, secondHardwareUUID, "2.2.2.2", testOptions{Labels: map[string]string{"rack": "bar"}}),
+		validHardware(fooHardwareName, firstHardwareUUID, "1.1.1.1", testOptions{Labels: map[string]string{"rack": "foo"}}),
+
+		validMachine(barMachineName, clusterNamespace, clusterName),
+		validMachine(fooMachineName, clusterNamespace, clusterName),
+		validMachine(bazMachineName, clusterNamespace, clusterName),
+
+		validSecret(fooMachineName, clusterNamespace),
+		validSecret(barMachineName, clusterNamespace),
+		validSecret(bazMachineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, fooTinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tinkerbellMachineNamespacedName := types.NamespacedName{
+		Name:      fooTinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}
+
+	ctx := context.Background()
+
+	fooMachine := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(client.Get(ctx, tinkerbellMachineNamespacedName, fooMachine)).To(Succeed(), "Getting first updated machine")
+
+	_, err = reconcileMachineWithClient(client, barTinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tinkerbellMachineNamespacedName.Name = barTinkerbellMachineName
+	barMachine := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(client.Get(ctx, tinkerbellMachineNamespacedName, barMachine)).To(Succeed())
+
+	_, err = reconcileMachineWithClient(client, bazTinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tinkerbellMachineNamespacedName.Name = bazTinkerbellMachineName
+	bazMachine := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(client.Get(ctx, tinkerbellMachineNamespacedName, bazMachine)).To(Succeed())
+
+	g.Expect(fooMachine.Spec.HardwareName).To(Equal(fooHardwareName))
+	g.Expect(barMachine.Spec.HardwareName).To(Equal(barHardwareName))
+	g.Expect(bazMachine.Spec.HardwareName).To(Equal(bazHardwareName))
 }

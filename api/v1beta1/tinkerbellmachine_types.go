@@ -65,10 +65,43 @@ type TinkerbellMachineSpec struct {
 	// +optional
 	TemplateOverride string `json:"templateOverride,omitempty"`
 
+	// HardwareAffinity allows filtering for hardware.
+	// +optional
+	HardwareAffinity *HardwareAffinity `json:"hardwareAffinity,omitempty"`
+
 	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
 	// we put them in spec instead of status.
 	HardwareName string `json:"hardwareName,omitempty"`
 	ProviderID   string `json:"providerID,omitempty"`
+}
+
+// HardwareAffinity defines the required and preferred hardware affinities.
+type HardwareAffinity struct {
+	// Required are the required hardware affinity terms.  The terms are OR'd together, hardware must match one term to
+	// be considered.
+	// +optional
+	Required []HardwareAffinityTerm `json:"required,omitempty"`
+	// Preferred are the preferred hardware affinity terms. Hardware matching these terms are preferred according to the
+	// weights provided, but are not required.
+	// +optional
+	Preferred []WeightedHardwareAffinityTerm `json:"preferred,omitempty"`
+}
+
+// HardwareAffinityTerm is used to select for a particular existing hardware resource.
+type HardwareAffinityTerm struct {
+	// LabelSelector is used to select for particular hardware by label.
+	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+}
+
+// WeightedHardwareAffinityTerm is a HardwareAffinityTerm with an associated weight.  The weights of all the matched
+// WeightedHardwareAffinityTerm fields are added per-hardware to find the most preferred hardware.
+type WeightedHardwareAffinityTerm struct {
+	// Weight associated with matching the corresponding hardwareAffinityTerm, in the range 1-100.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	Weight int32 `json:"weight"`
+	// HardwareAffinityTerm is the term associated with the corresponding weight.
+	HardwareAffinityTerm HardwareAffinityTerm `json:"hardwareAffinityTerm"`
 }
 
 // TinkerbellMachineStatus defines the observed state of TinkerbellMachine.

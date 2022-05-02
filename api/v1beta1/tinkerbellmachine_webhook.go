@@ -31,12 +31,14 @@ func (m *TinkerbellMachine) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (m *TinkerbellMachine) ValidateCreate() error {
-	return nil
+	allErrs := m.validateSpec()
+
+	return aggregateObjErrors(m.GroupVersionKind().GroupKind(), m.Name, allErrs)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (m *TinkerbellMachine) ValidateUpdate(oldRaw runtime.Object) error {
-	var allErrs field.ErrorList
+	allErrs := m.validateSpec()
 
 	old, _ := oldRaw.(*TinkerbellMachine)
 
@@ -54,4 +56,24 @@ func (m *TinkerbellMachine) ValidateUpdate(oldRaw runtime.Object) error {
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (m *TinkerbellMachine) ValidateDelete() error {
 	return nil
+}
+
+func (m *TinkerbellMachine) validateSpec() field.ErrorList {
+	var allErrs field.ErrorList
+
+	fieldBasePath := field.NewPath("spec")
+
+	// TODO: there are probably more fields that have requirements
+
+	if spec := m.Spec; spec.HardwareAffinity != nil {
+		for i, term := range spec.HardwareAffinity.Preferred {
+			if term.Weight < 1 || term.Weight > 100 {
+				allErrs = append(allErrs,
+					field.Invalid(fieldBasePath.Child("HardwareAffinity", "Preferred").Index(i),
+						term.Weight, "must be in the range [1,100]"))
+			}
+		}
+	}
+
+	return allErrs
 }
