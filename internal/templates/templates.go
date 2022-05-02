@@ -19,7 +19,11 @@ limitations under the License.
 package templates
 
 import (
+	"bytes"
 	"fmt"
+	"text/template"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -32,15 +36,16 @@ var (
 
 // WorkflowTemplate is a helper struct for rendering CAPT Template data.
 type WorkflowTemplate struct {
-	Name          string
-	MetadataURL   string
-	ImageURL      string
-	DestDisk      string
-	DestPartition string
+	Name               string
+	MetadataURL        string
+	ImageURL           string
+	DestDisk           string
+	DestPartition      string
+	DeviceTemplateName string
 }
 
 // Render renders workflow template for a given machine including user-data.
-func (wt WorkflowTemplate) Render() (string, error) {
+func (wt *WorkflowTemplate) Render() (string, error) {
 	if wt.Name == "" {
 		return "", ErrMissingName
 	}
@@ -49,18 +54,33 @@ func (wt WorkflowTemplate) Render() (string, error) {
 		return "", ErrMissingImageURL
 	}
 
-	return fmt.Sprintf(workflowTemplate, wt.Name, wt.Name, wt.ImageURL, wt.DestDisk, wt.DestPartition,
-		wt.MetadataURL, wt.DestPartition, wt.DestPartition), nil
+	if wt.DeviceTemplateName == "" {
+		wt.DeviceTemplateName = "{{.device_1}}"
+	}
+
+	tpl, err := template.New("template").Parse(workflowTemplate)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to parse template")
+	}
+
+	buf := &bytes.Buffer{}
+
+	err = tpl.Execute(buf, wt)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to execute template")
+	}
+
+	return buf.String(), nil
 }
 
 const (
 	workflowTemplate = `
 version: "0.1"
-name: %s
+name: {{.Name}}
 global_timeout: 6000
 tasks:
-  - name: "%s"
-    worker: "{{.device_1}}"
+  - name: "{{.Name}}"
+    worker: "{{.DeviceTemplateName}}"
     volumes:
       - /dev:/dev
       - /dev/console:/dev/console
@@ -70,14 +90,14 @@ tasks:
         image: oci2disk:v1.0.0
         timeout: 360
         environment:
-          IMG_URL: %s
-          DEST_DISK: %s
+          IMG_URL: {{.ImageURL}}
+          DEST_DISK: {{.DestDisk}}
           COMPRESSED: true
       - name: "add-tink-cloud-init-config"
         image: writefile:v1.0.0
         timeout: 90
         environment:
-          DEST_DISK: %s
+          DEST_DISK: {{.DestPartition}}
           FS_TYPE: ext4
           DEST_PATH: /etc/cloud/cloud.cfg.d/10_tinkerbell.cfg
           UID: 0
@@ -87,7 +107,7 @@ tasks:
           CONTENTS: |
             datasource:
               Ec2:
-                metadata_urls: ["%s"]
+                metadata_urls: ["{{.MetadataURL}}"]
                 strict_id: false
             system_info:
               default_user:
@@ -102,7 +122,7 @@ tasks:
         image: writefile:v1.0.0
         timeout: 90
         environment:
-          DEST_DISK: %s
+          DEST_DISK: {{.DestPartition}}
           FS_TYPE: ext4
           DEST_PATH: /etc/cloud/ds-identify.cfg
           UID: 0
@@ -116,7 +136,7 @@ tasks:
         timeout: 90
         pid: host
         environment:
-          BLOCK_DEVICE: %s
+          BLOCK_DEVICE: {{.DestPartition}}
           FS_TYPE: ext4
 `
 )
