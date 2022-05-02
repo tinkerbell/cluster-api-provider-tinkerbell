@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2022 The Tinkerbell Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,13 +38,14 @@ import (
 
 func notImplemented(t *testing.T) {
 	t.Helper()
+	t.Parallel()
 
 	// t.Fatalf("not implemented")
 	t.Skip("not implemented")
 }
 
 //nolint:unparam
-func validTinkerbellMachine(name, namespace, machineName, hardwareUUID string) *infrastructurev1.TinkerbellMachine { //nolint:lll
+func validTinkerbellMachine(name, namespace, machineName, hardwareUUID string) *infrastructurev1.TinkerbellMachine {
 	return &infrastructurev1.TinkerbellMachine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -334,45 +335,45 @@ func Test_Machine_reconciliation(t *testing.T) {
 		t.Parallel()
 
 		// Requeue will be handled when resource is created.
-		t.Run("is_requeued_when_machine_object_is_missing",
+		t.Run("is_requeued_when_machine_object_is_missing", //nolint:paralleltest
 			machineReconciliationIsRequeuedWhenTinkerbellMachineObjectIsMissing)
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when ownerRef is set
-		t.Run("machine_has_no_owner_set", machineReconciliationIsRequeuedWhenTinkerbellMachineHasNoOwnerSet)
+		t.Run("machine_has_no_owner_set", machineReconciliationIsRequeuedWhenTinkerbellMachineHasNoOwnerSet) //nolint:paralleltest
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when bootstrap secret is set through the Watch on Machines
-		t.Run("bootstrap_secret_is_not_ready", machineReconciliationIsRequeuedWhenBootstrapSecretIsNotReady)
+		t.Run("bootstrap_secret_is_not_ready", machineReconciliationIsRequeuedWhenBootstrapSecretIsNotReady) //nolint:paralleltest
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when bootstrap secret is set through the Watch on Clusters
-		t.Run("cluster_infrastructure_is_not_ready", machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady)
+		t.Run("cluster_infrastructure_is_not_ready", machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady) //nolint:paralleltest
 	})
 
 	t.Run("fails_when", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("reconciler_is_nil", machineReconciliationFailsWhenReconcilerIsNil)
-		t.Run("reconciler_has_no_client_set", machineReconciliationFailsWhenReconcilerHasNoClientSet)
+		t.Run("reconciler_is_nil", machineReconciliationFailsWhenReconcilerIsNil)                     //nolint:paralleltest
+		t.Run("reconciler_has_no_client_set", machineReconciliationFailsWhenReconcilerHasNoClientSet) //nolint:paralleltest
 
 		// CAPI spec says this is optional, but @detiber says it's effectively required, so treat it as so.
-		t.Run("machine_has_no_version_set", machineReconciliationFailsWhenMachineHasNoVersionSet)
+		t.Run("machine_has_no_version_set", machineReconciliationFailsWhenMachineHasNoVersionSet) //nolint:paralleltest
 
-		t.Run("associated_cluster_object_does_not_exist",
+		t.Run("associated_cluster_object_does_not_exist", //nolint:paralleltest
 			machineReconciliationFailsWhenAssociatedClusterObjectDoesNotExist)
 
-		t.Run("associated_tinkerbell_cluster_object_does_not_exist",
+		t.Run("associated_tinkerbell_cluster_object_does_not_exist", //nolint:paralleltest
 			machineReconciliationFailsWhenAssociatedTinkerbellClusterObjectDoesNotExist)
 
 		// If for example CAPI changes key used to store bootstrap date, we shouldn't try to create machines
 		// with empty bootstrap config, we should fail early instead.
-		t.Run("bootstrap_config_is_empty", machineReconciliationFailsWhenBootstrapConfigIsEmpty)
-		t.Run("bootstrap_config_has_no_value_key", machineReconciliationFailsWhenBootstrapConfigHasNoValueKey)
+		t.Run("bootstrap_config_is_empty", machineReconciliationFailsWhenBootstrapConfigIsEmpty)               //nolint:paralleltest
+		t.Run("bootstrap_config_has_no_value_key", machineReconciliationFailsWhenBootstrapConfigHasNoValueKey) //nolint:paralleltest
 
-		t.Run("there_is_no_hardware_available", machineReconciliationFailsWhenThereIsNoHardwareAvailable)
+		t.Run("there_is_no_hardware_available", machineReconciliationFailsWhenThereIsNoHardwareAvailable) //nolint:paralleltest
 
-		t.Run("selected_hardware_has_no_ip_address_set", machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet)
+		t.Run("selected_hardware_has_no_ip_address_set", machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet) //nolint:paralleltest
 	})
 
 	// Single hardware should only ever be used for a single machine.
@@ -390,10 +391,10 @@ func Test_Machine_reconciliation(t *testing.T) {
 		t.Parallel()
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
-		t.Run("removes_tinkerbell_finalizer", notImplemented)
+		t.Run("removes_tinkerbell_finalizer", notImplemented) //nolint:paralleltest
 
 		// Removing machine should release used hardware.
-		t.Run("marks_hardware_as_available_for_other_machines", notImplemented)
+		t.Run("marks_hardware_as_available_for_other_machines", notImplemented) //nolint:paralleltest
 	})
 }
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2022 The Tinkerbell Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -144,25 +144,25 @@ func Test_Cluster_reconciliation(t *testing.T) {
 
 		// This is introduced in v1alpha3 of CAPI even though behavior diagram does not reflect it.
 		// This will be automatically requeued when the tinkerbellCluster is unpaused.
-		t.Run("tinkerbellcluster_is_paused", clusterReconciliationIsNotRequeuedWhenTinkerbellClusterIsPaused)
+		t.Run("tinkerbellcluster_is_paused", clusterReconciliationIsNotRequeuedWhenTinkerbellClusterIsPaused) //nolint:paralleltest
 
 		// This is introduced in v1alpha3 of CAPI even though behavior diagram does not reflect it.
 		// Requeue happens through watch of Cluster.
-		t.Run("cluster_is_paused", clusterReconciliationIsNotRequeuedWhenClusterIsPaused)
+		t.Run("cluster_is_paused", clusterReconciliationIsNotRequeuedWhenClusterIsPaused) //nolint:paralleltest
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior.
 		// This will be automatically requeued when the ownerRef is set.
-		t.Run("cluster_has_no_owner_set", clusterReconciliationIsNotRequeuedWhenClusterHasNoOwnerSet)
+		t.Run("cluster_has_no_owner_set", clusterReconciliationIsNotRequeuedWhenClusterHasNoOwnerSet) //nolint:paralleltest
 
 		// If reconciliation process started, but we cannot find cluster object anymore, it means object has been
 		// removed in the meanwhile. This means there is nothing to do.
-		t.Run("cluster_object_is_missing", clusterReconciliationIsNotRequeuedWhenClusterObjectIsMissing)
+		t.Run("cluster_object_is_missing", clusterReconciliationIsNotRequeuedWhenClusterObjectIsMissing) //nolint:paralleltest
 	})
 
 	t.Run("fails_when", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("reconciler_has_no_client_set", clusterReconciliationFailsWhenReconcilerHasNoClientSet)
+		t.Run("reconciler_has_no_client_set", clusterReconciliationFailsWhenReconcilerHasNoClientSet) //nolint:paralleltest
 	})
 }
 

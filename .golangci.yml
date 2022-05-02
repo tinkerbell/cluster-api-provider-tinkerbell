@@ -87,6 +87,9 @@ issues:
         - lll
         - wsl
       source: "^// \\+kubebuilder:"
+    - linters:
+      - lll
+      path: 'controllers/(.+)_test.go'
 
 linters-settings:
   importas:
@@ -158,3 +161,5 @@ run:
   - "zz_generated.*\\.go$"
   - ".*conversion.*\\.go$"
   allow-parallel-runners: true
+  skip-dirs:
+    - tink/ # TODO: remove this line after #160 is merged. The /tink dir is going away
