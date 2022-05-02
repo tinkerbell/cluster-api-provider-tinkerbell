@@ -9,7 +9,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/tinkerbell/tink v0.0.0-20210910200746-3743d31e0cf0
 	google.golang.org/grpc v1.41.0
-	google.golang.org/protobuf v1.27.1
+	google.golang.org/protobuf v1.28.0
 	k8s.io/api v0.22.8
 	k8s.io/apimachinery v0.22.8
 	k8s.io/client-go v0.22.8
