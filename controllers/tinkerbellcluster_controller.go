@@ -20,11 +20,9 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
@@ -162,44 +160,6 @@ var (
 	// ErrControlPlaneEndpointNotSet is returned when trying to reconcile when the ControlPlane Endpoint is not defined.
 	ErrControlPlaneEndpointNotSet = fmt.Errorf("controlplane endpoint is not set")
 )
-
-func nextAvailableHardware(ctx context.Context, k8sClient client.Client, extraSelectors []string) (*tinkv1.Hardware, error) { //nolint:lll
-	hardware, err := nextHardware(ctx, k8sClient, append(extraSelectors, fmt.Sprintf("!%s", HardwareOwnerNameLabel)))
-	if err != nil {
-		return nil, fmt.Errorf("getting next Hardware object: %w", err)
-	}
-
-	if hardware == nil {
-		return nil, ErrNoHardwareAvailable
-	}
-
-	return hardware, nil
-}
-
-func nextHardware(ctx context.Context, k8sClient client.Client, selectors []string) (*tinkv1.Hardware, error) { //nolint:lll
-	availableHardwares := &tinkv1.HardwareList{}
-
-	selectorsRaw := strings.Join(selectors, ",")
-
-	selector, err := labels.Parse(selectorsRaw)
-	if err != nil {
-		return nil, fmt.Errorf("parsing raw labels selector %q: %w", selectorsRaw, err)
-	}
-
-	options := client.MatchingLabelsSelector{
-		Selector: selector,
-	}
-
-	if err := k8sClient.List(ctx, availableHardwares, options); err != nil {
-		return nil, fmt.Errorf("listing hardware without owner: %w", err)
-	}
-
-	if len(availableHardwares.Items) == 0 {
-		return nil, nil
-	}
-
-	return &availableHardwares.Items[0], nil
-}
 
 func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	if hardware == nil {

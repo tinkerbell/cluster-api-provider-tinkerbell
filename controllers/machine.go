@@ -22,8 +22,12 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"text/template"
+
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -351,23 +355,118 @@ func (mrc *machineReconcileContext) ensureHardware() (*tinkv1.Hardware, error) {
 }
 
 func (mrc *machineReconcileContext) hardwareForMachine() (*tinkv1.Hardware, error) {
-	alreadySelectedHardwareSelector := []string{
-		fmt.Sprintf("%s=%s", HardwareOwnerNameLabel, mrc.tinkerbellMachine.Name),
-		fmt.Sprintf("%s=%s", HardwareOwnerNamespaceLabel, mrc.tinkerbellMachine.Namespace),
+	// first query for hardware that's already assigned
+	if hardware, err := mrc.assignedHardware(); err != nil {
+		return nil, err
+	} else if hardware != nil {
+		return hardware, nil
 	}
 
-	alreadySelectedHardware, err := nextHardware(mrc.ctx, mrc.client, alreadySelectedHardwareSelector)
+	// then fallback to searching for new hardware
+	hardwareSelector := mrc.tinkerbellMachine.Spec.HardwareAffinity.DeepCopy()
+	if hardwareSelector == nil {
+		hardwareSelector = &infrastructurev1.HardwareAffinity{}
+	}
+	// if no terms are specified, we create an empty one to ensure we always query for non-selected hardware
+	if len(hardwareSelector.Required) == 0 {
+		hardwareSelector.Required = append(hardwareSelector.Required, infrastructurev1.HardwareAffinityTerm{})
+	}
+
+	var matchingHardware []tinkv1.Hardware
+
+	// OR all of the required terms by selecting each individually, we could end up with duplicates in matchingHardware
+	// but it doesn't matter
+	for i := range hardwareSelector.Required {
+		var matched tinkv1.HardwareList
+
+		// add a selector for unselected hardware
+		hardwareSelector.Required[i].LabelSelector.MatchExpressions = append(
+			hardwareSelector.Required[i].LabelSelector.MatchExpressions,
+			metav1.LabelSelectorRequirement{
+				Key:      HardwareOwnerNameLabel,
+				Operator: metav1.LabelSelectorOpDoesNotExist,
+			})
+
+		selector, err := metav1.LabelSelectorAsSelector(&hardwareSelector.Required[i].LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("converting label selector: %w", err)
+		}
+
+		if err := mrc.client.List(mrc.ctx, &matched, &client.ListOptions{LabelSelector: selector}); err != nil {
+			return nil, fmt.Errorf("listing hardware without owner: %w", err)
+		}
+
+		matchingHardware = append(matchingHardware, matched.Items...)
+	}
+
+	// finally sort by our preferred affinity terms
+	cmp, err := byHardwareAffinity(matchingHardware, hardwareSelector.Preferred)
 	if err != nil {
-		return nil, fmt.Errorf("checking if hardware has already been selected: %w", err)
+		return nil, fmt.Errorf("sorting hardware by preference: %w", err)
 	}
 
-	// If we already selected Hardware but we failed to commit this information into TinkerbellMachine object,
-	// this allows to pick up the process from where we left.
-	if alreadySelectedHardware != nil {
-		return alreadySelectedHardware, nil
+	sort.Slice(matchingHardware, cmp)
+
+	if len(matchingHardware) > 0 {
+		return &matchingHardware[0], nil
+	}
+	// nothing was found
+	return nil, ErrNoHardwareAvailable
+}
+
+// assignedHardware returns hardware that is already assigned. In the event of no hardware being assigned, it returns
+// nil, nil.
+func (mrc *machineReconcileContext) assignedHardware() (*tinkv1.Hardware, error) {
+	var selectedHardware tinkv1.HardwareList
+	if err := mrc.client.List(mrc.ctx, &selectedHardware, client.MatchingLabels{
+		HardwareOwnerNameLabel:      mrc.tinkerbellMachine.Name,
+		HardwareOwnerNamespaceLabel: mrc.tinkerbellMachine.Namespace,
+	}); err != nil {
+		return nil, fmt.Errorf("listing hardware with owner: %w", err)
 	}
 
-	return nextAvailableHardware(mrc.ctx, mrc.client, nil)
+	if len(selectedHardware.Items) > 0 {
+		return &selectedHardware.Items[0], nil
+	}
+
+	return nil, nil
+}
+
+//nolint:lll
+func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1.WeightedHardwareAffinityTerm) (func(i int, j int) bool, error) {
+	scores := map[client.ObjectKey]int32{}
+	// compute scores for each item based on the preferred term weightss
+	for _, term := range preferred {
+		selector, err := metav1.LabelSelectorAsSelector(&term.HardwareAffinityTerm.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("constructing label selector: %w", err)
+		}
+
+		for i := range hardware {
+			hw := &hardware[i]
+			if selector.Matches(labels.Set(hw.Labels)) {
+				scores[client.ObjectKeyFromObject(hw)] = term.Weight
+			}
+		}
+	}
+
+	return func(i, j int) bool {
+		lhsScore := scores[client.ObjectKeyFromObject(&hardware[i])]
+		rhsScore := scores[client.ObjectKeyFromObject(&hardware[j])]
+		// sort by score in descending order
+		if lhsScore > rhsScore {
+			return true
+		} else if lhsScore < rhsScore {
+			return false
+		}
+
+		// just give a consistent ordering so we predictably pick one if scores are equal
+		if hardware[i].Namespace != hardware[j].Namespace {
+			return hardware[i].Namespace < hardware[j].Namespace
+		}
+
+		return hardware[i].Name < hardware[j].Name
+	}, nil
 }
 
 func (mrc *machineReconcileContext) workflowExists() (bool, error) {
