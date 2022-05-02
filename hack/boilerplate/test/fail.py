@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2015 The Kubernetes Authors.
+# Copyright 2022 The Tinkerbell Authors.
 #
 # failed
 #

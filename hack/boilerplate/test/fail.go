@@ -1,5 +1,5 @@
 /*
-Copyright 2014 The Kubernetes Authors.
+Copyright 2022 The Tinkerbell Authors.
 
 fail
 
