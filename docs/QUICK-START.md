@@ -245,6 +245,11 @@ kind: Hardware
 apiVersion: tinkerbell.org/v1alpha1
 metadata:
   name: hw-a
+  labels: # Labels are optional, and can be used for machine selection later
+    manufacturer: dell
+    idrac-version: 8
+    rack: 1
+    room: 2
 spec:
   id: 3f0c4d3d-00ef-4e46-983d-0e6b38da827a
 ```
@@ -307,6 +312,38 @@ Machine Deployments, etc.
 The file can be eventually modified using your editor of choice.
 
 See [clusterctl generate cluster] for more details.
+
+#### Select your hardware
+
+In the `capi-quickstart.yaml`, you'll see a `TinkerbellMachineTemplate` type where you can edit the `hardwareAffinity`
+to enforce which CAPI machines will get provisioned on particular hardware.
+
+```yaml
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: TinkerbellMachineTemplate
+metadata:
+  name: capi-quickstart-md-0
+  namespace: capt-system
+spec:
+  template:
+    spec:
+      hardwareAffinity:
+        required:  # 'required' entries are OR'd
+        - labelSelector:
+            matchLabels:
+              manufacturer: dell
+            matchExpressions:
+            - key: idracVersion
+              operator: In
+              values: ["7", "8"]
+        preferred: # 'preferred' entries are sorted by weight and then sequentially evaluated
+        - weight: 50
+          hardwareAffinityTerm:
+            labelSelector:
+              matchLabels:
+                rack: 1
+                room: 2
+```
 
 #### Apply the workload cluster
 
