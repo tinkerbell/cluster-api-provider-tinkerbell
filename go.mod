@@ -11,10 +11,10 @@ require (
 	github.com/tinkerbell/tink v0.0.0-20210910200746-3743d31e0cf0
 	google.golang.org/grpc v1.46.0
 	google.golang.org/protobuf v1.28.0
-	k8s.io/api v0.22.8
-	k8s.io/apimachinery v0.22.8
-	k8s.io/client-go v0.22.8
-	k8s.io/component-base v0.22.8
+	k8s.io/api v0.22.9
+	k8s.io/apimachinery v0.22.9
+	k8s.io/client-go v0.22.9
+	k8s.io/component-base v0.22.9
 	k8s.io/klog/v2 v2.10.0
 	k8s.io/utils v0.0.0-20211116205334-6203023598ed
 	sigs.k8s.io/cluster-api v1.0.2
