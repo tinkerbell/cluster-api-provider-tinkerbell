@@ -37,9 +37,10 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 const providerIDPlaceholder = "PROVIDER_ID"
@@ -91,7 +92,7 @@ func (mrc *machineReconcileContext) ensureDependencies() error {
 		return fmt.Errorf("ensuring template: %w", err)
 	}
 
-	if err := mrc.ensureWorkflow(); err != nil {
+	if err := mrc.ensureWorkflow(hardware); err != nil {
 		return fmt.Errorf("ensuring workflow: %w", err)
 	}
 
@@ -127,7 +128,8 @@ func (mrc *machineReconcileContext) Reconcile() error {
 
 func (mrc *machineReconcileContext) templateExists() (bool, error) {
 	namespacedName := types.NamespacedName{
-		Name: mrc.tinkerbellMachine.Name,
+		Name:      mrc.tinkerbellMachine.Name,
+		Namespace: mrc.tinkerbellMachine.Namespace,
 	}
 
 	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1.Template{})
@@ -173,13 +175,13 @@ func (mrc *machineReconcileContext) imageURL() (string, error) {
 }
 
 func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) error {
-	if len(hardware.Status.Disks) < 1 {
+	if len(hardware.Spec.Disks) < 1 {
 		return ErrHardwareMissingDiskConfiguration
 	}
 
 	templateData := mrc.tinkerbellMachine.Spec.TemplateOverride
 	if templateData == "" {
-		targetDisk := hardware.Status.Disks[0].Device
+		targetDisk := hardware.Spec.Disks[0].Device
 		targetDevice := firstPartitionFromDevice(targetDisk)
 
 		imageURL, err := mrc.imageURL()
@@ -210,7 +212,8 @@ func (mrc *machineReconcileContext) createTemplate(hardware *tinkv1.Hardware) er
 
 	templateObject := &tinkv1.Template{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: mrc.tinkerbellMachine.Name,
+			Name:      mrc.tinkerbellMachine.Name,
+			Namespace: mrc.tinkerbellMachine.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
@@ -288,7 +291,8 @@ func (mrc *machineReconcileContext) setStatus(hardware *tinkv1.Hardware) error {
 		hardware = &tinkv1.Hardware{}
 
 		namespacedName := types.NamespacedName{
-			Name: mrc.tinkerbellMachine.Spec.HardwareName,
+			Name:      mrc.tinkerbellMachine.Spec.HardwareName,
+			Namespace: mrc.tinkerbellMachine.Namespace,
 		}
 
 		if err := mrc.client.Get(mrc.ctx, namespacedName, hardware); err != nil {
@@ -345,7 +349,7 @@ func (mrc *machineReconcileContext) ensureHardware() (*tinkv1.Hardware, error) {
 	}
 
 	mrc.tinkerbellMachine.Spec.HardwareName = hardware.Name
-	mrc.tinkerbellMachine.Spec.ProviderID = fmt.Sprintf("tinkerbell://%s", hardware.Spec.ID)
+	mrc.tinkerbellMachine.Spec.ProviderID = fmt.Sprintf("tinkerbell://%s", hardware.UID)
 
 	if err := mrc.ensureHardwareUserData(hardware, mrc.tinkerbellMachine.Spec.ProviderID); err != nil {
 		return nil, fmt.Errorf("ensuring Hardware user data: %w", err)
@@ -471,7 +475,8 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 
 func (mrc *machineReconcileContext) workflowExists() (bool, error) {
 	namespacedName := types.NamespacedName{
-		Name: mrc.tinkerbellMachine.Name,
+		Name:      mrc.tinkerbellMachine.Name,
+		Namespace: mrc.tinkerbellMachine.Namespace,
 	}
 
 	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1.Workflow{})
@@ -486,10 +491,11 @@ func (mrc *machineReconcileContext) workflowExists() (bool, error) {
 	return false, nil
 }
 
-func (mrc *machineReconcileContext) createWorkflow() error {
+func (mrc *machineReconcileContext) createWorkflow(hardware *tinkv1.Hardware) error {
 	workflow := &tinkv1.Workflow{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: mrc.tinkerbellMachine.Name,
+			Name:      mrc.tinkerbellMachine.Name,
+			Namespace: mrc.tinkerbellMachine.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
@@ -501,7 +507,7 @@ func (mrc *machineReconcileContext) createWorkflow() error {
 		},
 		Spec: tinkv1.WorkflowSpec{
 			TemplateRef: mrc.tinkerbellMachine.Name,
-			HardwareRef: mrc.tinkerbellMachine.Spec.HardwareName,
+			HardwareMap: map[string]string{"device_1": hardware.Spec.Metadata.Instance.ID},
 		},
 	}
 
@@ -512,7 +518,7 @@ func (mrc *machineReconcileContext) createWorkflow() error {
 	return nil
 }
 
-func (mrc *machineReconcileContext) ensureWorkflow() error {
+func (mrc *machineReconcileContext) ensureWorkflow(hardware *tinkv1.Hardware) error {
 	workflowExists, err := mrc.workflowExists()
 	if err != nil {
 		return fmt.Errorf("checking if workflow exists: %w", err)
@@ -524,7 +530,7 @@ func (mrc *machineReconcileContext) ensureWorkflow() error {
 
 	mrc.log.Info("Workflow does not exist, creating")
 
-	return mrc.createWorkflow()
+	return mrc.createWorkflow(hardware)
 }
 
 type image struct {

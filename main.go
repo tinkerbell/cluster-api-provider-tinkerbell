@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
-	tinkclient "github.com/tinkerbell/tink/client"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
@@ -36,13 +35,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/client"
-	tinkhardware "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/hardware"
-	tinktemplate "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/template"
-	tinkworkflow "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/controllers/workflow"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -216,39 +212,6 @@ func addHealthChecks(mgr ctrl.Manager) error {
 	return nil
 }
 
-func setupTinkShimControllers(ctx context.Context, mgr ctrl.Manager) error {
-	if err := tinkclient.Setup(); err != nil {
-		return fmt.Errorf("unable to create tinkerbell client: %w", err)
-	}
-
-	hwClient := client.NewHardwareClient(tinkclient.HardwareClient)
-	templateClient := client.NewTemplateClient(tinkclient.TemplateClient)
-	workflowClient := client.NewWorkflowClient(tinkclient.WorkflowClient, hwClient)
-
-	if err := (&tinkhardware.Reconciler{
-		Client:         mgr.GetClient(),
-		HardwareClient: hwClient,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellHardwareConcurrency}); err != nil {
-		return fmt.Errorf("unable to create tink hardware controller: %w", err)
-	}
-
-	if err := (&tinktemplate.Reconciler{
-		Client:         mgr.GetClient(),
-		TemplateClient: templateClient,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellTemplateConcurrency}); err != nil {
-		return fmt.Errorf("unable to create tink template controller: %w", err)
-	}
-
-	if err := (&tinkworkflow.Reconciler{
-		Client:         mgr.GetClient(),
-		WorkflowClient: workflowClient,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellWorkflowConcurrency}); err != nil {
-		return fmt.Errorf("unable to create tink workflow controller: %w", err)
-	}
-
-	return nil
-}
-
 func setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	if err := (&controllers.TinkerbellClusterReconciler{
 		Client:           mgr.GetClient(),
@@ -334,11 +297,6 @@ func main() { //nolint:funlen
 
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
-
-	if err := setupTinkShimControllers(ctx, mgr); err != nil {
-		setupLog.Error(err, "failed to add Tinkerbell Shim Controllers")
-		os.Exit(1)
-	}
 
 	if err := setupReconcilers(ctx, mgr); err != nil {
 		setupLog.Error(err, "failed to add Tinkerbell Reconcilers")

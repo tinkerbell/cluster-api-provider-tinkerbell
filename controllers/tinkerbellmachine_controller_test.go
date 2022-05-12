@@ -31,9 +31,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 func notImplemented(t *testing.T) {
@@ -166,12 +167,11 @@ func validSecret(name, namespace string) *corev1.Secret {
 func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardware {
 	hw := &tinkv1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:      name,
+			Namespace: clusterNamespace,
+			UID:       types.UID(uuid),
 		},
 		Spec: tinkv1.HardwareSpec{
-			ID: uuid,
-		},
-		Status: tinkv1.HardwareStatus{
 			Disks: []tinkv1.Disk{
 				{
 					Device: "/dev/sda",
@@ -184,6 +184,11 @@ func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardwa
 							Address: ip,
 						},
 					},
+				},
+			},
+			Metadata: &tinkv1.HardwareMetadata{
+				Instance: &tinkv1.MetadataInstance{
+					ID: ip,
 				},
 			},
 		},
@@ -226,7 +231,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	ctx := context.Background()
 
 	globalResourceName := types.NamespacedName{
-		Name: tinkerbellMachineName,
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
 	}
 
 	t.Run("creates_template", func(t *testing.T) {
@@ -319,7 +325,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		g := NewWithT(t)
 
 		hardwareNamespacedName := types.NamespacedName{
-			Name: hardwareName,
+			Name:      hardwareName,
+			Namespace: clusterNamespace,
 		}
 
 		updatedHardware := &tinkv1.Hardware{}
@@ -477,7 +484,8 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 	g.Expect(err).NotTo(HaveOccurred())
 
 	hardwareNamespacedName := types.NamespacedName{
-		Name: hardwareName,
+		Name:      hardwareName,
+		Namespace: clusterNamespace,
 	}
 
 	updatedHardware := &tinkv1.Hardware{}
