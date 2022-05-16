@@ -48,46 +48,35 @@ TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 GO_INSTALL = ./scripts/go_install.sh
 
-REPO_ROOT := $(shell git rev-parse --show-toplevel)
-# Set --output-base for conversion-gen if we are not within GOPATH
-ifneq ($(abspath $(REPO_ROOT)),$(shell go env GOPATH)/src/github.com/tinkerbell/cluster-api-provider-tinkerbell)
-	GEN_OUTPUT_BASE := --output-base=$(REPO_ROOT)
-else
-	export GOPATH := $(shell go env GOPATH)
-endif
-
 # Binaries.
-CONTROLLER_GEN_VER := v0.8.0
 CONTROLLER_GEN_BIN := controller-gen
-CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
-
-CONVERSION_GEN_VER := v0.22.9
-CONVERSION_GEN_BIN := conversion-gen
-CONVERSION_GEN := $(TOOLS_BIN_DIR)/$(CONVERSION_GEN_BIN)-$(CONVERSION_GEN_VER)
-
-ENVSUBST_VER := v1.2.0
-ENVSUBST_BIN := envsubst
-ENVSUBST := $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)
+CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)
 
 GOLANGCI_LINT_VER := v1.49.0
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
-KUSTOMIZE_VER := v4.5.4
 KUSTOMIZE_BIN := kustomize
-KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
+KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)
 
-GINKGO_VER := v2.1.4
-GINKGO_BIN := ginkgo
-GINKGO := $(TOOLS_BIN_DIR)/$(GINKGO_BIN)-$(GINKGO_VER)
-
-KUBECTL_VER := v1.22.9
+KUBECTL_VER := v1.23.0
 KUBECTL_BIN := kubectl
 KUBECTL := $(TOOLS_BIN_DIR)/$(KUBECTL_BIN)-$(KUBECTL_VER)
 
 KIND_VER := v0.12.0
 KIND_BIN := kind
 KIND := $(TOOLS_BIN_DIR)/$(KIND_BIN)-$(KIND_VER)
+
+toolsBins := $(addprefix ${TOOLS_BIN_DIR}/,$(notdir $(shell awk -F'"' '/^\s*_/ {print $$2}' tools.go | sed 's|/v[[:digit:]]\+||')))
+
+# installs cli tools defined in tools.go
+$(toolsBins): go.mod go.sum tools.go
+$(toolsBins): CMD=$(shell grep -w '$(@F)' tools.go | awk -F'"' '{print $$2}')
+$(toolsBins):
+	GOBIN=$(TOOLS_BIN_DIR) go install $(CMD)
+
+.PHONY: tools
+tools: ${toolsBins} ## Build Go based build tools
 
 TIMEOUT := $(shell command -v timeout || command -v gtimeout)
 
@@ -139,23 +128,8 @@ test: ## Run tests
 ## Tooling Binaries
 ## --------------------------------------
 
-$(ENVSUBST): ## Build envsubst from tools folder.
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/a8m/envsubst/cmd/envsubst $(ENVSUBST_BIN) $(ENVSUBST_VER)
-
 $(GOLANGCI_LINT): ## Build golangci-lint from tools folder.
 	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
-
-$(KUSTOMIZE): ## Build kustomize from tools folder.
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/kustomize/kustomize/v4 $(KUSTOMIZE_BIN) $(KUSTOMIZE_VER)
-
-$(CONTROLLER_GEN): ## Build controller-gen from tools folder.
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/controller-tools/cmd/controller-gen $(CONTROLLER_GEN_BIN) $(CONTROLLER_GEN_VER)
-
-$(CONVERSION_GEN): ## Build conversion-gen.
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) k8s.io/code-generator/cmd/conversion-gen $(CONVERSION_GEN_BIN) $(CONVERSION_GEN_VER)
-
-$(GINKGO): ## Build ginkgo.
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/onsi/ginkgo/ginkgo $(GINKGO_BIN) $(GINKGO_VER)
 
 $(KUBECTL): ## Build kubectl
 	mkdir -p $(TOOLS_BIN_DIR)
@@ -194,20 +168,20 @@ generate: ## Generate code
 #	$(MAKE) generate-templates
 
 # .PHONY: generate-templates
-# generate-templates: $(KUSTOMIZE) ## Generate cluster templates
+# generate-templates: tools ## Generate cluster templates
 # 	$(KUSTOMIZE) build templates/no-cloud-provider --load_restrictor none > templates/cluster-template-no-cloud-provider.yaml
 # 	$(KUSTOMIZE) build templates/legacy --load_restrictor none > templates/cluster-template-legacy.yaml
 # 	$(KUSTOMIZE) build templates/crs-cni-cpem --load_restrictor none > templates/cluster-template.yaml
 
 .PHONY: generate-go
-generate-go: $(CONTROLLER_GEN) $(CONVERSION_GEN) ## Runs Go related generate targets
+generate-go: tools ## Runs Go related generate targets
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
 		object:headerFile=./hack/boilerplate.go.txt
 	go generate ./...
 
 .PHONY: generate-manifests
-generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
+generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
 		crd:crdVersions=v1 \
@@ -289,7 +263,7 @@ release: clean-release
 	$(MAKE) release-templates
 
 .PHONY: release-manifests
-release-manifests: $(KUSTOMIZE) $(RELEASE_DIR) ## Builds the manifests to publish with a release
+release-manifests: tools $(RELEASE_DIR) ## Builds the manifests to publish with a release
 	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/infrastructure-components.yaml
 
 .PHONY: release-metadata
