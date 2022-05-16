@@ -124,10 +124,6 @@ func (tmr *TinkerbellMachineReconciler) validate() error {
 		return ErrConfigurationNil
 	}
 
-	if tmr.Client == nil {
-		return ErrMissingClient
-	}
-
 	return nil
 }
 
