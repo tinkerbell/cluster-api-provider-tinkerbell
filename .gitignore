@@ -30,6 +30,7 @@ kubeconfig
 
 # from the sed we run
 config/default/manager_image_patch.yaml-e
+config/default/manager_pull_policy.yaml-e
 
 # test results
 _artifacts
