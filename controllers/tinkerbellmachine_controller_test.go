@@ -18,6 +18,7 @@ package controllers_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -288,7 +289,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		g.Expect(updatedMachine.Spec.ProviderID).To(HaveSuffix(hardwareUUID),
+		g.Expect(updatedMachine.Spec.ProviderID).To(Equal(fmt.Sprintf("tinkerbell://%s/%s", clusterNamespace, hardwareName)),
 			"Expected ProviderID field to include hardwareUUID")
 	})
 

@@ -349,7 +349,7 @@ func (mrc *machineReconcileContext) ensureHardware() (*tinkv1.Hardware, error) {
 	}
 
 	mrc.tinkerbellMachine.Spec.HardwareName = hardware.Name
-	mrc.tinkerbellMachine.Spec.ProviderID = fmt.Sprintf("tinkerbell://%s", hardware.UID)
+	mrc.tinkerbellMachine.Spec.ProviderID = fmt.Sprintf("tinkerbell://%s/%s", hardware.Namespace, hardware.Name)
 
 	if err := mrc.ensureHardwareUserData(hardware, mrc.tinkerbellMachine.Spec.ProviderID); err != nil {
 		return nil, fmt.Errorf("ensuring Hardware user data: %w", err)
