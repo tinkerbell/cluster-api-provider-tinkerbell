@@ -264,11 +264,6 @@ func (mrc *machineReconcileContext) ensureTemplate(hardware *tinkv1.Hardware) er
 }
 
 func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1.Hardware) error {
-	patchHelper, err := patch.NewHelper(hardware, mrc.client)
-	if err != nil {
-		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
-	}
-
 	if len(hardware.ObjectMeta.Labels) == 0 {
 		hardware.ObjectMeta.Labels = map[string]string{}
 	}
@@ -279,7 +274,7 @@ func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1.Hardw
 	// Add finalizer to hardware as well to make sure we release it before Machine object is removed.
 	controllerutil.AddFinalizer(hardware, infrastructurev1.MachineFinalizer)
 
-	if err := patchHelper.Patch(mrc.ctx, hardware); err != nil {
+	if err := mrc.client.Update(mrc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
 	}
 
