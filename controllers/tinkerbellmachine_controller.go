@@ -50,6 +50,7 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=hardware;hardware/status,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=workflows;workflows/status,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=bmc.tinkerbell.org,resources=bmcjobs,verbs=get;list;watch;create
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
 func (tmr *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
