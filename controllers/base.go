@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
@@ -31,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -169,6 +171,57 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 
 	if err := patchHelper.Patch(bmrc.ctx, hardware); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
+	}
+
+	if err := bmrc.powerOffHardware(hardware); err != nil {
+		return fmt.Errorf("failed to power off hardware: %w", err)
+	}
+
+	return nil
+}
+
+// powerOffHardware uses hardware BMCRef to create a job to power off the machine.
+func (bmrc *baseMachineReconcileContext) powerOffHardware(hardware *tinkv1.Hardware) error {
+	if hardware.Spec.BMCRef == nil {
+		bmrc.log.Info("Skipping hardware power off", "BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
+
+		return nil
+	}
+
+	return bmrc.createPowerOffJob(hardware)
+}
+
+// createPowerOffJob creates a BMCJob object with the required tasks for hardware power off.
+func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hardware) error {
+	powerOffAction := rufiov1.HardPowerOff
+	bmcJob := &rufiov1.BMCJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name),
+			Namespace: bmrc.tinkerbellMachine.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+					Kind:       "TinkerbellMachine",
+					Name:       bmrc.tinkerbellMachine.Name,
+					UID:        bmrc.tinkerbellMachine.ObjectMeta.UID,
+				},
+			},
+		},
+		Spec: rufiov1.BMCJobSpec{
+			BaseboardManagementRef: rufiov1.BaseboardManagementRef{
+				Name:      hardware.Spec.BMCRef.Name,
+				Namespace: bmrc.tinkerbellMachine.Namespace,
+			},
+			Tasks: []rufiov1.Task{
+				{
+					PowerAction: &powerOffAction,
+				},
+			},
+		},
+	}
+
+	if err := bmrc.client.Create(bmrc.ctx, bmcJob); err != nil {
+		return fmt.Errorf("creating BMCJob: %w", err)
 	}
 
 	return nil
