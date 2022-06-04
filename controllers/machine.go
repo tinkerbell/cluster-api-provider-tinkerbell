@@ -123,6 +123,10 @@ func (mrc *machineReconcileContext) Reconcile() error {
 		return fmt.Errorf("marking machine as ready: %w", err)
 	}
 
+	if err := mrc.updateHardwareState(); err != nil {
+		return fmt.Errorf("error setting hardware state: %w", err)
+	}
+
 	return nil
 }
 
