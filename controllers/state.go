@@ -112,10 +112,6 @@ func (mrc *machineReconcileContext) updateHardwareState() error {
 		return fmt.Errorf("error getting workflow state: %w", err)
 	}
 
-	if wfState == "" {
-		return fmt.Errorf("no workflow found for machine %q", mrc.tinkerbellMachine.Name) // nolint:goerr113
-	}
-
 	hw, err := mrc.hardwareForMachine()
 	if err != nil {
 		return fmt.Errorf("error getting hardware: %w", err)
