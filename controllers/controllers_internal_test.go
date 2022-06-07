@@ -73,7 +73,7 @@ func TestUpdateState(t *testing.T) { // nolint:paralleltest
 
 	for name, tt := range tests { // nolint:paralleltest
 		t.Run(name, func(t *testing.T) {
-			err := updateState(tt.wfState, tt.hw)
+			err := updateInstanceState(tt.wfState, tt.hw)
 			if err != nil && !isNilPointer(err) {
 				t.Fatalf("updateState(%v, %v) = %v, want nil pointer err", tt.wfState, tt.hw, err)
 			}

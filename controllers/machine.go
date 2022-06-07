@@ -96,6 +96,10 @@ func (mrc *machineReconcileContext) ensureDependencies() error {
 		return fmt.Errorf("ensuring workflow: %w", err)
 	}
 
+	if err := mrc.setHardwareState(hardware); err != nil {
+		return fmt.Errorf("error setting hardware instance state: %w", err)
+	}
+
 	return nil
 }
 
@@ -121,10 +125,6 @@ func (mrc *machineReconcileContext) Reconcile() error {
 
 	if err := mrc.markAsReady(); err != nil {
 		return fmt.Errorf("marking machine as ready: %w", err)
-	}
-
-	if err := mrc.updateHardwareState(); err != nil {
-		return fmt.Errorf("error setting hardware state: %w", err)
 	}
 
 	return nil
