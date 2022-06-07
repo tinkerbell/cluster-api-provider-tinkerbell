@@ -85,7 +85,9 @@ func updateInstanceState(wfState tinkv1.WorkflowState, hw *tinkv1.Hardware) erro
 		// Setting Instance.State to "provisioning", combined with Metadata.State = "in_use",
 		// will ensure that the machine will NOT be given any netboot options by Boots.
 		hw.Spec.Metadata.Instance.State = provisioning
-	case tinkv1.WorkflowStateSuccess:
+	case tinkv1.WorkflowState(""), tinkv1.WorkflowStateSuccess:
+		// The tink client will never return a workflow state of tinkv1.WorkflowStateSuccess.
+		// see https://github.com/tinkerbell/tink/blob/main/pkg/apis/core/v1alpha1/workflow_methods.go#L64
 		// Setting Instance.State to "provisioned", combined with Metadata.State = "in_use",
 		// will ensure that the machine will NOT be given any netboot options by Boots.
 		hw.Spec.Metadata.Instance.State = provisioned
