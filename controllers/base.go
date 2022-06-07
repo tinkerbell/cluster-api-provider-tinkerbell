@@ -156,6 +156,12 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
+	// setting these Metadata.State and Metadata.Instance.State = "" indicates to Boots
+	// that this hardware should be allowed to netboot. FYI, this is not authoritative.
+	// Other hardware values can be set to prohibit netbooting of a machine.
+	// See this Boots function for the logic around this: https://github.com/tinkerbell/boots/blob/main/job/dhcp.go#L115
+	hardware.Spec.Metadata.State = ""
+	hardware.Spec.Metadata.Instance.State = ""
 
 	controllerutil.RemoveFinalizer(hardware, infrastructurev1.MachineFinalizer)
 
