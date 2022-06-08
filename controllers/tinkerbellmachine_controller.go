@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
 
@@ -111,7 +113,13 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 			&source.Kind{Type: &clusterv1.Cluster{}},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
 			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(log)),
-		)
+		).
+		Watches(
+			&source.Kind{Type: &tinkv1.Workflow{}},
+			&handler.EnqueueRequestForOwner{
+				OwnerType:    &infrastructurev1.TinkerbellMachine{},
+				IsController: true,
+			})
 
 	if err := builder.Complete(tmr); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
