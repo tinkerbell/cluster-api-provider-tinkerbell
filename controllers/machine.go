@@ -19,6 +19,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -43,7 +44,11 @@ import (
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
 )
 
-const providerIDPlaceholder = "PROVIDER_ID"
+const (
+	providerIDPlaceholder = "PROVIDER_ID"
+	inUse                 = "in_use"
+	provisioned           = "provisioned"
+)
 
 type machineReconcileContext struct {
 	*baseMachineReconcileContext
@@ -72,6 +77,12 @@ type MachineCreator interface {
 	HardwareAvailable(ctx context.Context, id string) (bool, error)
 }
 
+// lastActionStarted returns the state of the final action in a hardware's workflow or an error if the workflow
+// has not reached the final action.
+func (mrc *machineReconcileContext) lastActionStarted(wf *tinkv1.Workflow) bool {
+	return wf.GetCurrentActionIndex() == wf.GetTotalNumberOfActions()-1
+}
+
 func (mrc *machineReconcileContext) addFinalizer() error {
 	controllerutil.AddFinalizer(mrc.tinkerbellMachine, infrastructurev1.MachineFinalizer)
 
@@ -82,49 +93,92 @@ func (mrc *machineReconcileContext) addFinalizer() error {
 	return nil
 }
 
-func (mrc *machineReconcileContext) ensureDependencies() error {
-	hardware, err := mrc.ensureHardware()
-	if err != nil {
-		return fmt.Errorf("ensuring hardware: %w", err)
-	}
-
-	if err := mrc.ensureTemplate(hardware); err != nil {
-		return fmt.Errorf("ensuring template: %w", err)
-	}
-
-	if err := mrc.ensureWorkflow(hardware); err != nil {
-		return fmt.Errorf("ensuring workflow: %w", err)
-	}
-
-	if err := mrc.setHardwareState(hardware); err != nil {
-		return fmt.Errorf("error setting hardware instance state: %w", err)
-	}
-
-	return nil
+func (mrc *machineReconcileContext) isHardwareReady(hw *tinkv1.Hardware) bool {
+	return hw.Spec.Metadata.State == inUse && hw.Spec.Metadata.Instance.State == provisioned
 }
 
-func (mrc *machineReconcileContext) markAsReady() error {
+type errRequeueRequested struct{}
+
+func (e *errRequeueRequested) Error() string {
+	return "requeue requested"
+}
+
+func (mrc *machineReconcileContext) ensureTemplateAndWorkflow(hw *tinkv1.Hardware) (*tinkv1.Workflow, error) {
+	wf, err := mrc.workflow()
+
+	switch {
+	case apierrors.IsNotFound(err):
+		if err := mrc.ensureTemplate(hw); err != nil {
+			return nil, fmt.Errorf("failed to ensure template: %w", err)
+		}
+
+		if err := mrc.createWorkflow(hw); err != nil {
+			return nil, fmt.Errorf("failed to create workflow: %w", err)
+		}
+
+		return nil, &errRequeueRequested{}
+	case err != nil:
+		return nil, fmt.Errorf("failed to get workflow: %w", err)
+	default:
+	}
+
+	s := wf.GetCurrentActionState()
+	if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
+		mrc.log.Info("current action is in a failed or timed out state: %v", wf.GetCurrentAction())
+	}
+
+	return wf, nil
+}
+
+//
+func (mrc *machineReconcileContext) Reconcile() error {
+	defer func() {
+		// make sure we do not create orphaned objects.
+		if err := mrc.addFinalizer(); err != nil {
+			mrc.log.Error(err, "error adding finalizer")
+		}
+	}()
+
+	hw, err := mrc.ensureHardware()
+	if err != nil {
+		return fmt.Errorf("failed to ensure hardware: %w", err)
+	}
+
+	if !mrc.isHardwareReady(hw) {
+		wf, err := mrc.ensureTemplateAndWorkflow(hw)
+
+		switch {
+		case errors.Is(err, &errRequeueRequested{}):
+			return nil
+		case err != nil:
+			return fmt.Errorf("ensure template and workflow returned: %w", err)
+		}
+
+		if !mrc.lastActionStarted(wf) {
+			return nil
+		}
+
+		hw.Spec.Metadata.State = inUse
+		hw.Spec.Metadata.Instance.State = provisioned
+
+		if err := mrc.patchHardware(hw); err != nil {
+			return fmt.Errorf("failed to patch hardware: %w", err)
+		}
+	}
+
 	mrc.tinkerbellMachine.Status.Ready = true
 
-	if err := mrc.patch(); err != nil {
-		return fmt.Errorf("patching machine with ready status: %w", err)
-	}
-
-	return nil
+	return mrc.patch()
 }
 
-func (mrc *machineReconcileContext) Reconcile() error {
-	// To make sure we do not create orphaned objects.
-	if err := mrc.addFinalizer(); err != nil {
-		return fmt.Errorf("adding finalizer: %w", err)
+func (mrc *machineReconcileContext) patchHardware(hw *tinkv1.Hardware) error {
+	patchHelper, err := patch.NewHelper(hw, mrc.client)
+	if err != nil {
+		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
 
-	if err := mrc.ensureDependencies(); err != nil {
-		return fmt.Errorf("ensuring machine dependencies: %w", err)
-	}
-
-	if err := mrc.markAsReady(); err != nil {
-		return fmt.Errorf("marking machine as ready: %w", err)
+	if err := patchHelper.Patch(mrc.ctx, hw); err != nil {
+		return fmt.Errorf("patching Hardware object: %w", err)
 	}
 
 	return nil
@@ -279,7 +333,7 @@ func (mrc *machineReconcileContext) takeHardwareOwnership(hardware *tinkv1.Hardw
 	controllerutil.AddFinalizer(hardware, infrastructurev1.MachineFinalizer)
 
 	if err := mrc.client.Update(mrc.ctx, hardware); err != nil {
-		return fmt.Errorf("patching Hardware object: %w", err)
+		return fmt.Errorf("updating Hardware object: %w", err)
 	}
 
 	return nil
@@ -472,22 +526,25 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 	}, nil
 }
 
-func (mrc *machineReconcileContext) workflowExists() (bool, error) {
+func (mrc *machineReconcileContext) workflow() (*tinkv1.Workflow, error) {
 	namespacedName := types.NamespacedName{
 		Name:      mrc.tinkerbellMachine.Name,
 		Namespace: mrc.tinkerbellMachine.Namespace,
 	}
 
-	err := mrc.client.Get(mrc.ctx, namespacedName, &tinkv1.Workflow{})
-	if err == nil {
-		return true, nil
+	t := &tinkv1.Workflow{}
+
+	err := mrc.client.Get(mrc.ctx, namespacedName, t)
+	if err != nil {
+		msg := "failed to get workflow: %w"
+		if !apierrors.IsNotFound(err) {
+			msg = "no workflow exists: %w"
+		}
+
+		return t, fmt.Errorf(msg, err) // nolint:goerr113
 	}
 
-	if !apierrors.IsNotFound(err) {
-		return false, fmt.Errorf("checking if workflow exists: %w", err)
-	}
-
-	return false, nil
+	return t, nil
 }
 
 func (mrc *machineReconcileContext) createWorkflow(hardware *tinkv1.Hardware) error {
@@ -515,21 +572,6 @@ func (mrc *machineReconcileContext) createWorkflow(hardware *tinkv1.Hardware) er
 	}
 
 	return nil
-}
-
-func (mrc *machineReconcileContext) ensureWorkflow(hardware *tinkv1.Hardware) error {
-	workflowExists, err := mrc.workflowExists()
-	if err != nil {
-		return fmt.Errorf("checking if workflow exists: %w", err)
-	}
-
-	if workflowExists {
-		return nil
-	}
-
-	mrc.log.Info("Workflow does not exist, creating")
-
-	return mrc.createWorkflow(hardware)
 }
 
 type image struct {
