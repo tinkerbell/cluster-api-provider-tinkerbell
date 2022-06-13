@@ -79,7 +79,7 @@ type MachineCreator interface {
 
 // lastActionStarted returns the state of the final action in a hardware's workflow or an error if the workflow
 // has not reached the final action.
-func (mrc *machineReconcileContext) lastActionStarted(wf *tinkv1.Workflow) bool {
+func lastActionStarted(wf *tinkv1.Workflow) bool {
 	return wf.GetCurrentActionIndex() == wf.GetTotalNumberOfActions()-1
 }
 
@@ -93,7 +93,7 @@ func (mrc *machineReconcileContext) addFinalizer() error {
 	return nil
 }
 
-func (mrc *machineReconcileContext) isHardwareReady(hw *tinkv1.Hardware) bool {
+func isHardwareReady(hw *tinkv1.Hardware) bool {
 	return hw.Spec.Metadata.State == inUse && hw.Spec.Metadata.Instance.State == provisioned
 }
 
@@ -104,7 +104,7 @@ func (e *errRequeueRequested) Error() string {
 }
 
 func (mrc *machineReconcileContext) ensureTemplateAndWorkflow(hw *tinkv1.Hardware) (*tinkv1.Workflow, error) {
-	wf, err := mrc.workflow()
+	wf, err := mrc.getWorkflow()
 
 	switch {
 	case apierrors.IsNotFound(err):
@@ -144,7 +144,7 @@ func (mrc *machineReconcileContext) Reconcile() error {
 		return fmt.Errorf("failed to ensure hardware: %w", err)
 	}
 
-	if !mrc.isHardwareReady(hw) {
+	if !isHardwareReady(hw) {
 		wf, err := mrc.ensureTemplateAndWorkflow(hw)
 
 		switch {
@@ -154,7 +154,7 @@ func (mrc *machineReconcileContext) Reconcile() error {
 			return fmt.Errorf("ensure template and workflow returned: %w", err)
 		}
 
-		if !mrc.lastActionStarted(wf) {
+		if !lastActionStarted(wf) {
 			return nil
 		}
 
@@ -168,7 +168,7 @@ func (mrc *machineReconcileContext) Reconcile() error {
 
 	mrc.tinkerbellMachine.Status.Ready = true
 
-	return mrc.patch()
+	return nil
 }
 
 func (mrc *machineReconcileContext) patchHardware(hw *tinkv1.Hardware) error {
@@ -526,7 +526,7 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 	}, nil
 }
 
-func (mrc *machineReconcileContext) workflow() (*tinkv1.Workflow, error) {
+func (mrc *machineReconcileContext) getWorkflow() (*tinkv1.Workflow, error) {
 	namespacedName := types.NamespacedName{
 		Name:      mrc.tinkerbellMachine.Name,
 		Namespace: mrc.tinkerbellMachine.Namespace,
