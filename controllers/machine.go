@@ -122,11 +122,6 @@ func (mrc *machineReconcileContext) ensureTemplateAndWorkflow(hw *tinkv1.Hardwar
 	default:
 	}
 
-	s := wf.GetCurrentActionState()
-	if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
-		mrc.log.Info("current action is in a failed or timed out state: %v", wf.GetCurrentAction())
-	}
-
 	return wf, nil
 }
 
@@ -152,6 +147,11 @@ func (mrc *machineReconcileContext) Reconcile() error {
 			return nil
 		case err != nil:
 			return fmt.Errorf("ensure template and workflow returned: %w", err)
+		}
+
+		s := wf.GetCurrentActionState()
+		if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
+			return errWorkflowFailed
 		}
 
 		if !lastActionStarted(wf) {

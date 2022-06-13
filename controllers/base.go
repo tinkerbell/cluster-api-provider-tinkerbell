@@ -74,6 +74,8 @@ var (
 	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
 	// ErrBootstrapUserDataEmpty is the error returned when the referenced bootstrap data is empty.
 	ErrBootstrapUserDataEmpty = fmt.Errorf("received bootstrap user data is empty")
+	// errWorkflowFailed is the error returned when the workflow fails.
+	errWorkflowFailed = fmt.Errorf("workflow failed")
 )
 
 // New builds a context for machine reconciliation process, collecting all required
