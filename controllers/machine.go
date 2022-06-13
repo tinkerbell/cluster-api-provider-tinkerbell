@@ -548,6 +548,7 @@ func (mrc *machineReconcileContext) getWorkflow() (*tinkv1.Workflow, error) {
 }
 
 func (mrc *machineReconcileContext) createWorkflow(hardware *tinkv1.Hardware) error {
+	c := true
 	workflow := &tinkv1.Workflow{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mrc.tinkerbellMachine.Name,
@@ -558,6 +559,7 @@ func (mrc *machineReconcileContext) createWorkflow(hardware *tinkv1.Hardware) er
 					Kind:       "TinkerbellMachine",
 					Name:       mrc.tinkerbellMachine.Name,
 					UID:        mrc.tinkerbellMachine.ObjectMeta.UID,
+					Controller: &c,
 				},
 			},
 		},
