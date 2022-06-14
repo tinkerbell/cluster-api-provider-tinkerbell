@@ -36,8 +36,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 // TinkerbellClusterReconciler implements Reconciler interface.
@@ -166,23 +167,23 @@ func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 		return "", ErrHardwareIsNil
 	}
 
-	if len(hardware.Status.Interfaces) == 0 {
+	if len(hardware.Spec.Interfaces) == 0 {
 		return "", ErrHardwareMissingInterfaces
 	}
 
-	if hardware.Status.Interfaces[0].DHCP == nil {
+	if hardware.Spec.Interfaces[0].DHCP == nil {
 		return "", ErrHardwareFirstInterfaceNotDHCP
 	}
 
-	if hardware.Status.Interfaces[0].DHCP.IP == nil {
+	if hardware.Spec.Interfaces[0].DHCP.IP == nil {
 		return "", ErrHardwareFirstInterfaceDHCPMissingIP
 	}
 
-	if hardware.Status.Interfaces[0].DHCP.IP.Address == "" {
+	if hardware.Spec.Interfaces[0].DHCP.IP.Address == "" {
 		return "", ErrHardwareFirstInterfaceDHCPMissingIP
 	}
 
-	return hardware.Status.Interfaces[0].DHCP.IP.Address, nil
+	return hardware.Spec.Interfaces[0].DHCP.IP.Address, nil
 }
 
 func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoint, error) {

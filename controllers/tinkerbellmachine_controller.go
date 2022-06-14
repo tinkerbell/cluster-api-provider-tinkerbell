@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
 
@@ -45,6 +47,9 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines;machines/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets;,verbs=get;list;watch
+// +kubebuilder:rbac:groups=tinkerbell.org,resources=hardware;hardware/status,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tinkerbell.org,resources=workflows;workflows/status,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
 func (tmr *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -108,7 +113,13 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 			&source.Kind{Type: &clusterv1.Cluster{}},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
 			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(log)),
-		)
+		).
+		Watches(
+			&source.Kind{Type: &tinkv1.Workflow{}},
+			&handler.EnqueueRequestForOwner{
+				OwnerType:    &infrastructurev1.TinkerbellMachine{},
+				IsController: true,
+			})
 
 	if err := builder.Complete(tmr); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)

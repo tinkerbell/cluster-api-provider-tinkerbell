@@ -18,6 +18,7 @@ package controllers_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,9 +32,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 func notImplemented(t *testing.T) {
@@ -166,12 +168,11 @@ func validSecret(name, namespace string) *corev1.Secret {
 func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardware {
 	hw := &tinkv1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:      name,
+			Namespace: clusterNamespace,
+			UID:       types.UID(uuid),
 		},
 		Spec: tinkv1.HardwareSpec{
-			ID: uuid,
-		},
-		Status: tinkv1.HardwareStatus{
 			Disks: []tinkv1.Disk{
 				{
 					Device: "/dev/sda",
@@ -184,6 +185,11 @@ func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardwa
 							Address: ip,
 						},
 					},
+				},
+			},
+			Metadata: &tinkv1.HardwareMetadata{
+				Instance: &tinkv1.MetadataInstance{
+					ID: ip,
 				},
 			},
 		},
@@ -200,6 +206,58 @@ func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardwa
 	}
 
 	return hw
+}
+
+func validTemplate(name, namespace string) *tinkv1.Template {
+	tmpl := `version: "0.1"
+name: ubuntu_provisioning
+global_timeout: 6000
+tasks:
+  - name: "os-installation"
+	worker: "{{.device_1}}"
+	volumes:
+	  - /dev:/dev
+	  - /dev/console:/dev/console
+	  - /lib/firmware:/lib/firmware:ro
+	actions:
+	  - name: "disk-wipe"
+		image: disk-wipe
+		timeout: 90`
+
+	return &tinkv1.Template{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: tinkv1.TemplateSpec{
+			Data: &tmpl,
+		},
+	}
+}
+
+func validWorkflow(name, namespace string) *tinkv1.Workflow {
+	return &tinkv1.Workflow{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: tinkv1.WorkflowSpec{
+			TemplateRef: name,
+		},
+		Status: tinkv1.WorkflowStatus{
+			Tasks: []tinkv1.Task{
+				{
+					Name: name,
+					Actions: []tinkv1.Action{
+						{
+							Name:   name,
+							Status: tinkv1.WorkflowStateRunning,
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 //nolint:funlen
@@ -226,7 +284,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	ctx := context.Background()
 
 	globalResourceName := types.NamespacedName{
-		Name: tinkerbellMachineName,
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
 	}
 
 	t.Run("creates_template", func(t *testing.T) {
@@ -282,7 +341,117 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		g.Expect(updatedMachine.Spec.ProviderID).To(HaveSuffix(hardwareUUID),
+		g.Expect(updatedMachine.Spec.ProviderID).To(Equal(fmt.Sprintf("tinkerbell://%s/%s", clusterNamespace, hardwareName)),
+			"Expected ProviderID field to include hardwareUUID")
+	})
+
+	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
+	t.Run("sets_tinkerbell_finalizer", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		g.Expect(updatedMachine.ObjectMeta.Finalizers).NotTo(BeEmpty(), "Expected at least one finalizer to be set")
+	})
+
+	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
+	t.Run("sets_tinkerbell_machine_IP_address", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Expected at least one IP address to be populated")
+
+		g.Expect(updatedMachine.Status.Addresses[0].Address).To(BeEquivalentTo(hardwareIP),
+			"Expected first IP address to be %q", hardwareIP)
+	})
+
+	// So it becomes unavailable for other clusters.
+	t.Run("sets_ownership_label_on_selected_hardware", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		hardwareNamespacedName := types.NamespacedName{
+			Name:      hardwareName,
+			Namespace: clusterNamespace,
+		}
+
+		updatedHardware := &tinkv1.Hardware{}
+		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
+
+		g.Expect(updatedHardware.ObjectMeta.Labels).To(
+			HaveKeyWithValue(controllers.HardwareOwnerNameLabel, tinkerbellMachineName),
+			"Expected owner name label to be set on Hardware")
+
+		g.Expect(updatedHardware.ObjectMeta.Labels).To(
+			HaveKeyWithValue(controllers.HardwareOwnerNamespaceLabel, clusterNamespace),
+			"Expected owner namespace label to be set on Hardware")
+	})
+
+	// Ensure idempotency of reconcile operation. E.g. we shouldn't try to create the template with the same name
+	// on every iteration.
+	t.Run("succeeds_when_executed_twice", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+		g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+	})
+
+	// Status should be updated on every run.
+	//
+	// Don't execute this test in parallel, as we reset status here.
+	t.Run("refreshes_status_when_machine_is_already_provisioned", func(t *testing.T) { //nolint:paralleltest
+		updatedMachine.Status.Addresses = nil
+		g := NewWithT(t)
+
+		g.Expect(client.Update(context.Background(), updatedMachine)).To(Succeed())
+		_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		updatedMachine = &infrastructurev1.TinkerbellMachine{}
+		g.Expect(client.Get(ctx, namespacedName, updatedMachine)).To(Succeed())
+		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Machine status should be updated on every reconciliation")
+	})
+}
+
+//nolint:funlen
+func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+		validTemplate(tinkerbellMachineName, clusterNamespace),
+		validWorkflow(tinkerbellMachineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+	ctx := context.Background()
+
+	namespacedName := types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}
+
+	updatedMachine := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(client.Get(ctx, namespacedName, updatedMachine)).To(Succeed())
+
+	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
+	t.Run("sets_provider_id_with_selected_hardware_id", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		g.Expect(updatedMachine.Spec.ProviderID).To(Equal(fmt.Sprintf("tinkerbell://%s/%s", clusterNamespace, hardwareName)),
 			"Expected ProviderID field to include hardwareUUID")
 	})
 
@@ -319,7 +488,8 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		g := NewWithT(t)
 
 		hardwareNamespacedName := types.NamespacedName{
-			Name: hardwareName,
+			Name:      hardwareName,
+			Namespace: clusterNamespace,
 		}
 
 		updatedHardware := &tinkv1.Hardware{}
@@ -477,7 +647,8 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 	g.Expect(err).NotTo(HaveOccurred())
 
 	hardwareNamespacedName := types.NamespacedName{
-		Name: hardwareName,
+		Name:      hardwareName,
+		Namespace: clusterNamespace,
 	}
 
 	updatedHardware := &tinkv1.Hardware{}

@@ -31,8 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	tinkv1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
 )
 
 // ReconcileContext describes functionality required for reconciling Machine or Cluster object
@@ -73,6 +74,8 @@ var (
 	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
 	// ErrBootstrapUserDataEmpty is the error returned when the referenced bootstrap data is empty.
 	ErrBootstrapUserDataEmpty = fmt.Errorf("received bootstrap user data is empty")
+	// errWorkflowFailed is the error returned when the workflow fails.
+	errWorkflowFailed = fmt.Errorf("workflow failed")
 )
 
 // New builds a context for machine reconciliation process, collecting all required
@@ -140,7 +143,8 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 	hardware := &tinkv1.Hardware{}
 
 	namespacedName := types.NamespacedName{
-		Name: bmrc.tinkerbellMachine.Spec.HardwareName,
+		Name:      bmrc.tinkerbellMachine.Spec.HardwareName,
+		Namespace: bmrc.tinkerbellMachine.Namespace,
 	}
 
 	if err := bmrc.client.Get(bmrc.ctx, namespacedName, hardware); err != nil {
@@ -154,6 +158,12 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
+	// setting these Metadata.State and Metadata.Instance.State = "" indicates to Boots
+	// that this hardware should be allowed to netboot. FYI, this is not authoritative.
+	// Other hardware values can be set to prohibit netbooting of a machine.
+	// See this Boots function for the logic around this: https://github.com/tinkerbell/boots/blob/main/job/dhcp.go#L115
+	hardware.Spec.Metadata.State = ""
+	hardware.Spec.Metadata.Instance.State = ""
 
 	controllerutil.RemoveFinalizer(hardware, infrastructurev1.MachineFinalizer)
 

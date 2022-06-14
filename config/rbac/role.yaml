@@ -77,8 +77,6 @@ rules:
   - hardware
   - hardware/status
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
