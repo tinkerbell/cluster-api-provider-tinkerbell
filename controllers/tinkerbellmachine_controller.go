@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -117,6 +118,12 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 		).
 		Watches(
 			&source.Kind{Type: &tinkv1.Workflow{}},
+			&handler.EnqueueRequestForOwner{
+				OwnerType:    &infrastructurev1.TinkerbellMachine{},
+				IsController: true,
+			}).
+		Watches(
+			&source.Kind{Type: &rufiov1.BMCJob{}},
 			&handler.EnqueueRequestForOwner{
 				OwnerType:    &infrastructurev1.TinkerbellMachine{},
 				IsController: true,
