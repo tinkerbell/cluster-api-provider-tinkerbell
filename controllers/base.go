@@ -213,6 +213,10 @@ func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hard
 		return fmt.Errorf("creating BMCJob: %w", err)
 	}
 
+	bmrc.log.Info("Created BMCJob to power off hardware",
+		"Name", bmcJob.Name,
+		"Namespace", bmcJob.Namespace)
+
 	return nil
 }
 
