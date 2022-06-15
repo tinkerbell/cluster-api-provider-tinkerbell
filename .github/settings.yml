@@ -11,6 +11,8 @@ collaborators:
   # Approvers
   - username: tstromberg
     permission: push
+  - username: chrisdoherty4
+    permission: push
   # Reviewers
   - username: mmlb
     permission: triage
