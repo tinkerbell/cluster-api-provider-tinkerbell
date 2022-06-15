@@ -141,18 +141,7 @@ func (bmrc *baseMachineReconcileContext) MachineScheduledForDeletion() bool {
 	return !bmrc.tinkerbellMachine.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
-func (bmrc *baseMachineReconcileContext) releaseHardware() error {
-	hardware := &tinkv1.Hardware{}
-
-	namespacedName := types.NamespacedName{
-		Name:      bmrc.tinkerbellMachine.Spec.HardwareName,
-		Namespace: bmrc.tinkerbellMachine.Namespace,
-	}
-
-	if err := bmrc.client.Get(bmrc.ctx, namespacedName, hardware); err != nil {
-		return fmt.Errorf("getting hardware: %w", err)
-	}
-
+func (bmrc *baseMachineReconcileContext) releaseHardware(hardware *tinkv1.Hardware) error {
 	patchHelper, err := patch.NewHelper(hardware, bmrc.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
@@ -173,27 +162,26 @@ func (bmrc *baseMachineReconcileContext) releaseHardware() error {
 		return fmt.Errorf("patching Hardware object: %w", err)
 	}
 
-	if err := bmrc.powerOffHardware(hardware); err != nil {
-		return fmt.Errorf("failed to power off hardware: %w", err)
+	return nil
+}
+
+func (bmrc *baseMachineReconcileContext) getHardwareForMachine(hardware *tinkv1.Hardware) error {
+	namespacedName := types.NamespacedName{
+		Name:      bmrc.tinkerbellMachine.Spec.HardwareName,
+		Namespace: bmrc.tinkerbellMachine.Namespace,
+	}
+
+	if err := bmrc.client.Get(bmrc.ctx, namespacedName, hardware); err != nil {
+		return fmt.Errorf("getting hardware: %w", err)
 	}
 
 	return nil
 }
 
-// powerOffHardware uses hardware BMCRef to create a job to power off the machine.
-func (bmrc *baseMachineReconcileContext) powerOffHardware(hardware *tinkv1.Hardware) error {
-	if hardware.Spec.BMCRef == nil {
-		bmrc.log.Info("Skipping hardware power off", "BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
-
-		return nil
-	}
-
-	return bmrc.createPowerOffJob(hardware)
-}
-
 // createPowerOffJob creates a BMCJob object with the required tasks for hardware power off.
 func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hardware) error {
 	powerOffAction := rufiov1.HardPowerOff
+	controller := true
 	bmcJob := &rufiov1.BMCJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name),
@@ -204,6 +192,7 @@ func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hard
 					Kind:       "TinkerbellMachine",
 					Name:       bmrc.tinkerbellMachine.Name,
 					UID:        bmrc.tinkerbellMachine.ObjectMeta.UID,
+					Controller: &controller,
 				},
 			},
 		},
@@ -227,10 +216,71 @@ func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hard
 	return nil
 }
 
+// getBMCJob fetches the BMCJob with name JName.
+func (bmrc *baseMachineReconcileContext) getBMCJob(jName string, bmj *rufiov1.BMCJob) error {
+	namespacedName := types.NamespacedName{
+		Name:      jName,
+		Namespace: bmrc.tinkerbellMachine.Namespace,
+	}
+
+	if err := bmrc.client.Get(bmrc.ctx, namespacedName, bmj); err != nil {
+		return fmt.Errorf("GET BMCJob: %w", err)
+	}
+
+	return nil
+}
+
 // DeleteMachineWithDependencies removes template and workflow objects associated with given machine.
 func (bmrc *baseMachineReconcileContext) DeleteMachineWithDependencies() error {
 	bmrc.log.Info("Removing machine", "hardwareName", bmrc.tinkerbellMachine.Spec.HardwareName)
+	// Fetch hardware for the machine.
+	hardware := &tinkv1.Hardware{}
+	if err := bmrc.getHardwareForMachine(hardware); err != nil {
+		return err
+	}
 
+	if err := bmrc.removeDependencies(hardware); err != nil {
+		return err
+	}
+
+	// The hardware BMCRef is nil.
+	// Remove finalizers and let machine object delete.
+	if hardware.Spec.BMCRef == nil {
+		bmrc.log.Info("Hardware BMC reference not present; skipping hardware power off",
+			"BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
+
+		return bmrc.removeFinalizer()
+	}
+
+	// Fetch a poweroff BMCJob for the machine.
+	// If Job not found, we remove dependencies and create job.
+	bmcJob := &rufiov1.BMCJob{}
+	jobName := fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name)
+
+	err := bmrc.getBMCJob(jobName, bmcJob)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return bmrc.createPowerOffJob(hardware)
+		}
+
+		return fmt.Errorf("get bmc job for machine: %w", err)
+	}
+
+	// Check the Job conditions to ensure the power off job is complete.
+	if bmcJob.HasCondition(rufiov1.JobCompleted, rufiov1.ConditionTrue) {
+		return bmrc.removeFinalizer()
+	}
+
+	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
+	}
+
+	return nil
+}
+
+// removeDependencies removes the Template, Workflow linked to the machine.
+// Deletes the machine hardware labels for the machine.
+func (bmrc *baseMachineReconcileContext) removeDependencies(hardware *tinkv1.Hardware) error {
 	if err := bmrc.removeTemplate(); err != nil {
 		return fmt.Errorf("removing Template: %w", err)
 	}
@@ -239,10 +289,14 @@ func (bmrc *baseMachineReconcileContext) DeleteMachineWithDependencies() error {
 		return fmt.Errorf("removing Workflow: %w", err)
 	}
 
-	if err := bmrc.releaseHardware(); err != nil {
+	if err := bmrc.releaseHardware(hardware); err != nil {
 		return fmt.Errorf("releasing Hardware: %w", err)
 	}
 
+	return nil
+}
+
+func (bmrc *baseMachineReconcileContext) removeFinalizer() error {
 	controllerutil.RemoveFinalizer(bmrc.tinkerbellMachine, infrastructurev1.MachineFinalizer)
 
 	bmrc.log.Info("Patching Machine object to remove finalizer")
