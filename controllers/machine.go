@@ -143,6 +143,10 @@ func (mrc *machineReconcileContext) Reconcile() error {
 	if !isHardwareReady(hw) {
 		wf, err := mrc.ensureTemplateAndWorkflow(hw)
 
+		if ensureJobErr := mrc.ensureHardwareProvisionJob(hw); ensureJobErr != nil {
+			return fmt.Errorf("failed to ensure hardware ready for provisioning: %w", ensureJobErr)
+		}
+
 		switch {
 		case errors.Is(err, &errRequeueRequested{}):
 			return nil
@@ -151,6 +155,7 @@ func (mrc *machineReconcileContext) Reconcile() error {
 		}
 
 		s := wf.GetCurrentActionState()
+
 		if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
 			return errWorkflowFailed
 		}
@@ -163,6 +168,8 @@ func (mrc *machineReconcileContext) Reconcile() error {
 			return fmt.Errorf("failed to patch hardware: %w", err)
 		}
 	}
+
+	mrc.log.Info("Marking TinkerbellMachine as Ready")
 
 	mrc.tinkerbellMachine.Status.Ready = true
 
@@ -410,10 +417,6 @@ func (mrc *machineReconcileContext) ensureHardware() (*tinkv1.Hardware, error) {
 		return nil, fmt.Errorf("ensuring Hardware user data: %w", err)
 	}
 
-	if err := mrc.ensureHardwareReadyToProvision(hardware); err != nil {
-		return nil, fmt.Errorf("failed to ensure hardware ready for provisioning: %w", err)
-	}
-
 	return hardware, mrc.setStatus(hardware)
 }
 
@@ -532,56 +535,52 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 	}, nil
 }
 
-// ensureHardwareReadyToProvision ensures the hardware is ready to be provisioned.
+// ensureHardwareProvisionJob ensures the hardware is ready to be provisioned.
 // Uses the BMCRef from the hardware to create a BMCJob.
 // The BMCJob is responsible for getting the machine to desired state for provisioning.
-func (mrc *machineReconcileContext) ensureHardwareReadyToProvision(hardware *tinkv1.Hardware) error {
+// If a BMCJob is already found and has failed, we error.
+func (mrc *machineReconcileContext) ensureHardwareProvisionJob(hardware *tinkv1.Hardware) error {
 	if hardware.Spec.BMCRef == nil {
-		mrc.log.Info("Skipping BMC state management", "BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
-
-		return nil
+		mrc.log.Info("Hardware BMC reference not present; skipping BMCJob creation",
+			"BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
 	}
 
+	bmcJob := &rufiov1.BMCJob{}
 	jobName := fmt.Sprintf("%s-provision", mrc.tinkerbellMachine.Name)
-	// Check if BMC Job already exists for the machine
-	exists, err := mrc.bmcJobExists(jobName)
+
+	err := mrc.getBMCJob(jobName, bmcJob)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Create a BMCJob for hardware provisioning
+			return mrc.createHardwareProvisionJob(hardware, jobName)
+		}
+
 		return err
 	}
 
-	if exists {
-		return nil
-	}
-
-	// Create a BMCJob for hardware provisioning
-	if err := mrc.createBMCJobForHardware(hardware, jobName); err != nil {
-		return err
+	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
 	}
 
 	return nil
 }
 
-// bmcJobExists checks if a BMCJob exists for the machine.
-func (mrc *machineReconcileContext) bmcJobExists(name string) (bool, error) {
+// getBMCJob fetches the BMCJob with name JName.
+func (mrc *machineReconcileContext) getBMCJob(jName string, bmj *rufiov1.BMCJob) error {
 	namespacedName := types.NamespacedName{
-		Name:      name,
+		Name:      jName,
 		Namespace: mrc.tinkerbellMachine.Namespace,
 	}
 
-	err := mrc.client.Get(mrc.ctx, namespacedName, &rufiov1.BMCJob{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-
-		return false, fmt.Errorf("checking if bmc job exists: %w", err)
+	if err := mrc.client.Get(mrc.ctx, namespacedName, bmj); err != nil {
+		return fmt.Errorf("GET BMCJob: %w", err)
 	}
 
-	return true, nil
+	return nil
 }
 
-// createBMCJobForHardware creates a BMCJob object with the required tasks for hardware provisioning.
-func (mrc *machineReconcileContext) createBMCJobForHardware(hardware *tinkv1.Hardware, name string) error {
+// createHardwareProvisionJob creates a BMCJob object with the required tasks for hardware provisioning.
+func (mrc *machineReconcileContext) createHardwareProvisionJob(hardware *tinkv1.Hardware, name string) error {
 	powerOffAction := rufiov1.HardPowerOff
 	powerOnAction := rufiov1.PowerOn
 	bmcJob := &rufiov1.BMCJob{
@@ -611,7 +610,7 @@ func (mrc *machineReconcileContext) createBMCJobForHardware(hardware *tinkv1.Har
 						Devices: []rufiov1.BootDevice{
 							rufiov1.PXE,
 						},
-						EFIBoot: false,
+						EFIBoot: hardware.Spec.Interfaces[0].DHCP.UEFI,
 					},
 				},
 				{
@@ -624,6 +623,10 @@ func (mrc *machineReconcileContext) createBMCJobForHardware(hardware *tinkv1.Har
 	if err := mrc.client.Create(mrc.ctx, bmcJob); err != nil {
 		return fmt.Errorf("creating BMCJob: %w", err)
 	}
+
+	mrc.log.Info("Created BMCJob to get hardware ready for provisioning",
+		"Name", bmcJob.Name,
+		"Namespace", bmcJob.Namespace)
 
 	return nil
 }
