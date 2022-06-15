@@ -140,6 +140,10 @@ func (mrc *machineReconcileContext) Reconcile() error {
 		return fmt.Errorf("failed to ensure hardware: %w", err)
 	}
 
+	return mrc.reconcile(hw)
+}
+
+func (mrc *machineReconcileContext) reconcile(hw *tinkv1.Hardware) error {
 	if !isHardwareReady(hw) {
 		wf, err := mrc.ensureTemplateAndWorkflow(hw)
 
@@ -543,6 +547,8 @@ func (mrc *machineReconcileContext) ensureHardwareProvisionJob(hardware *tinkv1.
 	if hardware.Spec.BMCRef == nil {
 		mrc.log.Info("Hardware BMC reference not present; skipping BMCJob creation",
 			"BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
+
+		return nil
 	}
 
 	bmcJob := &rufiov1.BMCJob{}
