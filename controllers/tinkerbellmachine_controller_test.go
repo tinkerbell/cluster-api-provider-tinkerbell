@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -411,6 +412,25 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		g.Expect(client.Get(ctx, namespacedName, updatedMachine)).To(Succeed())
 		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Machine status should be updated on every reconciliation")
 	})
+
+	t.Run("in_use_states_are_not_set", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		hardwareNamespacedName := types.NamespacedName{
+			Name:      hardwareName,
+			Namespace: clusterNamespace,
+		}
+
+		updatedHardware := &tinkv1.Hardware{}
+		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
+		if diff := cmp.Diff(updatedHardware.Spec.Metadata.State, ""); diff != "" {
+			t.Errorf(diff)
+		}
+		if diff := cmp.Diff(updatedHardware.Spec.Metadata.Instance.State, ""); diff != "" {
+			t.Errorf(diff)
+		}
+	})
 }
 
 //nolint:funlen
@@ -528,6 +548,25 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 		updatedMachine = &infrastructurev1.TinkerbellMachine{}
 		g.Expect(client.Get(ctx, namespacedName, updatedMachine)).To(Succeed())
 		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Machine status should be updated on every reconciliation")
+	})
+
+	t.Run("in_use_states_are_set", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		hardwareNamespacedName := types.NamespacedName{
+			Name:      hardwareName,
+			Namespace: clusterNamespace,
+		}
+
+		updatedHardware := &tinkv1.Hardware{}
+		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
+		if diff := cmp.Diff(updatedHardware.Spec.Metadata.State, "in_use"); diff != "" {
+			t.Errorf(diff)
+		}
+		if diff := cmp.Diff(updatedHardware.Spec.Metadata.Instance.State, "provisioned"); diff != "" {
+			t.Errorf(diff)
+		}
 	})
 }
 
