@@ -35,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -56,6 +57,8 @@ func init() {
 	_ = infrastructurev1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
 	_ = tinkv1.AddToScheme(scheme)
+	_ = rufiov1.AddToScheme(scheme)
+
 	// +kubebuilder:scaffold:scheme
 }
 

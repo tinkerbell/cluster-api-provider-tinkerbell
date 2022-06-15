@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -139,8 +140,16 @@ func (mrc *machineReconcileContext) Reconcile() error {
 		return fmt.Errorf("failed to ensure hardware: %w", err)
 	}
 
+	return mrc.reconcile(hw)
+}
+
+func (mrc *machineReconcileContext) reconcile(hw *tinkv1.Hardware) error {
 	if !isHardwareReady(hw) {
 		wf, err := mrc.ensureTemplateAndWorkflow(hw)
+
+		if ensureJobErr := mrc.ensureHardwareProvisionJob(hw); ensureJobErr != nil {
+			return fmt.Errorf("failed to ensure hardware ready for provisioning: %w", ensureJobErr)
+		}
 
 		switch {
 		case errors.Is(err, &errRequeueRequested{}):
@@ -150,6 +159,7 @@ func (mrc *machineReconcileContext) Reconcile() error {
 		}
 
 		s := wf.GetCurrentActionState()
+
 		if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
 			return errWorkflowFailed
 		}
@@ -162,6 +172,8 @@ func (mrc *machineReconcileContext) Reconcile() error {
 			return fmt.Errorf("failed to patch hardware: %w", err)
 		}
 	}
+
+	mrc.log.Info("Marking TinkerbellMachine as Ready")
 
 	mrc.tinkerbellMachine.Status.Ready = true
 
@@ -525,6 +537,104 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 
 		return hardware[i].Name < hardware[j].Name
 	}, nil
+}
+
+// ensureHardwareProvisionJob ensures the hardware is ready to be provisioned.
+// Uses the BMCRef from the hardware to create a BMCJob.
+// The BMCJob is responsible for getting the machine to desired state for provisioning.
+// If a BMCJob is already found and has failed, we error.
+func (mrc *machineReconcileContext) ensureHardwareProvisionJob(hardware *tinkv1.Hardware) error {
+	if hardware.Spec.BMCRef == nil {
+		mrc.log.Info("Hardware BMC reference not present; skipping BMCJob creation",
+			"BMCRef", hardware.Spec.BMCRef, "Hardware", hardware.Name)
+
+		return nil
+	}
+
+	bmcJob := &rufiov1.BMCJob{}
+	jobName := fmt.Sprintf("%s-provision", mrc.tinkerbellMachine.Name)
+
+	err := mrc.getBMCJob(jobName, bmcJob)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Create a BMCJob for hardware provisioning
+			return mrc.createHardwareProvisionJob(hardware, jobName)
+		}
+
+		return err
+	}
+
+	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
+	}
+
+	return nil
+}
+
+// getBMCJob fetches the BMCJob with name JName.
+func (mrc *machineReconcileContext) getBMCJob(jName string, bmj *rufiov1.BMCJob) error {
+	namespacedName := types.NamespacedName{
+		Name:      jName,
+		Namespace: mrc.tinkerbellMachine.Namespace,
+	}
+
+	if err := mrc.client.Get(mrc.ctx, namespacedName, bmj); err != nil {
+		return fmt.Errorf("GET BMCJob: %w", err)
+	}
+
+	return nil
+}
+
+// createHardwareProvisionJob creates a BMCJob object with the required tasks for hardware provisioning.
+func (mrc *machineReconcileContext) createHardwareProvisionJob(hardware *tinkv1.Hardware, name string) error {
+	powerOffAction := rufiov1.HardPowerOff
+	powerOnAction := rufiov1.PowerOn
+	bmcJob := &rufiov1.BMCJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: mrc.tinkerbellMachine.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+					Kind:       "TinkerbellMachine",
+					Name:       mrc.tinkerbellMachine.Name,
+					UID:        mrc.tinkerbellMachine.ObjectMeta.UID,
+				},
+			},
+		},
+		Spec: rufiov1.BMCJobSpec{
+			BaseboardManagementRef: rufiov1.BaseboardManagementRef{
+				Name:      hardware.Spec.BMCRef.Name,
+				Namespace: mrc.tinkerbellMachine.Namespace,
+			},
+			Tasks: []rufiov1.Task{
+				{
+					PowerAction: &powerOffAction,
+				},
+				{
+					OneTimeBootDeviceAction: &rufiov1.OneTimeBootDeviceAction{
+						Devices: []rufiov1.BootDevice{
+							rufiov1.PXE,
+						},
+						EFIBoot: hardware.Spec.Interfaces[0].DHCP.UEFI,
+					},
+				},
+				{
+					PowerAction: &powerOnAction,
+				},
+			},
+		},
+	}
+
+	if err := mrc.client.Create(mrc.ctx, bmcJob); err != nil {
+		return fmt.Errorf("creating BMCJob: %w", err)
+	}
+
+	mrc.log.Info("Created BMCJob to get hardware ready for provisioning",
+		"Name", bmcJob.Name,
+		"Namespace", bmcJob.Namespace)
+
+	return nil
 }
 
 func (mrc *machineReconcileContext) getWorkflow() (*tinkv1.Workflow, error) {

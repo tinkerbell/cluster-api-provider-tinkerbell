@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -50,6 +51,7 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=hardware;hardware/status,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=workflows;workflows/status,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=bmc.tinkerbell.org,resources=bmcjobs,verbs=get;list;watch;create
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
 func (tmr *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -116,6 +118,12 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 		).
 		Watches(
 			&source.Kind{Type: &tinkv1.Workflow{}},
+			&handler.EnqueueRequestForOwner{
+				OwnerType:    &infrastructurev1.TinkerbellMachine{},
+				IsController: true,
+			}).
+		Watches(
+			&source.Kind{Type: &rufiov1.BMCJob{}},
 			&handler.EnqueueRequestForOwner{
 				OwnerType:    &infrastructurev1.TinkerbellMachine{},
 				IsController: true,
