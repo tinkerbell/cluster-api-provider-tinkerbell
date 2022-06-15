@@ -45,3 +45,4 @@ jobs:
         with:
           check_filenames: true
           check_hidden: true
+          skip: './.git','./go.mod','./go.sum'
