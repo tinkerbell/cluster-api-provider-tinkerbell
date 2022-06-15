@@ -158,10 +158,7 @@ func (mrc *machineReconcileContext) Reconcile() error {
 			return nil
 		}
 
-		hw.Spec.Metadata.State = inUse
-		hw.Spec.Metadata.Instance.State = provisioned
-
-		if err := mrc.patchHardware(hw); err != nil {
+		if err := mrc.patchHardwareStates(hw, inUse, provisioned); err != nil {
 			return fmt.Errorf("failed to patch hardware: %w", err)
 		}
 	}
@@ -171,11 +168,15 @@ func (mrc *machineReconcileContext) Reconcile() error {
 	return nil
 }
 
-func (mrc *machineReconcileContext) patchHardware(hw *tinkv1.Hardware) error {
+// patchHardwareStates patches a hardware's metadata and instance states.
+func (mrc *machineReconcileContext) patchHardwareStates(hw *tinkv1.Hardware, mdState, iState string) error {
 	patchHelper, err := patch.NewHelper(hw, mrc.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
+
+	hw.Spec.Metadata.State = mdState
+	hw.Spec.Metadata.Instance.State = iState
 
 	if err := patchHelper.Patch(mrc.ctx, hw); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
