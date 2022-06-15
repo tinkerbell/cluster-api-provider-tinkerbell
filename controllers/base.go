@@ -252,30 +252,7 @@ func (bmrc *baseMachineReconcileContext) DeleteMachineWithDependencies() error {
 		return bmrc.removeFinalizer()
 	}
 
-	// Fetch a poweroff BMCJob for the machine.
-	// If Job not found, we remove dependencies and create job.
-	bmcJob := &rufiov1.BMCJob{}
-	jobName := fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name)
-
-	err := bmrc.getBMCJob(jobName, bmcJob)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return bmrc.createPowerOffJob(hardware)
-		}
-
-		return fmt.Errorf("get bmc job for machine: %w", err)
-	}
-
-	// Check the Job conditions to ensure the power off job is complete.
-	if bmcJob.HasCondition(rufiov1.JobCompleted, rufiov1.ConditionTrue) {
-		return bmrc.removeFinalizer()
-	}
-
-	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
-		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
-	}
-
-	return nil
+	return bmrc.ensureBMCJobCompletionForDelete(hardware)
 }
 
 // removeDependencies removes the Template, Workflow linked to the machine.
@@ -302,6 +279,35 @@ func (bmrc *baseMachineReconcileContext) removeFinalizer() error {
 	bmrc.log.Info("Patching Machine object to remove finalizer")
 
 	return bmrc.patch()
+}
+
+// ensureBMCJobCompletionForDelete ensures the machine power off BMCJob is completed.
+// Removes the machint finalizer to let machine delete.
+func (bmrc *baseMachineReconcileContext) ensureBMCJobCompletionForDelete(hardware *tinkv1.Hardware) error {
+	// Fetch a poweroff BMCJob for the machine.
+	// If Job not found, we remove dependencies and create job.
+	bmcJob := &rufiov1.BMCJob{}
+	jobName := fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name)
+
+	err := bmrc.getBMCJob(jobName, bmcJob)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return bmrc.createPowerOffJob(hardware)
+		}
+
+		return fmt.Errorf("get bmc job for machine: %w", err)
+	}
+
+	// Check the Job conditions to ensure the power off job is complete.
+	if bmcJob.HasCondition(rufiov1.JobCompleted, rufiov1.ConditionTrue) {
+		return bmrc.removeFinalizer()
+	}
+
+	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
+	}
+
+	return nil
 }
 
 // IntoMachineReconcileContext implements BaseMachineReconcileContext by building MachineReconcileContext
