@@ -88,7 +88,7 @@ tasks:
     actions:
       - name: "stream-image"
         image: oci2disk:v1.0.0
-        timeout: 360
+        timeout: 600
         environment:
           IMG_URL: {{.ImageURL}}
           DEST_DISK: {{.DestDisk}}
