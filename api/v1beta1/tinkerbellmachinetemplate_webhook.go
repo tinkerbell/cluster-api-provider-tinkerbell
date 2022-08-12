@@ -55,7 +55,12 @@ func (m *TinkerbellMachineTemplate) ValidateUpdate(old runtime.Object) error {
 	oldTinkerbellMachineTemplate, _ := old.(*TinkerbellMachineTemplate)
 
 	if !reflect.DeepEqual(m.Spec, oldTinkerbellMachineTemplate.Spec) {
-		return apierrors.NewBadRequest("TinkerbellMachineTemplate.Spec is immutable")
+		newTemplateSpec := m.Spec.Template.Spec
+		oldTemplateSpec := oldTinkerbellMachineTemplate.Spec.Template.Spec
+
+		if !reflect.DeepEqual(newTemplateSpec.HardwareAffinity, oldTemplateSpec.HardwareAffinity) {
+			return apierrors.NewBadRequest("TinkerbellMachineTemplate.Spec.Template.Spec.HardwareAffinity is immutable")
+		}
 	}
 
 	return nil
