@@ -11,10 +11,10 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/tinkerbell/rufio v0.0.0-20220601004315-4dc2085adc8e
 	github.com/tinkerbell/tink v0.0.0-20220524234633-0a800a4b5e25
-	k8s.io/api v0.24.3
-	k8s.io/apimachinery v0.24.3
-	k8s.io/client-go v0.24.3
-	k8s.io/component-base v0.24.3
+	k8s.io/api v0.24.4
+	k8s.io/apimachinery v0.24.4
+	k8s.io/client-go v0.24.4
+	k8s.io/component-base v0.24.4
 	k8s.io/klog/v2 v2.60.1
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/cluster-api v1.0.2
