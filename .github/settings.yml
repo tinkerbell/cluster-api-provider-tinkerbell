@@ -2,16 +2,16 @@
 # See https://docs.github.com/en/rest/reference/repos#add-a-repository-collaborator for available options
 collaborators:
   # Maintainers, should also be added to the .github/CODEOWNERS file as owners of this settings.yml file.
-  - username: detiber
-    permission: maintain
   - username: displague
     permission: maintain
   - username: micahhausler
     permission: maintain
+  - username: chrisdoherty4
+    permission: maintain
   # Approvers
   - username: tstromberg
     permission: push
-  - username: chrisdoherty4
+  - username: detiber
     permission: push
   # Reviewers
   - username: mmlb
