@@ -75,7 +75,8 @@ func Test_Cloud_config_template(t *testing.T) {
 		},
 	}
 
-	for name, c := range cases { //nolint:paralleltest
+	// nolint:paralleltest
+	for name, c := range cases {
 		c := c
 
 		t.Run(name, func(t *testing.T) {
