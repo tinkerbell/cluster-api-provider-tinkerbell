@@ -7,142 +7,25 @@ In this tutorial we’ll cover the basics of how to use Cluster API to create on
 ### Prerequisites
 
 - Install and setup [kubectl] in your local environment
-- Install [Kind] and [Docker]
-- An existing [Tinkerbell] installation running at least versions mentioned in v0.6.0 of [sandbox](https://github.com/tinkerbell/sandbox/tree/v0.6.0), this guide assumes deployment using the sandbox with an IP address of 192.168.1.1, so modifications will be needed if Tinkerbell was deployed with a different method or if the IP address is different.
-
-### Install and/or configure a Kubernetes cluster
-
-Cluster API requires an existing Kubernetes cluster accessible via kubectl. During the installation process the
-Kubernetes cluster will be transformed into a [management cluster] by installing the Cluster API [provider components], so it
-is recommended to keep it separated from any application workload.
-
-It is a common practice to create a temporary, local bootstrap cluster which is then used to provision
-a target [management cluster] on the selected [infrastructure provider].
-
-Choose one of the options below:
-
-1. **Existing Management Cluster**
-
-   For production use-cases a "real" Kubernetes cluster should be used with appropriate backup and DR policies and procedures in place. The Kubernetes cluster must be at least v1.19.1.
-
-   ```bash
-   export KUBECONFIG=<...>
-   ```
-
-2. **Kind**
-
-   **NOTE** [kind] is not designed for production use.
-
-   **Minimum [kind] supported version**: v0.9.0
-
-   [kind] can be used for creating a local Kubernetes cluster for development environments or for
-   the creation of a temporary [bootstrap cluster] used to provision a target [management cluster] on the selected infrastructure provider.
-
-   Create the kind cluster:
-
-   ```bash
-   kind create cluster
-   ```
-
-   Test to ensure the local kind cluster is ready:
-
-   ```
-   kubectl cluster-info
-   ```
-
-### Install clusterctl
-
-The clusterctl CLI tool handles the lifecycle of a Cluster API management cluster.
-
-#### Install clusterctl binary with curl on linux
-
-Download the latest release; on linux, type:
-
-```
-curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.0/clusterctl-linux-amd64 -o clusterctl
-```
-
-Make the clusterctl binary executable.
-
-```
-chmod +x ./clusterctl
-```
-
-Move the binary in to your PATH.
-
-```
-sudo mv ./clusterctl /usr/local/bin/clusterctl
-```
-
-Test to ensure the version you installed is up-to-date:
-
-```
-clusterctl version
-```
-
-#### Install clusterctl binary with curl on macOS
-
-Download the latest release; on macOS, type:
-
-```
-curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.0/clusterctl-darwin-amd64 -o clusterctl
-```
-
-Or if your Mac has an M1 CPU ("Apple Silicon"):
-
-```
-curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.0/clusterctl-darwin-arm64 -o clusterctl
-```
-
-Make the clusterctl binary executable.
-
-```
-chmod +x ./clusterctl
-```
-
-Move the binary in to your PATH.
-
-```
-sudo mv ./clusterctl /usr/local/bin/clusterctl
-```
-
-Test to ensure the version you installed is up-to-date:
-
-```
-clusterctl version
-```
-
-#### Install clusterctl with homebrew on macOS and linux
-
-Install the latest release using homebrew:
-
-```bash
-brew install clusterctl
-```
-
-Test to ensure the version you installed is up-to-date:
-
-```
-clusterctl version
-```
+- Install [clusterctl]
+- Tinkerbell stack with all services using a kubernetes backend. *Full docs for this don't exist yet. These docs are scheduled to be included in the v0.3.0 release.*
 
 ### Initialize the management cluster
 
 Now that we've got clusterctl installed and all the prerequisites in place, let's transform the Kubernetes cluster
-into a management cluster by using `clusterctl init`.
+into a management cluster by using `clusterctl init`. This only needs to be run once.
 
 The command accepts as input a list of providers to install; when executed for the first time, `clusterctl init`
 automatically adds to the list the `cluster-api` core provider, and if unspecified, it also adds the `kubeadm` bootstrap
 and `kubeadm` control-plane providers.
 
-#### Initialization for the Tinkerbell provider
+`clusterctl` doesn't include the Tinkerbell CAPI provider (CAPT) so we need to configure this:
 
 ```sh
-# Let clusterctl know about the Tinkerbell provider
 cat >> ~/.cluster-api/clusterctl.yaml <<EOF
 providers:
   - name: "tinkerbell"
-    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/latest/infrastructure-components.yaml"
+    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/download/v0.1.0/infrastructure-components.yaml"
     type: "InfrastructureProvider"
 EOF
 
@@ -243,7 +126,7 @@ before configuring a cluster with Cluster API. Instructions are provided for the
 Otherwise, you can look at the `clusterctl generate cluster` [command][clusterctl generate cluster] documentation for details about how to
 discover the list of variables required by a cluster templates.
 
-To see all required OpenStack environment variables execute:
+To see all required Tinkerbell environment variables execute:
 
 ```bash
 clusterctl generate cluster --infrastructure tinkerbell --list-variables capi-quickstart
@@ -392,26 +275,16 @@ kubectl delete cluster capi-quickstart
 
 **NOTE** IMPORTANT: In order to ensure a proper cleanup of your infrastructure you must always delete the cluster object. Deleting the entire cluster template with `kubectl delete -f capi-quickstart.yaml` might lead to pending resources to be cleaned up manually.
 
-Delete management cluster
-
-```bash
-kind delete cluster
-```
-
-## Next steps
-
-See the [clusterctl] documentation for more detail about clusterctl supported actions.
-
 <!-- links -->
 [bootstrap cluster]: https://cluster-api.sigs.k8s.io/reference/glossary.html#bootstrap-cluster
 [clusterctl generate cluster]: https://cluster-api.sigs.k8s.io/clusterctl/commands/generate-cluster.html
 [clusterctl get kubeconfig]: https://cluster-api.sigs.k8s.io/clusterctl/commands/get-kubeconfig.html
-[clusterctl]: https://cluster-api.sigs.k8s.io/clusterctl/overview.html
-[Docker]: https://www.docker.com/
+[clusterctl]: https://cluster-api.sigs.k8s.io/user/quick-start.html#install-clusterctl
+[Docker]: https://docs.docker.com/get-docker/
 [infrastructure provider]: https://cluster-api.sigs.k8s.io/reference/glossary.html#infrastructure-provider
-[kind]: https://kind.sigs.k8s.io/
+[kind]: https://kind.sigs.k8s.io/docs/user/quick-start
 [KubeadmControlPlane]: https://cluster-api.sigs.k8s.io/developer/architecture/controllers/control-plane.html
-[kubectl]: https://kubernetes.io/docs/tasks/tools/install-kubectl/
+[kubectl]: https://kubernetes.io/docs/tasks/tools/#kubectl
 [management cluster]: https://cluster-api.sigs.k8s.io/reference/glossary.html#management-cluster
 [provider]: https://cluster-api.sigs.k8s.io/reference/providers.html
 [provider components]: https://cluster-api.sigs.k8s.io/reference/glossary.html#provider-components
