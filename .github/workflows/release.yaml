@@ -35,7 +35,7 @@ jobs:
         flavor: latest=false
         tags: type=ref,event=tag
     - name: Log in to the Container registry
-      uses: docker/login-action@v1
+      uses: docker/login-action@v2
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
