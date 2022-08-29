@@ -126,7 +126,6 @@ func (mrc *machineReconcileContext) ensureTemplateAndWorkflow(hw *tinkv1.Hardwar
 	return wf, nil
 }
 
-//
 func (mrc *machineReconcileContext) Reconcile() error {
 	defer func() {
 		// make sure we do not create orphaned objects.
@@ -565,7 +564,7 @@ func (mrc *machineReconcileContext) ensureHardwareProvisionJob(hardware *tinkv1.
 	}
 
 	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
-		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) //nolint:goerr113
 	}
 
 	return nil
@@ -652,7 +651,7 @@ func (mrc *machineReconcileContext) getWorkflow() (*tinkv1.Workflow, error) {
 			msg = "no workflow exists: %w"
 		}
 
-		return t, fmt.Errorf(msg, err) // nolint:goerr113
+		return t, fmt.Errorf(msg, err) //nolint:goerr113
 	}
 
 	return t, nil
