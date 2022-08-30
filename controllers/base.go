@@ -122,15 +122,6 @@ func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context,
 	return bmrc, ctrl.Result{}, nil
 }
 
-// validate validates if context configuration has all required fields properly populated.
-func (tmr *TinkerbellMachineReconciler) validate() error {
-	if tmr == nil {
-		return ErrConfigurationNil
-	}
-
-	return nil
-}
-
 // MachineScheduledForDeletion implements BaseMachineReconcileContext interface method
 // using TinkerbellMachine deletion timestamp.
 func (bmrc *baseMachineReconcileContext) MachineScheduledForDeletion() bool {
