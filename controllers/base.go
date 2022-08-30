@@ -308,7 +308,7 @@ func (bmrc *baseMachineReconcileContext) ensureBMCJobCompletionForDelete(hardwar
 	}
 
 	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
-		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) // nolint:goerr113
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) //nolint:goerr113
 	}
 
 	return nil

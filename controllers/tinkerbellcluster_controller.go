@@ -267,7 +267,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	if !crc.tinkerbellCluster.ObjectMeta.DeletionTimestamp.IsZero() {
-		if annotations.HasPausedAnnotation(crc.tinkerbellCluster) {
+		if annotations.HasPaused(crc.tinkerbellCluster) {
 			crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile deletion")
 
 			return ctrl.Result{}, nil
@@ -299,6 +299,13 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
+	mapper := util.ClusterToInfrastructureMapFunc(
+		ctx,
+		infrastructurev1.GroupVersion.WithKind("TinkerbellCluster"),
+		mgr.GetClient(),
+		&infrastructurev1.TinkerbellCluster{},
+	)
+
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrastructurev1.TinkerbellCluster{}).
@@ -306,12 +313,8 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(
 		WithEventFilter(predicates.ResourceIsNotExternallyManaged(log)).
 		Watches(
 			&source.Kind{Type: &clusterv1.Cluster{}},
-			handler.EnqueueRequestsFromMapFunc(
-				util.ClusterToInfrastructureMapFunc(infrastructurev1.GroupVersion.WithKind("TinkerbellCluster")),
-			),
-			builder.WithPredicates(
-				predicates.ClusterUnpaused(log),
-			),
+			handler.EnqueueRequestsFromMapFunc(mapper),
+			builder.WithPredicates(predicates.ClusterUnpaused(log)),
 		)
 
 	if err := builder.Complete(tcr); err != nil {
