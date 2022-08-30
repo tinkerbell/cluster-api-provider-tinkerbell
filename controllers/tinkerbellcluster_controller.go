@@ -49,6 +49,10 @@ type TinkerbellClusterReconciler struct {
 
 // validate validates if context configuration has all required fields properly populated.
 func (tcr *TinkerbellClusterReconciler) validate() error {
+	if tcr == nil {
+		return ErrConfigurationNil
+	}
+
 	if tcr.Client == nil {
 		return ErrMissingClient
 	}

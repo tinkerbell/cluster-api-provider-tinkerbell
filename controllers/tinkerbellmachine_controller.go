@@ -196,3 +196,16 @@ func (tmr *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ct
 		return result
 	}
 }
+
+// validate validates if context configuration has all required fields properly populated.
+func (tmr *TinkerbellMachineReconciler) validate() error {
+	if tmr == nil {
+		return ErrConfigurationNil
+	}
+
+	if tmr.Client == nil {
+		return ErrMissingClient
+	}
+
+	return nil
+}
