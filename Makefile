@@ -322,7 +322,7 @@ clean-release: ## Remove the release folder
 	rm -rf $(RELEASE_DIR)
 
 .PHONY: verify
-verify: verify-boilerplate verify-modules verify-gen
+verify: verify-modules verify-gen
 
 .PHONY: verify-boilerplate
 verify-boilerplate:
