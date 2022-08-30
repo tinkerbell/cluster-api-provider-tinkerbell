@@ -118,7 +118,7 @@ endif
 # Build time versioning details.
 LDFLAGS := $(shell hack/version.sh)
 
-GOLANG_VERSION := 1.17.8
+GOLANG_VERSION := 1.19
 
 ## --------------------------------------
 ## Help
