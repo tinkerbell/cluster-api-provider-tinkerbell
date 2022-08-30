@@ -1,10 +1,10 @@
-name: 'Setup Go'
-description: 'Setup Go'
+name: "Setup Go"
+description: "Setup Go"
 inputs:
   version:
-    description: 'Go Version to setup'
+    description: "Go Version to setup"
     required: true
-    default: "1.17"
+    default: "1.19"
 runs:
   using: "composite"
   steps:
