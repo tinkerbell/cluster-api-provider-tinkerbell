@@ -675,6 +675,7 @@ func (mrc *machineReconcileContext) createWorkflow(hardware *tinkv1.Hardware) er
 		},
 		Spec: tinkv1.WorkflowSpec{
 			TemplateRef: mrc.tinkerbellMachine.Name,
+			HardwareRef: hardware.Name,
 			HardwareMap: map[string]string{"device_1": hardware.Spec.Metadata.Instance.ID},
 		},
 	}
