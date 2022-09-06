@@ -123,7 +123,7 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 				IsController: true,
 			}).
 		Watches(
-			&source.Kind{Type: &rufiov1.BMCJob{}},
+			&source.Kind{Type: &rufiov1.Job{}},
 			&handler.EnqueueRequestForOwner{
 				OwnerType:    &infrastructurev1.TinkerbellMachine{},
 				IsController: true,
