@@ -10,16 +10,16 @@ require (
 	github.com/onsi/gomega v1.20.1
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
-	github.com/tinkerbell/rufio v0.0.0-20220601004315-4dc2085adc8e
+	github.com/tinkerbell/rufio v0.1.0
 	github.com/tinkerbell/tink v0.7.0
 	k8s.io/api v0.25.0
 	k8s.io/apimachinery v0.25.0
 	k8s.io/client-go v0.25.0
 	k8s.io/component-base v0.25.0
-	k8s.io/klog/v2 v2.70.1
+	k8s.io/klog/v2 v2.80.0
 	k8s.io/utils v0.0.0-20220823124924-e9cbc92d1a73
 	sigs.k8s.io/cluster-api v1.2.1
-	sigs.k8s.io/controller-runtime v0.12.3
+	sigs.k8s.io/controller-runtime v0.13.0
 	sigs.k8s.io/controller-tools v0.8.0
 	sigs.k8s.io/kustomize/kustomize/v4 v4.5.7
 	sigs.k8s.io/yaml v1.3.0
@@ -34,7 +34,7 @@ require (
 	github.com/coredns/corefile-migration v1.0.17 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
-	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
+	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
@@ -69,22 +69,26 @@ require (
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.12.1 // indirect
+	github.com/prometheus/client_golang v1.13.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.32.1 // indirect
-	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/prometheus/common v0.37.0 // indirect
+	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rivo/uniseg v0.3.4 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/spf13/cobra v1.5.0 // indirect
 	github.com/xlab/treeprint v1.1.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
+	go.uber.org/atomic v1.10.0 // indirect
+	go.uber.org/multierr v1.8.0 // indirect
+	go.uber.org/zap v1.23.0 // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20220826154423-83b083e8dc8b // indirect
-	golang.org/x/oauth2 v0.0.0-20220608161450-d0670ef3b1eb // indirect
-	golang.org/x/sys v0.0.0-20220829200755-d48e67d00261 // indirect
+	golang.org/x/oauth2 v0.0.0-20220822191816-0ebed06d0094 // indirect
+	golang.org/x/sys v0.0.0-20220906135438-9e1f76180b77 // indirect
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
+	golang.org/x/time v0.0.0-20220722155302-e5dcc9cfc0b9 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

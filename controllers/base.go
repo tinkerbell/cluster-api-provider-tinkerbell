@@ -167,9 +167,8 @@ func (bmrc *baseMachineReconcileContext) getHardwareForMachine(hardware *tinkv1.
 
 // createPowerOffJob creates a BMCJob object with the required tasks for hardware power off.
 func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hardware) error {
-	powerOffAction := rufiov1.HardPowerOff
 	controller := true
-	bmcJob := &rufiov1.BMCJob{
+	bmcJob := &rufiov1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name),
 			Namespace: bmrc.tinkerbellMachine.Namespace,
@@ -183,14 +182,14 @@ func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hard
 				},
 			},
 		},
-		Spec: rufiov1.BMCJobSpec{
-			BaseboardManagementRef: rufiov1.BaseboardManagementRef{
+		Spec: rufiov1.JobSpec{
+			MachineRef: corev1.ObjectReference{
 				Name:      hardware.Spec.BMCRef.Name,
 				Namespace: bmrc.tinkerbellMachine.Namespace,
 			},
-			Tasks: []rufiov1.Task{
+			Tasks: []rufiov1.Action{
 				{
-					PowerAction: &powerOffAction,
+					PowerAction: rufiov1.PowerHardOff.Ptr(),
 				},
 			},
 		},
@@ -207,14 +206,14 @@ func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hard
 	return nil
 }
 
-// getBMCJob fetches the BMCJob with name JName.
-func (bmrc *baseMachineReconcileContext) getBMCJob(jName string, bmj *rufiov1.BMCJob) error {
+// getJob fetches the Job by name.
+func (bmrc *baseMachineReconcileContext) getJob(name string, job *rufiov1.Job) error {
 	namespacedName := types.NamespacedName{
-		Name:      jName,
+		Name:      name,
 		Namespace: bmrc.tinkerbellMachine.Namespace,
 	}
 
-	if err := bmrc.client.Get(bmrc.ctx, namespacedName, bmj); err != nil {
+	if err := bmrc.client.Get(bmrc.ctx, namespacedName, job); err != nil {
 		return fmt.Errorf("GET BMCJob: %w", err)
 	}
 
@@ -277,11 +276,10 @@ func (bmrc *baseMachineReconcileContext) removeFinalizer() error {
 func (bmrc *baseMachineReconcileContext) ensureBMCJobCompletionForDelete(hardware *tinkv1.Hardware) error {
 	// Fetch a poweroff BMCJob for the machine.
 	// If Job not found, we remove dependencies and create job.
-	bmcJob := &rufiov1.BMCJob{}
+	bmcJob := &rufiov1.Job{}
 	jobName := fmt.Sprintf("%s-poweroff", bmrc.tinkerbellMachine.Name)
 
-	err := bmrc.getBMCJob(jobName, bmcJob)
-	if err != nil {
+	if err := bmrc.getJob(jobName, bmcJob); err != nil {
 		if apierrors.IsNotFound(err) {
 			return bmrc.createPowerOffJob(hardware)
 		}
