@@ -550,7 +550,7 @@ func (mrc *machineReconcileContext) ensureHardwareProvisionJob(hardware *tinkv1.
 		return nil
 	}
 
-	bmcJob := &rufiov1.BMCJob{}
+	bmcJob := &rufiov1.Job{}
 	jobName := fmt.Sprintf("%s-provision", mrc.tinkerbellMachine.Name)
 
 	err := mrc.getBMCJob(jobName, bmcJob)
@@ -571,7 +571,7 @@ func (mrc *machineReconcileContext) ensureHardwareProvisionJob(hardware *tinkv1.
 }
 
 // getBMCJob fetches the BMCJob with name JName.
-func (mrc *machineReconcileContext) getBMCJob(jName string, bmj *rufiov1.BMCJob) error {
+func (mrc *machineReconcileContext) getBMCJob(jName string, bmj *rufiov1.Job) error {
 	namespacedName := types.NamespacedName{
 		Name:      jName,
 		Namespace: mrc.tinkerbellMachine.Namespace,
@@ -586,9 +586,7 @@ func (mrc *machineReconcileContext) getBMCJob(jName string, bmj *rufiov1.BMCJob)
 
 // createHardwareProvisionJob creates a BMCJob object with the required tasks for hardware provisioning.
 func (mrc *machineReconcileContext) createHardwareProvisionJob(hardware *tinkv1.Hardware, name string) error {
-	powerOffAction := rufiov1.HardPowerOff
-	powerOnAction := rufiov1.PowerOn
-	bmcJob := &rufiov1.BMCJob{
+	job := &rufiov1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: mrc.tinkerbellMachine.Namespace,
@@ -601,14 +599,14 @@ func (mrc *machineReconcileContext) createHardwareProvisionJob(hardware *tinkv1.
 				},
 			},
 		},
-		Spec: rufiov1.BMCJobSpec{
-			BaseboardManagementRef: rufiov1.BaseboardManagementRef{
+		Spec: rufiov1.JobSpec{
+			MachineRef: corev1.ObjectReference{
 				Name:      hardware.Spec.BMCRef.Name,
 				Namespace: mrc.tinkerbellMachine.Namespace,
 			},
-			Tasks: []rufiov1.Task{
+			Tasks: []rufiov1.Action{
 				{
-					PowerAction: &powerOffAction,
+					PowerAction: rufiov1.PowerHardOff.Ptr(),
 				},
 				{
 					OneTimeBootDeviceAction: &rufiov1.OneTimeBootDeviceAction{
@@ -619,19 +617,19 @@ func (mrc *machineReconcileContext) createHardwareProvisionJob(hardware *tinkv1.
 					},
 				},
 				{
-					PowerAction: &powerOnAction,
+					PowerAction: rufiov1.PowerOn.Ptr(),
 				},
 			},
 		},
 	}
 
-	if err := mrc.client.Create(mrc.ctx, bmcJob); err != nil {
-		return fmt.Errorf("creating BMCJob: %w", err)
+	if err := mrc.client.Create(mrc.ctx, job); err != nil {
+		return fmt.Errorf("creating job: %w", err)
 	}
 
 	mrc.log.Info("Created BMCJob to get hardware ready for provisioning",
-		"Name", bmcJob.Name,
-		"Namespace", bmcJob.Namespace)
+		"Name", job.Name,
+		"Namespace", job.Namespace)
 
 	return nil
 }
