@@ -8,7 +8,6 @@
 <a href="https://kubernetes.io"><img src="https://github.com/kubernetes/kubernetes/raw/master/logo/logo.png"  height="100"></a>
 <a href="https://tinkerbell.org"><img src="https://raw.githubusercontent.com/tinkerbell/artwork/main/Tinkerbell-Logo-Landscape-Dark.png" height="100"></a>
 
----
 
 > This repository is
 [Experimental](https://github.com/equinix-labs/equinix-labs/blob/main/experimental-statement.md)
@@ -19,8 +18,6 @@ in production.
 
 Kubernetes-native declarative infrastructure for Kubernetes clusters on Tinkerbell.
 
----
-
 ## What is the Cluster API Provider Tinkerbell
 
 The [Cluster API][cluster_api] brings declarative, Kubernetes-style APIs to Kubernetes
@@ -29,13 +26,9 @@ cluster creation, configuration and management.
 The API itself is shared across multiple cloud providers allowing for true hybrid
 deployments of Kubernetes, both on-premises and off.
 
----
-
 ## Quick Start
 
 See the [Quick Start](docs/QUICK-START.md)
-
----
 
 ## Compatibility with Cluster API and Kubernetes Versions
 
@@ -58,13 +51,9 @@ Each version of Cluster API for Tinkerbell will attempt to support all community
 **NOTE:** As the versioning for this project is tied to the versioning of Cluster API, future modifications to this
 policy may be made to more closely align with other providers in the Cluster API ecosystem.
 
----
-
 ## Kubernetes versions with published Images
 
 Pre-built images are pushed to the [GitHub Container Registry](https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell). We currently publish images for [Ubuntu 18.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-1804) and [Ubuntu 20.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-2004).
-
----
 
 ## Current state
 
@@ -76,8 +65,6 @@ and secure deprovisioning of instances is still outstanding and must be handled 
 
 See [docs/README.md](docs/README.md) for more information on setting up a development
 environment.
-
----
 
 ## Technical preview
 
