@@ -16,7 +16,7 @@ rules:
 - apiGroups:
   - bmc.tinkerbell.org
   resources:
-  - bmcjobs
+  - jobs
   verbs:
   - create
   - get
