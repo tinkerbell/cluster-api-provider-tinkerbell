@@ -25,7 +25,7 @@ and `kubeadm` control-plane providers.
 cat >> ~/.cluster-api/clusterctl.yaml <<EOF
 providers:
   - name: "tinkerbell"
-    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/download/v0.1.0/infrastructure-components.yaml"
+    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/latest/infrastructure-components.yaml"
     type: "InfrastructureProvider"
 EOF
 
@@ -33,7 +33,7 @@ EOF
 clusterctl init --infrastructure tinkerbell
 ```
 
-The output of `clusterctl init` is similar to this:
+The output of `clusterctl init` is similar to the following:
 
 ```shell
 Fetching providers
