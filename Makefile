@@ -49,8 +49,7 @@ BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 GO_INSTALL = ./scripts/go_install.sh
 
 # Binaries.
-CONTROLLER_GEN_BIN := controller-gen
-CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)
+CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10
 
 GOLANGCI_LINT_VER := v1.49.0
 GOLANGCI_LINT_BIN := golangci-lint
@@ -73,6 +72,7 @@ toolsBins := $(addprefix ${TOOLS_BIN_DIR}/,$(notdir $(shell awk -F'"' '/^\s*_/ {
 $(toolsBins): go.mod go.sum tools.go
 $(toolsBins): CMD=$(shell grep -w '$(@F)' tools.go | awk -F'"' '{print $$2}')
 $(toolsBins):
+	echo "Installing $(CMD)"
 	GOBIN=$(TOOLS_BIN_DIR) go install $(CMD)
 
 .PHONY: tools
