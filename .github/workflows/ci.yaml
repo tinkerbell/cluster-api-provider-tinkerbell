@@ -9,14 +9,20 @@ jobs:
   validate:
     name: "Validate ${{ matrix.target }}"
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
         target: ["verify", "lint", "test"]
+
     steps:
-      - name: checkout
-        uses: actions/checkout@v3
-      - uses: ./.github/actions/setup-go
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+          cache: true
+
       - uses: actions/cache@v3
         with:
           path: hack/tools/bin
@@ -24,6 +30,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-tools-bin-${{ matrix.target }}-
             ${{ runner.os }}-tools-bin-
+
       - uses: actions/cache@v3
         if: ${{ matrix.target == 'test' }}
         with:
@@ -32,14 +39,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-tmp-${{ matrix.target }}-
             ${{ runner.os }}-tmp-
+
       - name: ${{ matrix.target }}
         run: make ${{ matrix.target }}
+
   codespell:
     name: Codespell
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+
       - name: Codespell
         uses: codespell-project/actions-codespell@v1.0
         with:
