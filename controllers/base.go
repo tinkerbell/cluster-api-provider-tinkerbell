@@ -183,7 +183,7 @@ func (bmrc *baseMachineReconcileContext) createPowerOffJob(hardware *tinkv1.Hard
 			},
 		},
 		Spec: rufiov1.JobSpec{
-			MachineRef: corev1.ObjectReference{
+			MachineRef: rufiov1.MachineRef{
 				Name:      hardware.Spec.BMCRef.Name,
 				Namespace: bmrc.tinkerbellMachine.Namespace,
 			},
