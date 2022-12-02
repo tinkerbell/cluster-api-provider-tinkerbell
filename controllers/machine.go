@@ -600,7 +600,7 @@ func (mrc *machineReconcileContext) createHardwareProvisionJob(hardware *tinkv1.
 			},
 		},
 		Spec: rufiov1.JobSpec{
-			MachineRef: corev1.ObjectReference{
+			MachineRef: rufiov1.MachineRef{
 				Name:      hardware.Spec.BMCRef.Name,
 				Namespace: mrc.tinkerbellMachine.Namespace,
 			},
