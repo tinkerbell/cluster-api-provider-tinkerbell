@@ -8,12 +8,13 @@ In this tutorial we’ll cover the basics of how to use Cluster API to create on
 
 - Install and setup [kubectl] in your local environment
 - Install [clusterctl]
-- Tinkerbell stack with all services using a kubernetes backend. *Full docs for this don't exist yet. These docs are scheduled to be included in the v0.3.0 release.*
+- A running [Tinkerbell stack].
 
 ### Initialize the management cluster
 
 Now that we've got clusterctl installed and all the prerequisites in place, let's transform the Kubernetes cluster
-into a management cluster by using `clusterctl init`. This only needs to be run once.
+into a management cluster by using `clusterctl init`. This only needs to be run once. For this quick start, run this against the same
+Kubernetes cluster where the Tinkerbell stack is installed.
 
 The command accepts as input a list of providers to install; when executed for the first time, `clusterctl init`
 automatically adds to the list the `cluster-api` core provider, and if unspecified, it also adds the `kubeadm` bootstrap
@@ -25,11 +26,12 @@ and `kubeadm` control-plane providers.
 cat >> ~/.cluster-api/clusterctl.yaml <<EOF
 providers:
   - name: "tinkerbell"
-    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/latest/infrastructure-components.yaml"
+    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/v0.4.0/infrastructure-components.yaml"
     type: "InfrastructureProvider"
 EOF
 
 # Finally, initialize the management cluster
+export TINKERBELL_IP=<hegel ip>
 clusterctl init --infrastructure tinkerbell
 ```
 
@@ -37,12 +39,12 @@ The output of `clusterctl init` is similar to the following:
 
 ```shell
 Fetching providers
-Installing cert-manager Version="v1.5.3"
+Installing cert-manager Version="v1.10.1"
 Waiting for cert-manager to be available...
-Installing Provider="cluster-api" Version="v1.0.0" TargetNamespace="capi-system"
-Installing Provider="bootstrap-kubeadm" Version="v1.0.0" TargetNamespace="capi-kubeadm-bootstrap-system"
-Installing Provider="control-plane-kubeadm" Version="v1.0.0" TargetNamespace="capi-kubeadm-control-plane-system"
-Installing Provider="infrastructure-tinkerbell" Version="v0.1.0" TargetNamespace="capt-system"
+Installing Provider="cluster-api" Version="v1.3.2" TargetNamespace="capi-system"
+Installing Provider="bootstrap-kubeadm" Version="v1.3.2" TargetNamespace="capi-kubeadm-bootstrap-system"
+Installing Provider="control-plane-kubeadm" Version="v1.3.2" TargetNamespace="capi-kubeadm-control-plane-system"
+Installing Provider="infrastructure-tinkerbell" Version="v0.4.0" TargetNamespace="capt-system"
 
 Your management cluster has been initialized successfully!
 
@@ -53,8 +55,9 @@ You can now create your first workload cluster by running the following:
 
 ### Create Hardware resources to make Tinkerbell Hardware available
 
-Cluster API Provider Tinkerbell does not assume all hardware configured in Tinkerbell is available for provisioning, to make Tinkerbell Hardware available create a `Hardware` resource in the
-management cluster.
+Cluster API Provider Tinkerbell does not assume all hardware configured in Tinkerbell is available for provisioning.
+To make Tinkerbell Hardware available create a `Hardware` resource in the management cluster.
+For this quick start, the `hardware.tinkerbell.org` custom resource objects need to live in the same namespace as the Tink stack(specifically where `tink-controller` lives).
 
 An example of a valid Hardware resource definition:
 
@@ -150,13 +153,23 @@ export POD_CIDR=172.25.0.0/16
 
 #### Generating the cluster configuration
 
-For the purpose of this tutorial, we'll name our cluster capi-quickstart.
+For the purpose of this tutorial, we'll name our cluster capi-quickstart. The `--target-namespace` needs to be the namespace where the Tink stack is deployed. Otherwise you will see an error.
+
+<details>
+<summary>error message</summary>
+
+```bash
+Error from server (InternalError): error when creating "capi-quickstart.yaml": Internal error occurred: failed calling webhook "validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io": failed to call webhook: Post "https://capt-webhook-service.capt-system.svc:443/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster?timeout=10s": EOF
+```
+
+</details>
 
 ```bash
 clusterctl generate cluster capi-quickstart \
-  --kubernetes-version v1.21.6 \
+  --kubernetes-version v1.22.8 \
   --control-plane-machine-count=3 \
   --worker-machine-count=3 \
+  --target-namespace=tink-system \
   > capi-quickstart.yaml
 ```
 
@@ -275,6 +288,8 @@ kubectl delete cluster capi-quickstart
 
 **NOTE** IMPORTANT: In order to ensure a proper cleanup of your infrastructure you must always delete the cluster object. Deleting the entire cluster template with `kubectl delete -f capi-quickstart.yaml` might lead to pending resources to be cleaned up manually.
 
+**NOTE** IMPORTANT: The OS images used in this quick start live here: https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell and are only build for BIOS based systems.
+
 <!-- links -->
 [bootstrap cluster]: https://cluster-api.sigs.k8s.io/reference/glossary.html#bootstrap-cluster
 [clusterctl generate cluster]: https://cluster-api.sigs.k8s.io/clusterctl/commands/generate-cluster.html
@@ -290,3 +305,4 @@ kubectl delete cluster capi-quickstart
 [provider components]: https://cluster-api.sigs.k8s.io/reference/glossary.html#provider-components
 [workload cluster]: https://cluster-api.sigs.k8s.io/reference/glossary.html#workload-cluster
 [Tinkerbell]: https://tinkerbell.org
+[Tinkerbell stack]: https://github.com/tinkerbell/charts/blob/main/tinkerbell/stack/README.md
