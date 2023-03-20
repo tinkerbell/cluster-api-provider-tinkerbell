@@ -143,37 +143,40 @@ func (mrc *machineReconcileContext) Reconcile() error {
 }
 
 func (mrc *machineReconcileContext) reconcile(hw *tinkv1.Hardware) error {
-	if !isHardwareReady(hw) {
-		wf, err := mrc.ensureTemplateAndWorkflow(hw)
+	if isHardwareReady(hw) {
+		mrc.log.Info("Marking TinkerbellMachine as Ready")
+		mrc.tinkerbellMachine.Status.Ready = true
 
-		if ensureJobErr := mrc.ensureHardwareProvisionJob(hw); ensureJobErr != nil {
-			return fmt.Errorf("failed to ensure hardware ready for provisioning: %w", ensureJobErr)
-		}
+		return nil
+	}
 
-		switch {
-		case errors.Is(err, &errRequeueRequested{}):
-			return nil
-		case err != nil:
-			return fmt.Errorf("ensure template and workflow returned: %w", err)
-		}
+	if ensureJobErr := mrc.ensureHardwareProvisionJob(hw); ensureJobErr != nil {
+		return fmt.Errorf("failed to ensure hardware ready for provisioning: %w", ensureJobErr)
+	}
 
-		s := wf.GetCurrentActionState()
+	wf, err := mrc.ensureTemplateAndWorkflow(hw)
 
-		if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
-			return errWorkflowFailed
-		}
+	switch {
+	case errors.Is(err, &errRequeueRequested{}):
+		return nil
+	case err != nil:
+		return fmt.Errorf("ensure template and workflow returned: %w", err)
+	}
 
-		if !lastActionStarted(wf) {
-			return nil
-		}
+	s := wf.GetCurrentActionState()
+	if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
+		return errWorkflowFailed
+	}
 
-		if err := mrc.patchHardwareStates(hw, inUse, provisioned); err != nil {
-			return fmt.Errorf("failed to patch hardware: %w", err)
-		}
+	if !lastActionStarted(wf) {
+		return nil
+	}
+
+	if err := mrc.patchHardwareStates(hw, inUse, provisioned); err != nil {
+		return fmt.Errorf("failed to patch hardware: %w", err)
 	}
 
 	mrc.log.Info("Marking TinkerbellMachine as Ready")
-
 	mrc.tinkerbellMachine.Status.Ready = true
 
 	return nil

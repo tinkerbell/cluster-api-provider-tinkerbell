@@ -51,7 +51,7 @@ GO_INSTALL = ./scripts/go_install.sh
 # Binaries.
 CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10
 
-GOLANGCI_LINT_VER := v1.49.0
+GOLANGCI_LINT_VER := v1.51.2
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
@@ -128,9 +128,6 @@ test: ## Run tests
 ## Tooling Binaries
 ## --------------------------------------
 
-$(GOLANGCI_LINT): ## Build golangci-lint from tools folder.
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
-
 $(KUBECTL): ## Build kubectl
 	mkdir -p $(TOOLS_BIN_DIR)
 	rm -f "$(KUBECTL)*"
@@ -149,9 +146,39 @@ $(KIND): ## Build kind
 ## Linting
 ## --------------------------------------
 
+# BEGIN: lint-install
+# http://github.com/tinkerbell/lint-install
+
 .PHONY: lint
-lint: $(GOLANGCI_LINT) ## Lint codebase
-	$(GOLANGCI_LINT) run -v --fast=false
+lint: _lint ## Lint codebase
+
+LINT_ROOT := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+LINTERS :=
+FIXERS :=
+
+GOLANGCI_LINT_CONFIG := $(LINT_ROOT)/.golangci.yml
+$(GOLANGCI_LINT):
+	mkdir -p $(TOOLS_BIN_DIR)
+	rm -rf $(TOOLS_BIN_DIR)/golangci-lint-*
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
+	mv $(TOOLS_BIN_DIR)/golangci-lint $@
+
+LINTERS += golangci-lint-lint
+golangci-lint-lint: $(GOLANGCI_LINT)
+	find . -name go.mod -execdir "$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)" \;
+
+FIXERS += golangci-lint-fix
+golangci-lint-fix: $(GOLANGCI_LINT)
+	find . -name go.mod -execdir "$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)" --fix \;
+
+.PHONY: _lint $(LINTERS)
+_lint: $(LINTERS)
+
+.PHONY: fix $(FIXERS)
+fix: $(FIXERS)
+
+# END: lint-install
 
 ## --------------------------------------
 ## Generate
