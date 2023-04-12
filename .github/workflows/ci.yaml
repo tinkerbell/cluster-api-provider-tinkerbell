@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+env:
+  CGO_ENABLED: 0
+  GO_VERSION: '1.20'
+
 jobs:
   validate:
     name: "Validate ${{ matrix.target }}"
@@ -20,7 +24,7 @@ jobs:
 
       - uses: actions/setup-go@v4
         with:
-          go-version: 1.19
+          go-version: "${{ env.GO_VERSION }}"
           cache: true
 
       - uses: actions/cache@v3
