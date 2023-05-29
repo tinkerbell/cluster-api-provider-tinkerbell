@@ -141,7 +141,7 @@ func validMachine(name, namespace, clusterName string) *clusterv1.Machine {
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				clusterv1.ClusterLabelName: clusterName,
+				clusterv1.ClusterNameLabel: clusterName,
 			},
 		},
 		Spec: clusterv1.MachineSpec{
