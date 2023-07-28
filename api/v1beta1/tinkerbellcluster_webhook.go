@@ -42,7 +42,7 @@ func (c *TinkerbellCluster) ValidateCreate() error {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateUpdate(oldRaw runtime.Object) error {
+func (c *TinkerbellCluster) ValidateUpdate(_ runtime.Object) error {
 	return nil
 }
 

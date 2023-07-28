@@ -88,9 +88,9 @@ var (
 // If some data is not yet available, nil is returned.
 //
 //nolint:lll
-func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (BaseMachineReconcileContext, ctrl.Result, error) {
+func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (BaseMachineReconcileContext, error) {
 	if err := tmr.validate(); err != nil {
-		return nil, ctrl.Result{}, fmt.Errorf("invalid configuration: %w", err)
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	log := ctrl.LoggerFrom(ctx)
@@ -106,20 +106,20 @@ func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context,
 		if apierrors.IsNotFound(err) {
 			bmrc.log.Info("TinkerbellMachine not found")
 
-			return nil, ctrl.Result{}, nil
+			return nil, nil
 		}
 
-		return nil, ctrl.Result{}, fmt.Errorf("getting TinkerbellMachine: %w", err)
+		return nil, fmt.Errorf("getting TinkerbellMachine: %w", err)
 	}
 
 	patchHelper, err := patch.NewHelper(bmrc.tinkerbellMachine, bmrc.client)
 	if err != nil {
-		return nil, ctrl.Result{}, fmt.Errorf("initializing patch helper: %w", err)
+		return nil, fmt.Errorf("initializing patch helper: %w", err)
 	}
 
 	bmrc.patchHelper = patchHelper
 
-	return bmrc, ctrl.Result{}, nil
+	return bmrc, nil
 }
 
 // MachineScheduledForDeletion implements BaseMachineReconcileContext interface method

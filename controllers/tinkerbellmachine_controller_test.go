@@ -103,7 +103,6 @@ func validCluster(name, namespace string) *clusterv1.Cluster {
 	}
 }
 
-//nolint:unparam
 func validTinkerbellCluster(name, namespace string) *infrastructurev1.TinkerbellCluster {
 	tinkCluster := &infrastructurev1.TinkerbellCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -145,9 +144,9 @@ func validMachine(name, namespace, clusterName string) *clusterv1.Machine {
 			},
 		},
 		Spec: clusterv1.MachineSpec{
-			Version: pointer.StringPtr("1.19.4"),
+			Version: pointer.String("1.19.4"),
 			Bootstrap: clusterv1.Bootstrap{
-				DataSecretName: pointer.StringPtr(name),
+				DataSecretName: pointer.String(name),
 			},
 		},
 	}
