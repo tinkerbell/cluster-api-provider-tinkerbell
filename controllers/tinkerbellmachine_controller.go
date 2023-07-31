@@ -55,13 +55,13 @@ type TinkerbellMachineReconciler struct {
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
 func (tmr *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	bmrc, result, err := tmr.newReconcileContext(ctx, req.NamespacedName)
+	bmrc, err := tmr.newReconcileContext(ctx, req.NamespacedName)
 	if err != nil {
-		return result, fmt.Errorf("creating reconciliation context: %w", err)
+		return ctrl.Result{}, fmt.Errorf("creating reconciliation context: %w", err)
 	}
 
 	if bmrc == nil {
-		return result, nil
+		return ctrl.Result{}, nil
 	}
 
 	if bmrc.MachineScheduledForDeletion() {

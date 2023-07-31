@@ -38,7 +38,7 @@ import (
 
 //nolint:unparam
 func unreadyTinkerbellCluster(name, namespace string) *infrastructurev1.TinkerbellCluster {
-	unreadyTinkerbellCluster := validTinkerbellCluster(name, clusterNamespace)
+	unreadyTinkerbellCluster := validTinkerbellCluster(name, namespace)
 	unreadyTinkerbellCluster.Status.Ready = false
 	unreadyTinkerbellCluster.ObjectMeta.Finalizers = nil
 	unreadyTinkerbellCluster.Spec.ControlPlaneEndpoint.Host = ""
