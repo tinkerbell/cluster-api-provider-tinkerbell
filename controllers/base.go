@@ -38,11 +38,27 @@ import (
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
 
-// ReconcileContext describes functionality required for reconciling Machine or Cluster object
-// into Tinkerbell Kubernetes node.
-type ReconcileContext interface {
-	Reconcile() error
-}
+var (
+	// ErrMachineVersionEmpty is the error returned when Version is not set on the parent Machine.
+	ErrMachineVersionEmpty = fmt.Errorf("machine version is empty")
+
+	// ErrConfigurationNil is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler is nil.
+	ErrConfigurationNil = fmt.Errorf("configuration is nil")
+
+	// ErrMissingClient is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler do
+	// not have a Client configured.
+	ErrMissingClient = fmt.Errorf("client is nil")
+
+	// ErrMissingBootstrapDataSecretValueKey is the error returned when the Secret referenced for bootstrap data
+	// is missing the value key.
+	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
+
+	// ErrBootstrapUserDataEmpty is the error returned when the referenced bootstrap data is empty.
+	ErrBootstrapUserDataEmpty = fmt.Errorf("received bootstrap user data is empty")
+
+	// errWorkflowFailed is the error returned when the workflow fails.
+	errWorkflowFailed = fmt.Errorf("workflow failed")
+)
 
 // baseMachineReconcileContext contains enough information to decide if given machine should
 // be removed or created.
@@ -54,32 +70,6 @@ type baseMachineReconcileContext struct {
 	client            client.Client
 }
 
-// BaseMachineReconcileContext is an interface allowing basic machine reconciliation which
-// involves either object removal or further processing using MachineReconcileContext interface.
-type BaseMachineReconcileContext interface {
-	MachineScheduledForDeletion() bool
-	DeleteMachineWithDependencies() error
-	IntoMachineReconcileContext() (ReconcileContext, error)
-	Log() logr.Logger
-}
-
-var (
-	// ErrMachineVersionEmpty is the error returned when Version is not set on the parent Machine.
-	ErrMachineVersionEmpty = fmt.Errorf("machine version is empty")
-	// ErrConfigurationNil is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler is nil.
-	ErrConfigurationNil = fmt.Errorf("configuration is nil")
-	// ErrMissingClient is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler do
-	// not have a Client configured.
-	ErrMissingClient = fmt.Errorf("client is nil")
-	// ErrMissingBootstrapDataSecretValueKey is the error returned when the Secret referenced for bootstrap data
-	// is missing the value key.
-	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
-	// ErrBootstrapUserDataEmpty is the error returned when the referenced bootstrap data is empty.
-	ErrBootstrapUserDataEmpty = fmt.Errorf("received bootstrap user data is empty")
-	// errWorkflowFailed is the error returned when the workflow fails.
-	errWorkflowFailed = fmt.Errorf("workflow failed")
-)
-
 // New builds a context for machine reconciliation process, collecting all required
 // information.
 //
@@ -88,7 +78,7 @@ var (
 // If some data is not yet available, nil is returned.
 //
 //nolint:lll
-func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (BaseMachineReconcileContext, error) {
+func (tmr *TinkerbellMachineReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (*baseMachineReconcileContext, error) {
 	if err := tmr.validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -301,7 +291,7 @@ func (bmrc *baseMachineReconcileContext) ensureBMCJobCompletionForDelete(hardwar
 
 // IntoMachineReconcileContext implements BaseMachineReconcileContext by building MachineReconcileContext
 // from existing fields.
-func (bmrc *baseMachineReconcileContext) IntoMachineReconcileContext() (ReconcileContext, error) {
+func (bmrc *baseMachineReconcileContext) IntoMachineReconcileContext() (*machineReconcileContext, error) {
 	machine, err := bmrc.getReadyMachine()
 	if err != nil {
 		return nil, fmt.Errorf("getting valid Machine object: %w", err)

@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -62,21 +61,6 @@ type machineReconcileContext struct {
 // ErrHardwareMissingDiskConfiguration is returned when the referenced hardware is missing
 // disk configuration.
 var ErrHardwareMissingDiskConfiguration = fmt.Errorf("disk configuration is required")
-
-// MachineCreator is a subset of tinkerbellCluster used by machineReconcileContext.
-type MachineCreator interface {
-	// Template related functions.
-	CreateTemplate(ctx context.Context, name, data string) (string, error)
-
-	// Workflow related functions.
-	CreateWorkflow(ctx context.Context, templateID, hardware string) (string, error)
-
-	// Hardware related functions.
-	HardwareIDByIP(ctx context.Context, ip string) (string, error)
-	GetHardwareIP(ctx context.Context, id string) (string, error)
-	NextAvailableHardwareID(ctx context.Context) (string, error)
-	HardwareAvailable(ctx context.Context, id string) (bool, error)
-}
 
 // lastActionStarted returns the state of the final action in a hardware's workflow or an error if the workflow
 // has not reached the final action.
