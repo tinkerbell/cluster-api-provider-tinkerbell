@@ -103,7 +103,6 @@ func validCluster(name, namespace string) *clusterv1.Cluster {
 	}
 }
 
-//nolint:unparam
 func validTinkerbellCluster(name, namespace string) *infrastructurev1.TinkerbellCluster {
 	tinkCluster := &infrastructurev1.TinkerbellCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -145,9 +144,9 @@ func validMachine(name, namespace, clusterName string) *clusterv1.Machine {
 			},
 		},
 		Spec: clusterv1.MachineSpec{
-			Version: pointer.StringPtr("1.19.4"),
+			Version: pointer.String("1.19.4"),
 			Bootstrap: clusterv1.Bootstrap{
-				DataSecretName: pointer.StringPtr(name),
+				DataSecretName: pointer.String(name),
 			},
 		},
 	}
@@ -597,8 +596,8 @@ func Test_Machine_reconciliation(t *testing.T) {
 	t.Run("fails_when", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("reconciler_is_nil", machineReconciliationFailsWhenReconcilerIsNil)                     //nolint:paralleltest
-		t.Run("reconciler_has_no_client_set", machineReconciliationFailsWhenReconcilerHasNoClientSet) //nolint:paralleltest
+		t.Run("reconciler_is_nil", machineReconciliationPanicsWhenReconcilerIsNil)                     //nolint:paralleltest
+		t.Run("reconciler_has_no_client_set", machineReconciliationPanicsWhenReconcilerHasNoClientSet) //nolint:paralleltest
 
 		// CAPI spec says this is optional, but @detiber says it's effectively required, so treat it as so.
 		t.Run("machine_has_no_version_set", machineReconciliationFailsWhenMachineHasNoVersionSet) //nolint:paralleltest
@@ -716,7 +715,7 @@ const (
 	tinkerbellMachineName = "myTinkerbellMachineName"
 )
 
-func machineReconciliationFailsWhenReconcilerIsNil(t *testing.T) {
+func machineReconciliationPanicsWhenReconcilerIsNil(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -729,11 +728,17 @@ func machineReconciliationFailsWhenReconcilerIsNil(t *testing.T) {
 		},
 	}
 
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic but received none")
+		}
+	}()
+
 	_, err := machineController.Reconcile(context.TODO(), request)
 	g.Expect(err).To(MatchError(controllers.ErrConfigurationNil))
 }
 
-func machineReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
+func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -745,6 +750,12 @@ func machineReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
 			Name:      tinkerbellMachineName,
 		},
 	}
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic but received none")
+		}
+	}()
 
 	_, err := machineController.Reconcile(context.TODO(), request)
 	g.Expect(err).To(MatchError(controllers.ErrMissingClient))

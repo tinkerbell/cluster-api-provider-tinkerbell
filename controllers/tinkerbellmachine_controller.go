@@ -19,11 +19,13 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/collections"
+	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -54,30 +56,79 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=bmc.tinkerbell.org,resources=jobs,verbs=get;list;watch;create
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
-func (tmr *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	bmrc, result, err := tmr.newReconcileContext(ctx, req.NamespacedName)
+func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// If the TinkerbellMachineReconciler instant is invalid we can't continue. There's also no way
+	// for us to recover the TinkerbellMachineReconciler instance (i.e. there's a programmer error).
+	// To avoid continuously requeueing resources for the controller that will never resolve its
+	// problem, we're panicking.
+	if err := r.validate(); err != nil {
+		panic(err)
+	}
+
+	log := ctrl.LoggerFrom(ctx)
+
+	scope := &machineReconcileScope{
+		log:               log,
+		ctx:               ctx,
+		tinkerbellMachine: &infrastructurev1.TinkerbellMachine{},
+		client:            r.Client,
+	}
+
+	if err := r.Client.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("TinkerbellMachine not found")
+
+			return ctrl.Result{}, nil
+		}
+
+		return ctrl.Result{}, fmt.Errorf("get TinkerbellMachine: %w", err)
+	}
+
+	patchHelper, err := patch.NewHelper(scope.tinkerbellMachine, r.Client)
 	if err != nil {
-		return result, fmt.Errorf("creating reconciliation context: %w", err)
+		return ctrl.Result{}, fmt.Errorf("initialize patch helper: %w", err)
+	}
+	scope.patchHelper = patchHelper
+
+	if scope.MachineScheduledForDeletion() {
+		return ctrl.Result{}, scope.DeleteMachineWithDependencies() //nolint:wrapcheck
 	}
 
-	if bmrc == nil {
-		return result, nil
-	}
-
-	if bmrc.MachineScheduledForDeletion() {
-		return ctrl.Result{}, bmrc.DeleteMachineWithDependencies() //nolint:wrapcheck
-	}
-
-	mrc, err := bmrc.IntoMachineReconcileContext()
+	// We must be bound to a CAPI Machine object before we can continue.
+	machine, err := scope.getReadyMachine()
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("building machine reconcile context: %w", err)
+		return ctrl.Result{}, fmt.Errorf("getting valid Machine object: %w", err)
 	}
-
-	if mrc == nil {
+	if machine == nil {
 		return ctrl.Result{}, nil
 	}
 
-	return ctrl.Result{}, mrc.Reconcile() //nolint:wrapcheck
+	// We need a bootstrap cloud config secret to bootstrap the node so we can't proceed without it.
+	// Typically, this is something akin to cloud-init user-data.
+	bootstrapCloudConfig, err := scope.getReadyBootstrapCloudConfig(machine)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("receiving bootstrap cloud config: %w", err)
+	}
+	if bootstrapCloudConfig == "" {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	tinkerbellCluster, err := scope.getReadyTinkerbellCluster(machine)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("getting TinkerbellCluster: %w", err)
+	}
+
+	if tinkerbellCluster == nil {
+		log.Info("TinkerbellCluster is not ready yet")
+
+		return ctrl.Result{}, nil
+	}
+
+	scope.machine = machine
+	scope.bootstrapCloudConfig = bootstrapCloudConfig
+	scope.tinkerbellCluster = tinkerbellCluster
+
+	return ctrl.Result{}, scope.Reconcile() //nolint:wrapcheck
 }
 
 // SetupWithManager configures reconciler with a given manager.
