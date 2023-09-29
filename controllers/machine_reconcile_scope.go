@@ -41,7 +41,7 @@ import (
 
 	"github.com/go-logr/logr"
 	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"

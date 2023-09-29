@@ -32,10 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -153,32 +152,28 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, tmr.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
 		Watches(
-			&source.Kind{Type: &clusterv1.Machine{}},
+			&clusterv1.Machine{},
 			handler.EnqueueRequestsFromMapFunc(
 				util.MachineToInfrastructureMapFunc(infrastructurev1.GroupVersion.WithKind("TinkerbellMachine")),
 			),
 		).
 		Watches(
-			&source.Kind{Type: &infrastructurev1.TinkerbellCluster{}},
+			&infrastructurev1.TinkerbellCluster{},
 			handler.EnqueueRequestsFromMapFunc(tmr.TinkerbellClusterToTinkerbellMachines(ctx)),
 		).
 		Watches(
-			&source.Kind{Type: &clusterv1.Cluster{}},
+			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
 			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(log)),
 		).
 		Watches(
-			&source.Kind{Type: &tinkv1.Workflow{}},
-			&handler.EnqueueRequestForOwner{
-				OwnerType:    &infrastructurev1.TinkerbellMachine{},
-				IsController: true,
-			}).
+			&tinkv1.Workflow{},
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &infrastructurev1.TinkerbellMachine{}, handler.OnlyControllerOwner()),
+		).
 		Watches(
-			&source.Kind{Type: &rufiov1.Job{}},
-			&handler.EnqueueRequestForOwner{
-				OwnerType:    &infrastructurev1.TinkerbellMachine{},
-				IsController: true,
-			})
+			&rufiov1.Job{},
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &infrastructurev1.TinkerbellMachine{}, handler.OnlyControllerOwner()),
+		)
 
 	if err := builder.Complete(tmr); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
@@ -192,7 +187,7 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 func (tmr *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx context.Context) handler.MapFunc {
 	log := ctrl.LoggerFrom(ctx)
 
-	return func(o client.Object) []ctrl.Request {
+	return func(ctx context.Context, o client.Object) []ctrl.Request {
 		c, ok := o.(*infrastructurev1.TinkerbellCluster)
 		if !ok {
 			log.Error(

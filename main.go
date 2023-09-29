@@ -33,13 +33,15 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -276,20 +278,25 @@ func main() { //nolint:funlen
 	})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                  scheme,
-		MetricsBindAddress:      metricsAddr,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		Cache: cache.Options{
+			DefaultNamespaces: map[string]cache.Config{watchNamespace: {}},
+		},
 		LeaderElection:          enableLeaderElection,
 		LeaderElectionID:        "controller-leader-election-capt",
 		LeaderElectionNamespace: leaderElectionNamespace,
 		LeaseDuration:           &leaderElectionLeaseDuration,
 		RenewDeadline:           &leaderElectionRenewDeadline,
 		RetryPeriod:             &leaderElectionRetryPeriod,
-		SyncPeriod:              &syncPeriod,
-		Namespace:               watchNamespace,
-		Port:                    webhookPort,
-		CertDir:                 webhookCertDir,
-		HealthProbeBindAddress:  healthAddr,
-		EventBroadcaster:        broadcaster,
+		// SyncPeriod:              &syncPeriod,
+		// Namespace:               watchNamespace,
+		// Port:                    webhookPort,
+		// CertDir:                 webhookCertDir,
+		HealthProbeBindAddress: healthAddr,
+		EventBroadcaster:       broadcaster,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
