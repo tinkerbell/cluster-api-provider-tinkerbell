@@ -21,7 +21,7 @@ require (
 	sigs.k8s.io/cluster-api v1.4.4
 	sigs.k8s.io/controller-runtime v0.14.5
 	sigs.k8s.io/kustomize/kustomize/v4 v4.5.7
-	sigs.k8s.io/yaml v1.3.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
