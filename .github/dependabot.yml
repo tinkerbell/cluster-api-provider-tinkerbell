@@ -1,19 +1,49 @@
 version: 2
 updates:
-  # Maintain dependencies for GitHub Actions.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+      time: "04:39"
+      timezone: "America/New_York"
+    reviewers:
+      - chrisdoherty4
+      - jacobweinstock
+    open-pull-requests-limit: 10
 
-  # Maintain dependencies for Go modules.
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+      time: "03:52"
+      timezone: "America/New_York"
+    reviewers:
+      - chrisdoherty4
+      - jacobweinstock
+    open-pull-requests-limit: 10
 
-  # Maintain dependencies for Docker images.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "03:52"
+      timezone: "America/New_York"
+    reviewers:
+      - chrisdoherty4
+      - jacobweinstock
+    open-pull-requests-limit: 10
+
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+      time: "04:22"
+      timezone: "America/New_York"
+    reviewers:
+      - chrisdoherty4
+      - jacobweinstock
+    open-pull-requests-limit: 10
