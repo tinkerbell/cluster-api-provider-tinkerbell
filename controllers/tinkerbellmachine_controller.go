@@ -138,7 +138,7 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	clusterToObjectFunc, err := util.ClusterToObjectsMapper(
+	clusterToObjectFunc, err := util.ClusterToTypedObjectsMapper(
 		tmr.Client,
 		&infrastructurev1.TinkerbellMachineList{},
 		mgr.GetScheme(),
