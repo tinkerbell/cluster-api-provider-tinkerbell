@@ -29,7 +29,7 @@ import (
 	cgrecord "k8s.io/client-go/tools/record"
 	"k8s.io/component-base/version"
 	"k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,9 +39,10 @@ import (
 	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
 	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -269,7 +270,7 @@ func main() { //nolint:funlen
 		}()
 	}
 
-	ctrl.SetLogger(klogr.New())
+	ctrl.SetLogger(textlogger.NewLogger(&textlogger.Config{}))
 
 	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
 	// Setting the burst size higher ensures all events will be recorded and submitted to the API

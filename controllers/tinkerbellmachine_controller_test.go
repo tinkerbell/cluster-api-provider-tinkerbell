@@ -28,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -144,9 +144,9 @@ func validMachine(name, namespace, clusterName string) *clusterv1.Machine {
 			},
 		},
 		Spec: clusterv1.MachineSpec{
-			Version: pointer.String("1.19.4"),
+			Version: ptr.To[string]("1.19.4"),
 			Bootstrap: clusterv1.Bootstrap{
-				DataSecretName: pointer.String(name),
+				DataSecretName: ptr.To[string](name),
 			},
 		},
 	}
