@@ -305,7 +305,7 @@ func main() { //nolint:funlen
 	}
 
 	// Initialize event recorder.
-	record.InitFromRecorder(mgr.GetEventRecorderFor("packet-controller"))
+	record.InitFromRecorder(mgr.GetEventRecorderFor("tinkerbell-controller"))
 
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
