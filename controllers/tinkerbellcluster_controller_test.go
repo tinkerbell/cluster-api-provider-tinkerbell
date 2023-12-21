@@ -194,10 +194,12 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	g.Expect(infrastructurev1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell CAPI objects to scheme should succeed")
 	g.Expect(clusterv1.AddToScheme(scheme)).To(Succeed(), "Adding CAPI objects to scheme should succeed")
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed(), "Adding Core V1 objects to scheme should succeed")
+
 	objs := []client.Object{
 		&infrastructurev1.TinkerbellMachine{},
 		&infrastructurev1.TinkerbellCluster{},
 	}
+
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()
 }
 
