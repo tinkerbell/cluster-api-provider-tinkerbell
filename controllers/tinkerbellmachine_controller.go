@@ -61,7 +61,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// If the TinkerbellMachineReconciler instant is invalid we can't continue. There's also no way
 	// for us to recover the TinkerbellMachineReconciler instance (i.e. there's a programmer error).
 	// To avoid continuously requeueing resources for the controller that will never resolve its
-	// problem, we're panicking.
+	// problem, we panic.
 	if err := r.validate(); err != nil {
 		panic(err)
 	}

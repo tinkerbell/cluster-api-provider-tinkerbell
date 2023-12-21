@@ -39,6 +39,11 @@ import (
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
 )
 
+const (
+	machineName           = "myMachineName"
+	tinkerbellMachineName = "myTinkerbellMachineName"
+)
+
 func notImplemented(t *testing.T) {
 	t.Helper()
 	t.Parallel()
@@ -677,10 +682,7 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 	updatedMachine := &infrastructurev1.TinkerbellMachine{}
 	g.Expect(client.Get(ctx, tinkerbellMachineNamespacedName, updatedMachine)).To(Succeed())
 
-	now := metav1.Now()
-	updatedMachine.ObjectMeta.DeletionTimestamp = &now
-
-	g.Expect(client.Update(ctx, updatedMachine)).To(Succeed())
+	g.Expect(client.Delete(ctx, updatedMachine)).To(Succeed())
 	_, err = reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
 	g.Expect(err).NotTo(HaveOccurred())
 
@@ -709,11 +711,6 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 			"Found hardware owner namespace label")
 	})
 }
-
-const (
-	machineName           = "myMachineName"
-	tinkerbellMachineName = "myTinkerbellMachineName"
-)
 
 func machineReconciliationPanicsWhenReconcilerIsNil(t *testing.T) {
 	t.Parallel()
