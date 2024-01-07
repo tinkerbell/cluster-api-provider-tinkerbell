@@ -53,6 +53,7 @@ jobs:
           }
           EOF
           packer plugins install github.com/hashicorp/qemu 
+          make deps-qemu
           PACKER_VAR_FILES=packer/raw/overwrite-kubernetes.json make build-raw-all
 
       - name: Log in to the Container registry
@@ -64,5 +65,5 @@ jobs:
 
       - name: Push the images
         run: |
-          oras push ${REGISTRY}/${{ github.repository }}/ubuntu-1804:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config image-builder/images/capi/output/ubuntu-1804-kube-${KUBERNETES_SEM_VERSION}.gz
+          # oras push ${REGISTRY}/${{ github.repository }}/ubuntu-1804:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config image-builder/images/capi/output/ubuntu-1804-kube-${KUBERNETES_SEM_VERSION}.gz
           oras push ${REGISTRY}/${{ github.repository }}/ubuntu-2004:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config image-builder/images/capi/output/ubuntu-2004-kube-${KUBERNETES_SEM_VERSION}.gz
