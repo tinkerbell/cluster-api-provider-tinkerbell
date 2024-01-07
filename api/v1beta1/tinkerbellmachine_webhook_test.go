@@ -28,7 +28,6 @@ import (
 func Test_valid_tinkerbell_machine(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-
 	existingValidMachine := &v1beta1.TinkerbellMachine{}
 
 	for _, machine := range []v1beta1.TinkerbellMachine{
@@ -82,8 +81,10 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 			},
 		},
 	} {
-		g.Expect(machine.ValidateCreate()).ToNot(HaveOccurred())
-		g.Expect(machine.ValidateUpdate(existingValidMachine)).ToNot(HaveOccurred())
+		_, err := machine.ValidateCreate()
+		g.Expect(err).ToNot(HaveOccurred())
+		_, err = machine.ValidateUpdate(existingValidMachine)
+		g.Expect(err).ToNot(HaveOccurred())
 	}
 }
 
@@ -128,7 +129,9 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 			},
 		},
 	} {
-		g.Expect(machine.ValidateCreate()).To(HaveOccurred())
-		g.Expect(machine.ValidateUpdate(existingValidMachine)).To(HaveOccurred())
+		_, err := machine.ValidateCreate()
+		g.Expect(err).To(HaveOccurred())
+		_, err = machine.ValidateUpdate(existingValidMachine)
+		g.Expect(err).To(HaveOccurred())
 	}
 }

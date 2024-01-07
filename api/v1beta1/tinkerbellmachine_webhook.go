@@ -20,7 +20,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
+
+var _ admission.Validator = &TinkerbellMachine{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (m *TinkerbellMachine) SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -30,14 +33,14 @@ func (m *TinkerbellMachine) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachine,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines,versions=v1beta1,name=validation.tinkerbellmachine.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateCreate() error {
+func (m *TinkerbellMachine) ValidateCreate() (admission.Warnings, error) {
 	allErrs := m.validateSpec()
 
-	return aggregateObjErrors(m.GroupVersionKind().GroupKind(), m.Name, allErrs)
+	return nil, aggregateObjErrors(m.GroupVersionKind().GroupKind(), m.Name, allErrs)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateUpdate(oldRaw runtime.Object) error {
+func (m *TinkerbellMachine) ValidateUpdate(oldRaw runtime.Object) (admission.Warnings, error) {
 	allErrs := m.validateSpec()
 
 	old, _ := oldRaw.(*TinkerbellMachine)
@@ -50,12 +53,12 @@ func (m *TinkerbellMachine) ValidateUpdate(oldRaw runtime.Object) error {
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "providerID"), "is immutable once set"))
 	}
 
-	return aggregateObjErrors(m.GroupVersionKind().GroupKind(), m.Name, allErrs)
+	return nil, aggregateObjErrors(m.GroupVersionKind().GroupKind(), m.Name, allErrs)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateDelete() error {
-	return nil
+func (m *TinkerbellMachine) ValidateDelete() (admission.Warnings, error) {
+	return nil, nil
 }
 
 func (m *TinkerbellMachine) validateSpec() field.ErrorList {
