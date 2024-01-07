@@ -87,14 +87,14 @@ tasks:
       - /lib/firmware:/lib/firmware:ro
     actions:
       - name: "stream-image"
-        image: oci2disk:v1.0.0
+        image: quay.io/tinkerbell-actions/oci2disk:v1.0.0
         timeout: 600
         environment:
           IMG_URL: {{.ImageURL}}
           DEST_DISK: {{.DestDisk}}
           COMPRESSED: true
       - name: "add-tink-cloud-init-config"
-        image: writefile:v1.0.0
+        image: quay.io/tinkerbell-actions/writefile:v1.0.0
         timeout: 90
         environment:
           DEST_DISK: {{.DestPartition}}
@@ -119,7 +119,7 @@ tasks:
             warnings:
               dsid_missing_source: off
       - name: "add-tink-cloud-init-ds-config"
-        image: writefile:v1.0.0
+        image: quay.io/tinkerbell-actions/writefile:v1.0.0
         timeout: 90
         environment:
           DEST_DISK: {{.DestPartition}}
@@ -132,11 +132,15 @@ tasks:
           CONTENTS: |
             datasource: Ec2
       - name: "kexec-image"
-        image: kexec:v1.0.0
+        image: ghcr.io/jacobweinstock/waitdaemon:0.1.2
         timeout: 90
         pid: host
         environment:
           BLOCK_DEVICE: {{.DestPartition}}
           FS_TYPE: ext4
+          IMAGE: quay.io/tinkerbell-actions/kexec:v1.0.0
+          WAIT_SECONDS: 10
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
 `
 )
