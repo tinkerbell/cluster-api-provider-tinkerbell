@@ -23,13 +23,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-logr/zerologr"
+	"github.com/rs/zerolog"
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
 	"k8s.io/component-base/version"
 	"k8s.io/klog/v2"
-	"k8s.io/klog/v2/textlogger"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -270,7 +271,10 @@ func main() { //nolint:funlen
 		}()
 	}
 
-	ctrl.SetLogger(textlogger.NewLogger(&textlogger.Config{}))
+	zl := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Caller().Timestamp().Logger()
+	logger := zerologr.New(&zl)
+	ctrl.SetLogger(logger)
+	klog.SetLogger(logger)
 
 	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
 	// Setting the burst size higher ensures all events will be recorded and submitted to the API
@@ -292,12 +296,8 @@ func main() { //nolint:funlen
 		LeaseDuration:           &leaderElectionLeaseDuration,
 		RenewDeadline:           &leaderElectionRenewDeadline,
 		RetryPeriod:             &leaderElectionRetryPeriod,
-		// SyncPeriod:              &syncPeriod,
-		// Namespace:               watchNamespace,
-		// Port:                    webhookPort,
-		// CertDir:                 webhookCertDir,
-		HealthProbeBindAddress: healthAddr,
-		EventBroadcaster:       broadcaster,
+		HealthProbeBindAddress:  healthAddr,
+		EventBroadcaster:        broadcaster,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
