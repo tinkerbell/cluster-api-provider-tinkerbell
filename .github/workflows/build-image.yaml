@@ -52,8 +52,8 @@ jobs:
             "kubernetes_series": "${KUBERNETES_SERIES}"
           }
           EOF
-          packer plugins install github.com/hashicorp/qemu 
-          make deps-qemu
+          make deps-raw
+          packer plugins install github.com/hashicorp/qemu
           PACKER_VAR_FILES=packer/raw/overwrite-kubernetes.json make build-raw-all
 
       - name: Log in to the Container registry
