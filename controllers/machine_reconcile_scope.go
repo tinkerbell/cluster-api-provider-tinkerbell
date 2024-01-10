@@ -41,7 +41,7 @@ import (
 
 	"github.com/go-logr/logr"
 	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
@@ -519,8 +519,10 @@ func (scope *machineReconcileScope) assignedHardware() (*tinkv1.Hardware, error)
 //nolint:lll
 func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1.WeightedHardwareAffinityTerm) (func(i int, j int) bool, error) {
 	scores := map[client.ObjectKey]int32{}
-	// compute scores for each item based on the preferred term weightss
+	// compute scores for each item based on the preferred term weights
 	for _, term := range preferred {
+		term := term
+
 		selector, err := metav1.LabelSelectorAsSelector(&term.HardwareAffinityTerm.LabelSelector)
 		if err != nil {
 			return nil, fmt.Errorf("constructing label selector: %w", err)

@@ -28,15 +28,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+)
+
+const (
+	machineName           = "myMachineName"
+	tinkerbellMachineName = "myTinkerbellMachineName"
 )
 
 func notImplemented(t *testing.T) {
@@ -144,9 +149,9 @@ func validMachine(name, namespace, clusterName string) *clusterv1.Machine {
 			},
 		},
 		Spec: clusterv1.MachineSpec{
-			Version: pointer.String("1.19.4"),
+			Version: ptr.To[string]("1.19.4"),
 			Bootstrap: clusterv1.Bootstrap{
-				DataSecretName: pointer.String(name),
+				DataSecretName: ptr.To[string](name),
 			},
 		},
 	}
@@ -677,10 +682,7 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 	updatedMachine := &infrastructurev1.TinkerbellMachine{}
 	g.Expect(client.Get(ctx, tinkerbellMachineNamespacedName, updatedMachine)).To(Succeed())
 
-	now := metav1.Now()
-	updatedMachine.ObjectMeta.DeletionTimestamp = &now
-
-	g.Expect(client.Update(ctx, updatedMachine)).To(Succeed())
+	g.Expect(client.Delete(ctx, updatedMachine)).To(Succeed())
 	_, err = reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
 	g.Expect(err).NotTo(HaveOccurred())
 
@@ -709,11 +711,6 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 			"Found hardware owner namespace label")
 	})
 }
-
-const (
-	machineName           = "myMachineName"
-	tinkerbellMachineName = "myTinkerbellMachineName"
-)
 
 func machineReconciliationPanicsWhenReconcilerIsNil(t *testing.T) {
 	t.Parallel()

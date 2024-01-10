@@ -21,12 +21,15 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
 	osUbuntu             = "ubuntu"
 	defaultUbuntuVersion = "20.04"
 )
+
+var _ admission.Validator = &TinkerbellCluster{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (c *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -37,18 +40,18 @@ func (c *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:webhook:verbs=create;update,path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=true,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=default.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateCreate() error {
-	return nil
+func (c *TinkerbellCluster) ValidateCreate() (admission.Warnings, error) {
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateUpdate(_ runtime.Object) error {
-	return nil
+func (c *TinkerbellCluster) ValidateUpdate(_ runtime.Object) (admission.Warnings, error) {
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateDelete() error {
-	return nil
+func (c *TinkerbellCluster) ValidateDelete() (admission.Warnings, error) {
+	return nil, nil
 }
 
 func defaultVersionForOSDistro(distro string) string {

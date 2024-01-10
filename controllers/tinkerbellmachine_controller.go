@@ -32,10 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -56,11 +55,13 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=bmc.tinkerbell.org,resources=jobs,verbs=get;list;watch;create
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
+//
+//nolint:funlen,cyclop
 func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// If the TinkerbellMachineReconciler instant is invalid we can't continue. There's also no way
 	// for us to recover the TinkerbellMachineReconciler instance (i.e. there's a programmer error).
 	// To avoid continuously requeueing resources for the controller that will never resolve its
-	// problem, we're panicking.
+	// problem, we panic.
 	if err := r.validate(); err != nil {
 		panic(err)
 	}
@@ -88,10 +89,11 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("initialize patch helper: %w", err)
 	}
+
 	scope.patchHelper = patchHelper
 
 	if scope.MachineScheduledForDeletion() {
-		return ctrl.Result{}, scope.DeleteMachineWithDependencies() //nolint:wrapcheck
+		return ctrl.Result{}, scope.DeleteMachineWithDependencies()
 	}
 
 	// We must be bound to a CAPI Machine object before we can continue.
@@ -99,6 +101,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("getting valid Machine object: %w", err)
 	}
+
 	if machine == nil {
 		return ctrl.Result{}, nil
 	}
@@ -109,8 +112,11 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("receiving bootstrap cloud config: %w", err)
 	}
+
 	if bootstrapCloudConfig == "" {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		const requeueAfter = 30 * time.Second
+
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
 	tinkerbellCluster, err := scope.getReadyTinkerbellCluster(machine)
@@ -128,19 +134,19 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	scope.bootstrapCloudConfig = bootstrapCloudConfig
 	scope.tinkerbellCluster = tinkerbellCluster
 
-	return ctrl.Result{}, scope.Reconcile() //nolint:wrapcheck
+	return ctrl.Result{}, scope.Reconcile()
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (tmr *TinkerbellMachineReconciler) SetupWithManager(
+func (r *TinkerbellMachineReconciler) SetupWithManager(
 	ctx context.Context,
 	mgr ctrl.Manager,
 	options controller.Options,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	clusterToObjectFunc, err := util.ClusterToObjectsMapper(
-		tmr.Client,
+	clusterToObjectFunc, err := util.ClusterToTypedObjectsMapper(
+		r.Client,
 		&infrastructurev1.TinkerbellMachineList{},
 		mgr.GetScheme(),
 	)
@@ -150,37 +156,43 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, tmr.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, r.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
 		Watches(
-			&source.Kind{Type: &clusterv1.Machine{}},
+			&clusterv1.Machine{},
 			handler.EnqueueRequestsFromMapFunc(
 				util.MachineToInfrastructureMapFunc(infrastructurev1.GroupVersion.WithKind("TinkerbellMachine")),
 			),
 		).
 		Watches(
-			&source.Kind{Type: &infrastructurev1.TinkerbellCluster{}},
-			handler.EnqueueRequestsFromMapFunc(tmr.TinkerbellClusterToTinkerbellMachines(ctx)),
+			&infrastructurev1.TinkerbellCluster{},
+			handler.EnqueueRequestsFromMapFunc(r.TinkerbellClusterToTinkerbellMachines(ctx)),
 		).
 		Watches(
-			&source.Kind{Type: &clusterv1.Cluster{}},
+			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
 			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(log)),
 		).
 		Watches(
-			&source.Kind{Type: &tinkv1.Workflow{}},
-			&handler.EnqueueRequestForOwner{
-				OwnerType:    &infrastructurev1.TinkerbellMachine{},
-				IsController: true,
-			}).
+			&tinkv1.Workflow{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&infrastructurev1.TinkerbellMachine{},
+				handler.OnlyControllerOwner(),
+			),
+		).
 		Watches(
-			&source.Kind{Type: &rufiov1.Job{}},
-			&handler.EnqueueRequestForOwner{
-				OwnerType:    &infrastructurev1.TinkerbellMachine{},
-				IsController: true,
-			})
+			&rufiov1.Job{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&infrastructurev1.TinkerbellMachine{},
+				handler.OnlyControllerOwner(),
+			),
+		)
 
-	if err := builder.Complete(tmr); err != nil {
+	if err := builder.Complete(r); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
 	}
 
@@ -189,10 +201,10 @@ func (tmr *TinkerbellMachineReconciler) SetupWithManager(
 
 // TinkerbellClusterToTinkerbellMachines is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
 // of TinkerbellMachines.
-func (tmr *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx context.Context) handler.MapFunc {
+func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx context.Context) handler.MapFunc {
 	log := ctrl.LoggerFrom(ctx)
 
-	return func(o client.Object) []ctrl.Request {
+	return func(ctx context.Context, o client.Object) []ctrl.Request {
 		c, ok := o.(*infrastructurev1.TinkerbellCluster)
 		if !ok {
 			log.Error(
@@ -212,7 +224,7 @@ func (tmr *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ct
 			return nil
 		}
 
-		cluster, err := util.GetOwnerCluster(ctx, tmr.Client, c.ObjectMeta)
+		cluster, err := util.GetOwnerCluster(ctx, r.Client, c.ObjectMeta)
 
 		switch {
 		case apierrors.IsNotFound(err) || cluster == nil:
@@ -225,7 +237,7 @@ func (tmr *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ct
 			return nil
 		}
 
-		machines, err := collections.GetFilteredMachinesForCluster(ctx, tmr.Client, cluster)
+		machines, err := collections.GetFilteredMachinesForCluster(ctx, r.Client, cluster)
 		if err != nil {
 			log.Error(err, "failed to get Machines for Cluster")
 
@@ -249,12 +261,12 @@ func (tmr *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ct
 }
 
 // validate validates if context configuration has all required fields properly populated.
-func (tmr *TinkerbellMachineReconciler) validate() error {
-	if tmr == nil {
+func (r *TinkerbellMachineReconciler) validate() error {
+	if r == nil {
 		return ErrConfigurationNil
 	}
 
-	if tmr.Client == nil {
+	if r.Client == nil {
 		return ErrMissingClient
 	}
 

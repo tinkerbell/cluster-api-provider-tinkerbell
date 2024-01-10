@@ -51,18 +51,18 @@ GO_INSTALL = ./scripts/go_install.sh
 # Binaries.
 CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10
 
-GOLANGCI_LINT_VER := v1.53.3
+GOLANGCI_LINT_VER := v1.54.2
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)
 
-KUBECTL_VER := v1.23.0
+KUBECTL_VER := v1.28.2
 KUBECTL_BIN := kubectl
 KUBECTL := $(TOOLS_BIN_DIR)/$(KUBECTL_BIN)-$(KUBECTL_VER)
 
-KIND_VER := v0.12.0
+KIND_VER := v0.20.0
 KIND_BIN := kind
 KIND := $(TOOLS_BIN_DIR)/$(KIND_BIN)-$(KIND_VER)
 
@@ -107,7 +107,7 @@ endif
 # Build time versioning details.
 LDFLAGS := $(shell hack/version.sh)
 
-GOLANG_VERSION := 1.20
+GOLANG_VERSION := 1.21
 
 ## --------------------------------------
 ## Help
