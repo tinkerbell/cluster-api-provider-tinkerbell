@@ -281,14 +281,10 @@ func main() { //nolint:funlen
 	broadcaster := cgrecord.NewBroadcasterWithCorrelatorOptions(cgrecord.CorrelatorOptions{
 		BurstSize: 100, //nolint:gomnd
 	})
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	opts := ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
-		},
-		Cache: cache.Options{
-			DefaultNamespaces: map[string]cache.Config{watchNamespace: {}},
 		},
 		LeaderElection:          enableLeaderElection,
 		LeaderElectionID:        "controller-leader-election-capt",
@@ -298,7 +294,13 @@ func main() { //nolint:funlen
 		RetryPeriod:             &leaderElectionRetryPeriod,
 		HealthProbeBindAddress:  healthAddr,
 		EventBroadcaster:        broadcaster,
-	})
+	}
+	if watchNamespace != "" {
+		opts.Cache = cache.Options{
+			DefaultNamespaces: map[string]cache.Config{watchNamespace: {}},
+		}
+	}
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), opts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
