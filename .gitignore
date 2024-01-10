@@ -44,3 +44,6 @@ dist
 # development / test / lints
 bin/
 hack/tools
+
+# Playground outputs
+playground/output
