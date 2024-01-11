@@ -98,7 +98,12 @@ for i in {1..4}; do echo $i; docker exec -it virtualbmc vbmc start "node$i"; don
 
 > NOTE: Manual steps for now.
 
-1. update capt image to: `reg.weinstocklabs.com/tinkerbell/capt-amd64:latest`
+1. update capt image. Needed until we have a new release.
+
+   ```bash
+   kubectl set image deployment/capt-controller-manager -n capt-system manager=reg.weinstocklabs.com/tinkerbell/capt-amd64:latest
+   ```
+
 1. update Rufio CRD:
 
    ```bash
@@ -106,9 +111,17 @@ for i in {1..4}; do echo $i; docker exec -it virtualbmc vbmc start "node$i"; don
    kubectl apply -f https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_tasks.yaml
    ```
 
-1. Apply Hardware objects.
-1. Apply BMC objects.
+1. Apply Hardware, BMC machine, and secret objects.
+
+   ```bash
+   kubectl apply -f output/apply/
+   ```
+
 1. Apply CAPI/CAPT cluster objects.
+
+   ```bash
+   kubectl apply -f output/playground.yaml
+   ```
 
 ## Phase 5: Post cluster creation
 
@@ -122,6 +135,7 @@ for i in {1..4}; do echo $i; docker exec -it virtualbmc vbmc start "node$i"; don
 1. Install CNI.
 
    ```bash
+   export KUBECONFIG=playground.kubeconfig
    cilium install --version 1.14.5
    ```
 
@@ -133,7 +147,7 @@ for i in {1..4}; do echo $i; docker exec -it virtualbmc vbmc start "node$i"; don
    kind delete cluster --name playground
    rm -rf output/
    docker rm -f virtualbmc
-   for i in {1..4}; do echo $i; sudo virsh undefine node$i --remove-all-storage --nvram; done
+   for i in {1..4}; do echo $i; sudo virsh destroy "node$i"; sudo virsh undefine "node$i" --remove-all-storage --nvram; done
    ```
 
 1. Kubeconfig retrieval
