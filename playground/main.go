@@ -26,8 +26,6 @@ const (
 	workerNodeRole       nodeRole  = "worker"
 	captRoleLabel        captLabel = "capt-node-role"
 	clusterName                    = "playground"
-	controlPlaneVIP                = "172.18.18.17"
-	tinkerbellVIP                  = "172.18.18.18"
 )
 
 type captLabel string
@@ -59,7 +57,7 @@ type data struct {
 	Mac         net.HardwareAddr
 	Nameservers []string
 	IP          netip.Addr
-	Netmask     netip.Addr
+	Netmask     net.IPMask
 	Gateway     netip.Addr
 	Disk        string
 	BMCHostname string
@@ -87,6 +85,36 @@ func main() {
 	fs.StringVar(&c.tinkerbellStackVer, "tinkerbell-stack-version", "0.4.2", "tinkerbell stack version to install")
 	fs.Parse(os.Args[1:])
 
+	// We need the docker network created first so that other containers and VMs can connect to it.
+	log.Println("create kind cluster")
+	if err := c.createKindCluster(clusterName); err != nil {
+		log.Fatalf("error creating kind cluster: %s", err)
+	}
+
+	// This runs before creating the data slice so that we can get the IP of the Virtual BMC container.
+	log.Println("Start Virtual BMC")
+	vbmcIP, err := startVirtualBMC("kind")
+	if err != nil {
+		log.Fatalf("error starting Virtual BMC: %s", err)
+	}
+
+	// get the gateway of the kind network
+	gateway, err := getGateway("kind")
+	if err != nil {
+		log.Fatalf("error getting gateway: %s", err)
+	}
+
+	subnet, err := getSubnet("kind")
+	if err != nil {
+		log.Fatalf("error getting subnet: %s", err)
+	}
+
+	// Use the vbmcIP in order to determine the subnet for the KinD network.
+	// This is used to create the IP addresses for the VMs, Tinkerbell stack LB IP, and the KubeAPI server VIP.
+	base := fmt.Sprintf("%v.%v.100", vbmcIP.As4()[0], vbmcIP.As4()[1]) // x.x.100
+	controlPlaneVIP := fmt.Sprintf("%v.%d", base, 100)                 // x.x.100.100
+	tinkerbellVIP := fmt.Sprintf("%v.%d", base, 101)                   // x.x.100.101
+
 	c.data = make([]data, c.hardwareCount)
 	curControlPlaneNodesCount := 0
 	curWorkerNodesCount := 0
@@ -97,11 +125,11 @@ func main() {
 			Namespace:   c.namespace,
 			Mac:         net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 			Nameservers: []string{"8.8.8.8", "1.1.1.1"},
-			IP:          netip.MustParseAddr(fmt.Sprintf("172.18.19.%d", num)),
-			Netmask:     netip.MustParseAddr("255.255.0.0"),
-			Gateway:     netip.MustParseAddr("172.18.0.1"),
+			IP:          netip.MustParseAddr(fmt.Sprintf("%v.%d", base, num)),
+			Netmask:     subnet,
+			Gateway:     gateway,
 			Disk:        "/dev/vda",
-			BMCHostname: "virtualbmc",
+			BMCHostname: vbmcIP.String(),
 			BMCIPPort:   netip.MustParseAddrPort(fmt.Sprintf("0.0.0.0:623%v", num)),
 			BMCUsername: "admin",
 			BMCPassword: "password",
@@ -121,13 +149,8 @@ func main() {
 		c.data[i] = d
 	}
 
-	log.Println("create kind cluster")
-	if err := c.createKindCluster(clusterName); err != nil {
-		log.Fatalf("error creating kind cluster: %s", err)
-	}
-
 	log.Println("deploy Tinkerbell stack")
-	if err := c.deployTinkerbellStack(); err != nil {
+	if err := c.deployTinkerbellStack(tinkerbellVIP); err != nil {
 		log.Fatalf("error deploying Tinkerbell stack: %s", err)
 	}
 
@@ -147,7 +170,8 @@ func main() {
 	}
 
 	log.Println("running clusterctl generate cluster")
-	if err := c.clusterctlGenerateClusterYaml(c.outputDir, clusterName, c.namespace, c.controlPlaneNodesCount, c.workerNodesCount, c.kubernetesVersion, controlPlaneVIP); err != nil {
+	podCIDR := fmt.Sprintf("%v.100.0.0/16", vbmcIP.As4()[0]) // x.100.0.0/16 (172.25.0.0/16)
+	if err := c.clusterctlGenerateClusterYaml(c.outputDir, clusterName, c.namespace, c.controlPlaneNodesCount, c.workerNodesCount, c.kubernetesVersion, controlPlaneVIP, podCIDR); err != nil {
 		log.Fatalf("error running clusterctl generate cluster: %s", err)
 	}
 	if err := c.kustomizeClusterYaml(c.outputDir); err != nil {
@@ -164,15 +188,62 @@ func main() {
 		log.Fatalf("error creating vms: %s\n", err)
 	}
 
-	log.Println("Start Virtual BMC")
-	if err := startVirtualBMC("kind"); err != nil {
-		log.Fatalf("error starting Virtual BMC: %s", err)
-	}
-
 	log.Println("Register and start Virtual BMCs for all nodes")
 	if err := registerAndStartVirtualBMCs(c.data); err != nil {
 		log.Fatalf("error registering and starting Virtual BMCs: %s", err)
 	}
+}
+
+func getSubnet(dockerNet string) (net.IPMask, error) {
+	/*
+		docker network inspect kind -f '{{range .IPAM.Config}}{{.Subnet}},{{end}}'
+		result: 172.20.0.0/16,fc00:f853:ccd:e793::/64,
+	*/
+	cmd := "docker"
+	args := []string{"network", "inspect", dockerNet, "-f", "'{{range .IPAM.Config}}{{.Subnet}},{{end}}'"}
+	e := exec.CommandContext(context.Background(), cmd, args...)
+	out, err := e.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("error getting subnet: %s: out: %v", err, string(out))
+	}
+
+	o := strings.Trim(strings.Trim(string(out), "\n"), "'")
+	subnets := strings.Split(o, ",")
+	for _, s := range subnets {
+		_, ipnet, err := net.ParseCIDR(s)
+		if err == nil {
+			if ipnet.IP.To4() != nil {
+				return ipnet.Mask, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("unable to determine docker network subnet mask, err from command: %s: stdout: %v", err, string(out))
+}
+
+func getGateway(dockerNet string) (netip.Addr, error) {
+	/*
+		docker network inspect kind -f '{{range .IPAM.Config}}{{.Gateway}},{{end}}'
+		result: 172.20.0.1,
+	*/
+	cmd := "docker"
+	args := []string{"network", "inspect", dockerNet, "-f", "'{{range .IPAM.Config}}{{.Gateway}},{{end}}'"}
+	e := exec.CommandContext(context.Background(), cmd, args...)
+	out, err := e.CombinedOutput()
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("error getting gateway: %s: out: %v", err, string(out))
+	}
+
+	o := strings.Trim(strings.Trim(string(out), "\n"), "'")
+	subnets := strings.Split(o, ",")
+	for _, s := range subnets {
+		ip, err := netip.ParseAddr(s)
+		if err == nil && ip.Is4() {
+			return ip, nil
+		}
+	}
+
+	return netip.Addr{}, fmt.Errorf("unable to determine docker network gateway, err from command: %s: stdout: %v", err, string(out))
 }
 
 func registerAndStartVirtualBMCs(ds []data) error {
@@ -212,7 +283,7 @@ func registerAndStartVirtualBMCs(ds []data) error {
 	return nil
 }
 
-func startVirtualBMC(dockerNet string) error {
+func startVirtualBMC(dockerNet string) (netip.Addr, error) {
 	/*
 		docker run -d --rm --network kind -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock --name virtualbmc capt-playground:v2
 	*/
@@ -228,10 +299,26 @@ func startVirtualBMC(dockerNet string) error {
 	e := exec.CommandContext(context.Background(), cmd, args...)
 	out, err := e.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error starting Virtual BMC: %s: out: %v", err, string(out))
+		return netip.Addr{}, fmt.Errorf("error starting Virtual BMC: %s: out: %v", err, string(out))
 	}
 
-	return nil
+	// get the IP of the container
+	args = []string{
+		"inspect", "-f", "'{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'", "virtualbmc",
+	}
+	e = exec.CommandContext(context.Background(), cmd, args...)
+	out, err = e.CombinedOutput()
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("error getting Virtual BMC IP: %s: out: %v", err, string(out))
+	}
+
+	o := strings.Trim(strings.Trim(string(out), "\n"), "'")
+	ip, err := netip.ParseAddr(o)
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("error parsing Virtual BMC IP: %s: out: %v", err, string(out))
+	}
+
+	return ip, nil
 }
 
 func (c cluster) createKindCluster(name string) error {
@@ -249,7 +336,7 @@ func (c cluster) createKindCluster(name string) error {
 	return nil
 }
 
-func (c cluster) deployTinkerbellStack() error {
+func (c cluster) deployTinkerbellStack(tinkVIP string) error {
 	/*
 		trusted_proxies=$(kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}')
 		LB_IP=x.x.x.x
@@ -281,8 +368,8 @@ func (c cluster) deployTinkerbellStack() error {
 		"--wait",
 		"--set", fmt.Sprintf("smee.trustedProxies={%s}", trustedProxies),
 		"--set", fmt.Sprintf("hegel.trustedProxies={%s}", trustedProxies),
-		"--set", fmt.Sprintf("stack.loadBalancerIP=%s", tinkerbellVIP),
-		"--set", fmt.Sprintf("smee.publicIP=%s", tinkerbellVIP),
+		"--set", fmt.Sprintf("stack.loadBalancerIP=%s", tinkVIP),
+		"--set", fmt.Sprintf("smee.publicIP=%s", tinkVIP),
 		"--set", "rufio.image=quay.io/tinkerbell/rufio:latest",
 	}
 	e := exec.CommandContext(context.Background(), cmd, args...)
@@ -295,7 +382,7 @@ func (c cluster) deployTinkerbellStack() error {
 	return nil
 }
 
-func (c cluster) clusterctlGenerateClusterYaml(outputDir string, clusterName string, namespace string, numCP int, numWorker int, k8sVer string, cpVIP string) error {
+func (c cluster) clusterctlGenerateClusterYaml(outputDir string, clusterName string, namespace string, numCP int, numWorker int, k8sVer string, cpVIP string, podCIDR string) error {
 	/*
 		CONTROL_PLANE_VIP=172.18.18.17 POD_CIDR=172.25.0.0/16 clusterctl generate cluster playground --config outputDir/clusterctl.yaml --kubernetes-version v1.23.5 --control-plane-machine-count=1 --worker-machine-count=2 --target-namespace=tink-system --write-to playground.yaml
 	*/
@@ -312,7 +399,7 @@ func (c cluster) clusterctlGenerateClusterYaml(outputDir string, clusterName str
 	e := exec.CommandContext(context.Background(), cmd, args...)
 	e.Env = []string{
 		fmt.Sprintf("CONTROL_PLANE_VIP=%s", cpVIP),
-		"POD_CIDR=172.25.0.0/16",
+		fmt.Sprintf("POD_CIDR=%v", podCIDR),
 		fmt.Sprintf("KUBECONFIG=%s", c.kubeconfig),
 		"XDG_CONFIG_HOME=/home/tink/xdg",
 		"XDG_CONFIG_DIRS=/home/tink/xdg",
@@ -553,7 +640,7 @@ func (d data) hardware() v1alpha1.Hardware {
 						Arch:        "x86_64",
 						IP: &v1alpha1.IP{
 							Address: d.IP.String(),
-							Netmask: d.Netmask.String(),
+							Netmask: net.IP(d.Netmask).String(),
 							Gateway: d.Gateway.String(),
 						},
 					},
