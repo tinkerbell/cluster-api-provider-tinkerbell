@@ -47,3 +47,5 @@ hack/tools
 
 # Playground outputs
 playground/output
+playground/.kube
+playground/.cache

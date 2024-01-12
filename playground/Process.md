@@ -101,12 +101,15 @@ for i in {1..4}; do echo $i; docker exec -it virtualbmc vbmc start "node$i"; don
 1. update capt image. Needed until we have a new release.
 
    ```bash
+   export KUBECONFIG=output/kind.kubeconfig
    kubectl set image deployment/capt-controller-manager -n capt-system manager=reg.weinstocklabs.com/tinkerbell/capt-amd64:latest
    ```
 
 1. update Rufio CRD:
 
    ```bash
+   kubectl delete crd machines.bmc.tinkerbell.org
+   kubectl delete crd tasks.bmc.tinkerbell.org
    kubectl apply -f https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_machines.yaml
    kubectl apply -f https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_tasks.yaml
    ```
