@@ -3,6 +3,7 @@ module github.com/tinkerbell/cluster-api-provider/playground
 go 1.21.2
 
 require (
+	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/tinkerbell/rufio v0.3.2
 	github.com/tinkerbell/tink v0.9.0
 	gopkg.in/yaml.v3 v3.0.1
