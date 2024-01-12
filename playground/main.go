@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -12,10 +13,13 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"text/template"
 
+	"github.com/tinkerbell/cluster-api-provider/playground/cmd"
 	rufio "github.com/tinkerbell/rufio/api/v1alpha1"
 	"github.com/tinkerbell/tink/api/v1alpha1"
 	"gopkg.in/yaml.v3"
@@ -71,6 +75,21 @@ type data struct {
 }
 
 func main() {
+
+	exitCode := 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
+	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+	defer done()
+
+	if err := cmd.Execute(ctx, os.Args[1:]); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintln(os.Stderr, err)
+		exitCode = 127
+	}
+	return
+
 	fs := flag.NewFlagSet("capt-playground", flag.ExitOnError)
 	pwd, err := os.Getwd()
 	if err != nil {
@@ -196,6 +215,62 @@ func main() {
 	if err := registerAndStartVirtualBMCs(c.data); err != nil {
 		log.Fatalf("error registering and starting Virtual BMCs: %s", err)
 	}
+
+	log.Println("update Rufio CRDs")
+	if err := c.updateRufioCRDs(); err != nil {
+		log.Fatalf("error updating Rufio CRDs: %s", err)
+	}
+
+	log.Println("apply all Tinkerbell manifests")
+	if err := c.applyAllTinkerbellManifests(); err != nil {
+		log.Fatalf("error applying all Tinkerbell manifests: %s", err)
+	}
+
+}
+
+func (c cluster) applyAllTinkerbellManifests() error {
+	/*
+		kubectl apply -f output/apply/
+	*/
+	cmd := "kubectl"
+	args := []string{"apply", "-f", filepath.Join(c.outputDir, "apply")}
+	e := exec.CommandContext(context.Background(), cmd, args...)
+	e.Env = []string{fmt.Sprintf("KUBECONFIG=%s", c.kubeconfig)}
+	out, err := e.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error applying all Tinkerbell manifests: %s: out: %v", err, string(out))
+	}
+
+	return nil
+}
+
+func (c cluster) updateRufioCRDs() error {
+	/*
+		kubectl delete crd machines.bmc.tinkerbell.org tasks.bmc.tinkerbell.org
+		kubectl apply -f https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_machines.yaml https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_tasks.yaml
+	*/
+	cmd := "kubectl"
+	args := []string{"delete", "crd", "machines.bmc.tinkerbell.org", "tasks.bmc.tinkerbell.org"}
+	e := exec.CommandContext(context.Background(), cmd, args...)
+	e.Env = []string{fmt.Sprintf("KUBECONFIG=%s", c.kubeconfig)}
+	out, err := e.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error deleting Rufio CRDs: %s: out: %v", err, string(out))
+	}
+
+	args = []string{
+		"apply",
+		"-f", "https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_machines.yaml",
+		"-f", "https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_tasks.yaml",
+	}
+	e = exec.CommandContext(context.Background(), cmd, args...)
+	e.Env = []string{fmt.Sprintf("KUBECONFIG=%s", c.kubeconfig)}
+	out, err = e.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error applying Rufio CRDs: %s: out: %v", err, string(out))
+	}
+
+	return nil
 }
 
 func getSubnet(dockerNet string) (net.IPMask, error) {

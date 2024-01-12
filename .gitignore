@@ -49,3 +49,4 @@ hack/tools
 playground/output
 playground/.kube
 playground/.cache
+playground/state.yaml
