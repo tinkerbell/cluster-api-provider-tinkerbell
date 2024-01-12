@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	rufio "github.com/tinkerbell/rufio/api/v1alpha1"
 	"github.com/tinkerbell/tink/api/v1alpha1"
@@ -48,6 +50,7 @@ type cluster struct {
 	outputDir              string
 	kubeconfig             string
 	tinkerbellStackVer     string
+	sshAuthorizedKeyFile   string
 	data                   []data
 }
 
@@ -83,6 +86,7 @@ func main() {
 	fs.StringVar(&c.kubernetesVersion, "kubernetes-version", "v1.23.5", "kubernetes version to install")
 	fs.StringVar(&c.outputDir, "output-dir", "output", "directory to all produced artifacts (yamls, kubeconfig, etc)")
 	fs.StringVar(&c.tinkerbellStackVer, "tinkerbell-stack-version", "0.4.2", "tinkerbell stack version to install")
+	fs.StringVar(&c.sshAuthorizedKeyFile, "ssh-authorized-key-file", "", "ssh authorized key file to add to nodes")
 	fs.Parse(os.Args[1:])
 
 	// We need the docker network created first so that other containers and VMs can connect to it.
@@ -417,7 +421,7 @@ func (c cluster) clusterctlGenerateClusterYaml(outputDir string, clusterName str
 	return nil
 }
 
-const kustomizeYaml = `apiVersion: kustomize.config.k8s.io/v1beta1
+var kustomizeYaml = `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: tink-system
 resources:
@@ -450,14 +454,65 @@ patches:
             required:
             - labelSelector:
                 matchLabels:
-                  capt-node-role: worker`
+                  capt-node-role: worker
+{{- if .SSHAuthorizedKey }}
+  - target:
+      group: bootstrap.cluster.x-k8s.io
+      kind: KubeadmConfigTemplate
+      name: "playground-.*"
+      version: v1beta1
+    patch: |-
+      - op: add
+        path: /spec/template/spec/users
+        value:
+          - name: tink
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            sshAuthorizedKeys:
+            - {{ .SSHAuthorizedKey }}
+  - target:
+      group: controlplane.cluster.x-k8s.io
+      kind: KubeadmControlPlane
+      name: "playground-.*"
+      version: v1beta1
+    patch: |-
+      - op: add
+        path: /spec/kubeadmConfigSpec/users
+        value:
+          - name: tink
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            sshAuthorizedKeys:
+            - {{ .SSHAuthorizedKey }}
+{{ end -}}
+`
+
+func generateTemplate(d any, tmpl string) (string, error) {
+	t := template.New("template")
+	t, err := t.Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+	buffer := new(bytes.Buffer)
+	if err := t.Execute(buffer, d); err != nil {
+		return "", err
+	}
+
+	return buffer.String(), nil
+}
 
 func (c cluster) kustomizeClusterYaml(outputDir string) error {
 	/*
 		kubectl kustomize -o output/playground.yaml
 	*/
+	// get authorized key. ignore error if file doesn't exist as authorizedKey will be "" and the template will be unchanged
+	authorizedKey, _ := os.ReadFile(c.sshAuthorizedKeyFile)
+	authorizedKey = []byte(strings.TrimSuffix(string(authorizedKey), "\n"))
+	patch, err := generateTemplate(struct{ SSHAuthorizedKey string }{string(authorizedKey)}, kustomizeYaml)
+	if err != nil {
+		return err
+	}
+
 	// write kustomization.yaml to output dir
-	if err := os.WriteFile(filepath.Join(outputDir, "kustomization.yaml"), []byte(kustomizeYaml), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(outputDir, "kustomization.yaml"), []byte(patch), 0644); err != nil {
 		return err
 	}
 	cmd := "kubectl"
