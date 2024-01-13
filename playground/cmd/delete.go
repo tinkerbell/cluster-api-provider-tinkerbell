@@ -123,18 +123,29 @@ func deleteVirshNodes(num int) error {
 		args := []string{"-c", "qemu:///system", "destroy", fmt.Sprintf("node%d", i)}
 		e := exec.CommandContext(context.Background(), cmd, args...)
 		out, err := e.CombinedOutput()
-		if err != nil && !strings.Contains(string(out), "Domain not found") {
-			return fmt.Errorf("error destroying virsh node, command: `%v %v`, err: %w: output: %s", cmd, strings.Join(args, " "), err, out)
+		if err != nil && !contains(strings.ToLower(string(out)), []string{"domain not found", "failed to get domain", "domain is not running"}) {
+			// return fmt.Errorf("error destroying virsh node, command: `%v %v`, err: %w: output: %s", cmd, strings.Join(args, " "), err, out)
+			continue
 		}
 
 		// remove the VM and any disks associated with it
 		args = []string{"-c", "qemu:///system", "undefine", fmt.Sprintf("node%d", i), "--remove-all-storage", "--nvram"}
 		e = exec.CommandContext(context.Background(), cmd, args...)
 		out, err = e.CombinedOutput()
-		if err != nil {
+		if err != nil && !contains(strings.ToLower(string(out)), []string{"domain not found", "failed to get domain"}) {
 			return fmt.Errorf("error removing virsh node: command: `%v %v`, err: %w: output: %s", cmd, strings.Join(args, " "), err, out)
 		}
 	}
 
 	return nil
+}
+
+func contains(s string, substrs []string) bool {
+	for _, sub := range substrs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+
+	return false
 }
