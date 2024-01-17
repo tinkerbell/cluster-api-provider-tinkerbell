@@ -57,26 +57,26 @@ func (d *Delete) exec(ctx context.Context) error {
 	// delete all virsh nodes
 
 	log.Println("Deleting KinD cluster")
-	if err := deleteKindCluster(s.ClusterName); err != nil {
-		return err
+	if errC := deleteKindCluster(s.ClusterName); errC != nil {
+		err = fmt.Errorf("error deleting kind cluster: %w", errC)
 	}
 
 	log.Println("Deleting output directory")
-	if err := deleteOutputDir(s.OutputDir); err != nil {
-		return err
+	if errC := deleteOutputDir(s.OutputDir); errC != nil {
+		err = fmt.Errorf("error deleting output directory: %w", errC)
 	}
 
 	log.Println("Deleting virtualbmc docker container")
-	if err := deleteDockerContainer("virtualbmc"); err != nil {
-		return err
+	if errC := deleteDockerContainer("virtualbmc"); errC != nil {
+		err = fmt.Errorf("error deleting virtualbmc docker container: %w", errC)
 	}
 
 	log.Println("Deleting virsh nodes")
-	if err := deleteVirshNodes(s.TotalHardware); err != nil {
-		return err
+	if errC := deleteVirshNodes(s.TotalHardware); errC != nil {
+		err = fmt.Errorf("error deleting virsh nodes: %w", errC)
 	}
 
-	return nil
+	return err
 }
 
 func deleteKindCluster(name string) error {

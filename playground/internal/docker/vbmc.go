@@ -63,6 +63,9 @@ func (v VirtualBMC) RunVirtualBMCContainer(ctx context.Context) (netip.Addr, err
 }
 
 func (v VirtualBMC) RegisterVirtualBMC(ctx context.Context) error {
+	/*
+		docker exec virtualbmc vbmc add --username admin --password password --port 623 node1
+	*/
 	for _, bmc := range v.BMCInfo {
 		args := Args{
 			Cmd: "exec",
