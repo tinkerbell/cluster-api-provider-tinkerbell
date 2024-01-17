@@ -16,6 +16,7 @@
 * KinD
 * clusterctl
 * kubectl
+* virt-install
 
 ### Hardware Dependencies
 

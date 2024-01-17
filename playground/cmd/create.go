@@ -59,7 +59,8 @@ func NewCreateCommand(rc *rootConfig) *ffcli.Command {
 	rc.registerRootFlags(fs)
 	return &ffcli.Command{
 		Name:       "create",
-		ShortUsage: "create the CAPT playground [flags]",
+		ShortUsage: "capt-playground create [flags]",
+		ShortHelp:  "Create the CAPT playground",
 		Options:    []ff.Option{ff.WithEnvVarPrefix("CAPT_PLAYGROUND")},
 		FlagSet:    fs,
 		Exec: func(ctx context.Context, _ []string) error {
@@ -120,7 +121,7 @@ func (c *Create) exec(ctx context.Context) error {
 		Network:       "kind",
 		ContainerName: "virtualbmc",
 		LibvirtSocket: "/var/run/libvirt/libvirt-sock",
-		Image:         "capt-playground:v2",
+		Image:         "ghcr.io/jacobweinstock/virtualbmc",
 	}
 	log.Println("Start Virtual BMC")
 	vbmcIP, err := vbmc.RunVirtualBMCContainer(context.Background())
