@@ -3,8 +3,11 @@ package helm
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
-	"os/exec"
+	"path/filepath"
+
+	"github.com/tinkerbell/cluster-api-provider/playground/internal/exec"
 )
 
 const binary = "helm"
@@ -19,10 +22,17 @@ type Args struct {
 	Wait            bool
 	SetArgs         map[string]string
 	Kubeconfig      string
+	CacheDir        string
+	AuditWriter     io.Writer
+	OutputWriter    io.Writer
 }
 
 func Install(ctx context.Context, a Args) error {
-	args := []string{"install", a.ReleaseName, a.Chart.String()}
+	var args []string
+	if a.CacheDir != "" {
+		args = append(args, "--debug", "--kubeconfig", a.Kubeconfig, "--repository-cache", filepath.Join(a.CacheDir, ".helm", "cache"))
+	}
+	args = append(args, "install", a.ReleaseName, a.Chart.String())
 	if a.Version != "" {
 		args = append(args, "--version", a.Version)
 	}
@@ -39,7 +49,22 @@ func Install(ctx context.Context, a Args) error {
 		args = append(args, "--set", fmt.Sprintf("%s=%s", k, v))
 	}
 	e := exec.CommandContext(context.Background(), binary, args...)
-	e.Env = []string{fmt.Sprintf("KUBECONFIG=%s", a.Kubeconfig)}
+	e.Env = []string{fmt.Sprintf(
+		"KUBECONFIG=%s", a.Kubeconfig),
+		"XDG_CONFIG_HOME=/tmp/xdg",
+		"XDG_CONFIG_DIRS=/tmp/xdg",
+		"XDG_STATE_HOME=/tmp/xdg",
+		"XDG_CACHE_HOME=/tmp/xdg",
+		"XDG_RUNTIME_DIR=/tmp/xdg",
+		"XDG_DATA_HOME=/tmp/xdg",
+		"XDG_DATA_DIRS=/tmp/xdg",
+	}
+	if a.AuditWriter != nil {
+		e.AuditWriter = a.AuditWriter
+	}
+	if a.OutputWriter != nil {
+		e.OutputWriter = a.OutputWriter
+	}
 	out, err := e.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error deploying Tinkerbell stack: %s: out: %v", err, string(out))

@@ -9,7 +9,7 @@ import (
 )
 
 func TestXxx(t *testing.T) {
-	out, err := GetNodeCidrs(context.Background(), "/home/tink/.kube/config")
+	out, err := Opts{Kubeconfig: "/home/tink/.kube/config"}.GetNodeCidrs(context.Background())
 	if err != nil {
 		t.Fatalf("error getting trusted proxies: %s: out: %v", err, out)
 	}
@@ -39,7 +39,7 @@ LOOP:
 			// strip quotes
 			trustedProxies = strings.Trim(string(out), "'")
 		*/
-		cidrs, err := GetNodeCidrs(context.Background(), "/home/tink/.kube/config")
+		cidrs, err := Opts{Kubeconfig: "/home/tink/.kube/config"}.GetNodeCidrs(context.Background())
 		if err != nil {
 			t.Fatal(fmt.Errorf("error getting node cidrs: %w", err))
 		}

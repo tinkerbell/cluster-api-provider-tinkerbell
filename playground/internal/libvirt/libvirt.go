@@ -3,12 +3,18 @@ package libvirt
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
-	"os/exec"
 	"strings"
+
+	"github.com/tinkerbell/cluster-api-provider/playground/internal/exec"
 )
 
-func CreateVM(name string, netBridge string, mac net.HardwareAddr) error {
+type Opts struct {
+	AuditWriter io.Writer
+}
+
+func (o Opts) CreateVM(name string, netBridge string, mac net.HardwareAddr) error {
 	cmd := "virt-install"
 	args := []string{
 		"--description", "CAPT VM",
@@ -26,6 +32,9 @@ func CreateVM(name string, netBridge string, mac net.HardwareAddr) error {
 	args = append(args, "--disk", fmt.Sprintf("path=/tmp/%v-disk.img,bus=virtio,size=10,sparse=yes", name))
 	args = append(args, "--network", fmt.Sprintf("bridge:%s,mac=%s", netBridge, mac.String()))
 	e := exec.CommandContext(context.Background(), cmd, args...)
+	if o.AuditWriter != nil {
+		e.AuditWriter = o.AuditWriter
+	}
 	out, err := e.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error creating: command: %v: error: %s: out: %v", fmt.Sprintf("%v %v", cmd, strings.Join(args, " ")), err, string(out))

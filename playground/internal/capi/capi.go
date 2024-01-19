@@ -3,9 +3,11 @@ package capi
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+
+	"github.com/tinkerbell/cluster-api-provider/playground/internal/exec"
 )
 
 const (
@@ -13,25 +15,34 @@ const (
 	clusterctlYaml = "clusterctl.yaml"
 )
 
-func ClusterctlYamlToDisk(outputDir string) error {
+type Opts struct {
+	AuditWriter io.Writer
+}
+
+func ClusterctlYamlToDisk(outputDir string, releaseVer, imageTag string) error {
 	contents := fmt.Sprintf(`providers:
   - name: "tinkerbell"
     url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/v%v/infrastructure-components.yaml"
-    type: "InfrastructureProvider"`, "0.4.0")
+    type: "InfrastructureProvider"
+images:
+  infrastructure-tinkerbell:
+    tag: %v
+`, releaseVer, imageTag)
 
 	return os.WriteFile(filepath.Join(outputDir, clusterctlYaml), []byte(contents), 0644)
 }
 
-func ClusterctlInit(outputDir, kubeconfig, tinkerbellVIP string) error {
+func ClusterctlInit(outputDir, kubeconfig, tinkerbellVIP string, o Opts) (output string, err error) {
 	/*
 		TINKERBELL_IP=172.18.18.18 clusterctl --config output/clusterctl.yaml init --infrastructure tinkerbell
 	*/
 
-	args := []string{"init", "--config", filepath.Join(outputDir, clusterctlYaml), "--infrastructure", "tinkerbell"}
+	args := []string{"init", "--config", filepath.Join(outputDir, clusterctlYaml), "--infrastructure", "tinkerbell", "-v5"}
 	e := exec.CommandContext(context.Background(), binary, args...)
 	e.Env = []string{
 		fmt.Sprintf("TINKERBELL_IP=%s", tinkerbellVIP),
 		fmt.Sprintf("KUBECONFIG=%s", kubeconfig),
+		"CLUSTERCTL_DISABLE_VERSIONCHECK=true",
 		"XDG_CONFIG_HOME=/tmp/xdg",
 		"XDG_CONFIG_DIRS=/tmp/xdg",
 		"XDG_STATE_HOME=/tmp/xdg",
@@ -40,15 +51,18 @@ func ClusterctlInit(outputDir, kubeconfig, tinkerbellVIP string) error {
 		"XDG_DATA_HOME=/tmp/xdg",
 		"XDG_DATA_DIRS=/tmp/xdg",
 	}
+	if o.AuditWriter != nil {
+		e.AuditWriter = o.AuditWriter
+	}
 	out, err := e.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error running clusterctl init: %s: out: %v", err, string(out))
+		return "", fmt.Errorf("error running clusterctl init: %s: out: %v", err, string(out))
 	}
 
-	return nil
+	return string(out), nil
 }
 
-func ClusterYamlToDisk(outputDir, clusterName, namespace, cpNodeNum, workerNodeNum, k8sVer, cpVIP, podCIDR, kubeconfig string) error {
+func ClusterYamlToDisk(outputDir, clusterName, namespace, cpNodeNum, workerNodeNum, k8sVer, cpVIP, podCIDR, kubeconfig string, o Opts) error {
 	/*
 		CONTROL_PLANE_VIP=172.18.18.17 POD_CIDR=172.25.0.0/16 clusterctl generate cluster playground --config outputDir/clusterctl.yaml --kubernetes-version v1.23.5 --control-plane-machine-count=1 --worker-machine-count=2 --target-namespace=tink-system --write-to playground.yaml
 	*/
@@ -66,6 +80,7 @@ func ClusterYamlToDisk(outputDir, clusterName, namespace, cpNodeNum, workerNodeN
 		fmt.Sprintf("CONTROL_PLANE_VIP=%s", cpVIP),
 		fmt.Sprintf("POD_CIDR=%v", podCIDR),
 		fmt.Sprintf("KUBECONFIG=%s", kubeconfig),
+		"CLUSTERCTL_DISABLE_VERSIONCHECK=true",
 		"XDG_CONFIG_HOME=/tmp/xdg",
 		"XDG_CONFIG_DIRS=/tmp/xdg",
 		"XDG_STATE_HOME=/tmp/xdg",
@@ -73,6 +88,9 @@ func ClusterYamlToDisk(outputDir, clusterName, namespace, cpNodeNum, workerNodeN
 		"XDG_RUNTIME_DIR=/tmp/xdg",
 		"XDG_DATA_HOME=/tmp/xdg",
 		"XDG_DATA_DIRS=/tmp/xdg",
+	}
+	if o.AuditWriter != nil {
+		e.AuditWriter = o.AuditWriter
 	}
 	out, err := e.CombinedOutput()
 	if err != nil {

@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/netip"
 	"strings"
 )
@@ -13,6 +14,7 @@ type VirtualBMC struct {
 	ContainerName string
 	LibvirtSocket string
 	BMCInfo       []BMCInfo
+	AuditWriter   io.Writer
 }
 
 type BMCInfo struct {
@@ -35,8 +37,9 @@ func (v VirtualBMC) RunVirtualBMCContainer(ctx context.Context) (netip.Addr, err
 			fmt.Sprintf("%s-ro", v.LibvirtSocket): "/var/run/libvirt/libvirt-sock-ro",
 			v.LibvirtSocket:                       "/var/run/libvirt/libvirt-sock",
 		},
-		Name:  v.ContainerName,
-		Image: v.Image,
+		Name:        v.ContainerName,
+		Image:       v.Image,
+		AuditWriter: v.AuditWriter,
 	}
 	if _, err := RunCommand(context.Background(), args); err != nil {
 		return netip.Addr{}, err
@@ -47,6 +50,7 @@ func (v VirtualBMC) RunVirtualBMCContainer(ctx context.Context) (netip.Addr, err
 		Cmd:                  "inspect",
 		OutputFormat:         "'{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'",
 		AdditionalSuffixArgs: []string{"virtualbmc"},
+		AuditWriter:          v.AuditWriter,
 	}
 	out, err := RunCommand(context.Background(), args)
 	if err != nil {
@@ -77,6 +81,7 @@ func (v VirtualBMC) RegisterVirtualBMC(ctx context.Context) error {
 				"--port", bmc.Port,
 				bmc.Hostname,
 			},
+			AuditWriter: v.AuditWriter,
 		}
 		if _, err := RunCommand(ctx, args); err != nil {
 			return err
@@ -94,6 +99,7 @@ func (v VirtualBMC) StartVirtualBMC(ctx context.Context) error {
 		args := Args{
 			Cmd:                  "exec",
 			AdditionalPrefixArgs: []string{v.ContainerName, "vbmc", "start", bmc.Hostname},
+			AuditWriter:          v.AuditWriter,
 		}
 		if _, err := RunCommand(ctx, args); err != nil {
 			return err

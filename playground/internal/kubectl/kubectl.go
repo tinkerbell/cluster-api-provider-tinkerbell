@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/tinkerbell/cluster-api-provider/playground/internal/exec"
 )
 
 const binary = "kubectl"
@@ -18,17 +20,32 @@ type Args struct {
 	AdditionalPrefixArgs []string
 	AdditionalSuffixArgs []string
 	Kubeconfig           string
+	CacheDir             string
+	AuditWriter          io.Writer
+}
+
+type Opts struct {
+	Kubeconfig  string
+	CacheDir    string
+	AuditWriter io.Writer
 }
 
 // RunCommand runs a kubectl command with the given args
 func RunCommand(ctx context.Context, c Args) (string, error) {
-	args := []string{c.Cmd}
+	var args []string
+	if c.CacheDir != "" {
+		args = append(args, "--cache-dir", filepath.Join(c.CacheDir, ".kube", "cache"))
+	}
 	args = append(args, c.AdditionalPrefixArgs...)
+	args = append(args, c.Cmd)
 	args = append(args, c.AdditionalSuffixArgs...)
 
 	e := exec.CommandContext(context.Background(), binary, args...)
 	if c.Kubeconfig != "" {
 		e.Env = []string{fmt.Sprintf("KUBECONFIG=%s", c.Kubeconfig)}
+	}
+	if c.AuditWriter != nil {
+		e.AuditWriter = c.AuditWriter
 	}
 	out, err := e.CombinedOutput()
 	if err != nil {
@@ -38,11 +55,13 @@ func RunCommand(ctx context.Context, c Args) (string, error) {
 	return string(out), nil
 }
 
-func GetNodeCidrs(ctx context.Context, kubeconfig string) ([]string, error) {
+func (o Opts) GetNodeCidrs(ctx context.Context) ([]string, error) {
 	args := Args{
 		Cmd:                  "get",
-		AdditionalPrefixArgs: []string{"nodes", "-o", "jsonpath={.items[*].spec.podCIDR}"},
-		Kubeconfig:           kubeconfig,
+		AdditionalSuffixArgs: []string{"nodes", "-o", "jsonpath='{.items[*].spec.podCIDR}'"},
+		Kubeconfig:           o.Kubeconfig,
+		CacheDir:             o.CacheDir,
+		AuditWriter:          o.AuditWriter,
 	}
 	out, err := RunCommand(ctx, args)
 	if err != nil {
@@ -53,7 +72,7 @@ func GetNodeCidrs(ctx context.Context, kubeconfig string) ([]string, error) {
 	return strings.Split(cidrs, " "), nil
 }
 
-func ApplyFiles(ctx context.Context, kubeconfig string, files []string) error {
+func (o Opts) ApplyFiles(ctx context.Context, files []string) error {
 	formatted := []string{}
 	for _, f := range files {
 		formatted = append(formatted, "-f", f)
@@ -61,8 +80,10 @@ func ApplyFiles(ctx context.Context, kubeconfig string, files []string) error {
 
 	args := Args{
 		Cmd:                  "apply",
-		AdditionalPrefixArgs: formatted,
-		Kubeconfig:           kubeconfig,
+		AdditionalSuffixArgs: formatted,
+		Kubeconfig:           o.Kubeconfig,
+		CacheDir:             o.CacheDir,
+		AuditWriter:          o.AuditWriter,
 	}
 	_, err := RunCommand(ctx, args)
 	if err != nil {
@@ -86,7 +107,7 @@ func generateTemplate(d any, tmpl string) (string, error) {
 	return buffer.String(), nil
 }
 
-func KustomizeClusterYaml(outputDir string, name, kubeconfig string, sshAuthKeyFile string, kustomizeYaml string, namespace string, nodeLabel string) error {
+func (o Opts) KustomizeClusterYaml(outputDir string, name, sshAuthKeyFile string, kustomizeYaml string, namespace string, nodeLabel string) error {
 	/*
 		kubectl kustomize -o output/playground.yaml
 	*/
@@ -111,13 +132,17 @@ func KustomizeClusterYaml(outputDir string, name, kubeconfig string, sshAuthKeyF
 	if err := os.WriteFile(filepath.Join(outputDir, "kustomization.yaml"), []byte(patch), 0644); err != nil {
 		return err
 	}
-	cmd := "kubectl"
-	args := []string{"kustomize", outputDir, "-o", filepath.Join(outputDir, name+".yaml")}
-	e := exec.CommandContext(context.Background(), cmd, args...)
-	e.Env = []string{fmt.Sprintf("KUBECONFIG=%s", kubeconfig)}
-	out, err := e.CombinedOutput()
+
+	args := Args{
+		Cmd:                  "kustomize",
+		AdditionalSuffixArgs: []string{outputDir, "-o", filepath.Join(outputDir, name+".yaml")},
+		Kubeconfig:           o.Kubeconfig,
+		CacheDir:             o.CacheDir,
+		AuditWriter:          o.AuditWriter,
+	}
+	out, err := RunCommand(context.Background(), args)
 	if err != nil {
-		return fmt.Errorf("error running kubectl kustomize: %s: out: %v", err, string(out))
+		return fmt.Errorf("error running kubectl kustomize: %s: out: %v", err, out)
 	}
 
 	return nil
