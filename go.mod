@@ -8,7 +8,7 @@ require (
 	github.com/go-logr/logr v1.4.1
 	github.com/go-logr/zerologr v1.2.3
 	github.com/google/go-cmp v0.6.0
-	github.com/google/uuid v1.5.0
+	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.31.1
 	github.com/pkg/errors v0.9.1
