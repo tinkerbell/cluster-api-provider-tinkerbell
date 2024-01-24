@@ -24,13 +24,12 @@ type Args struct {
 	Kubeconfig      string
 	CacheDir        string
 	AuditWriter     io.Writer
-	OutputWriter    io.Writer
 }
 
 func Install(ctx context.Context, a Args) error {
 	var args []string
 	if a.CacheDir != "" {
-		args = append(args, "--debug", "--kubeconfig", a.Kubeconfig, "--repository-cache", filepath.Join(a.CacheDir, ".helm", "cache"))
+		args = append(args, "--kubeconfig", a.Kubeconfig, "--repository-cache", filepath.Join(a.CacheDir, ".helm", "cache"))
 	}
 	args = append(args, "install", a.ReleaseName, a.Chart.String())
 	if a.Version != "" {
@@ -58,12 +57,12 @@ func Install(ctx context.Context, a Args) error {
 		"XDG_RUNTIME_DIR=/tmp/xdg",
 		"XDG_DATA_HOME=/tmp/xdg",
 		"XDG_DATA_DIRS=/tmp/xdg",
+		// Helm shells out to kubectl, which uses $HOME/.kube/config, which ends up being
+		// ./.kube/config. We want this cache in the cache directory.
+		fmt.Sprintf("HOME=%s", a.CacheDir),
 	}
 	if a.AuditWriter != nil {
 		e.AuditWriter = a.AuditWriter
-	}
-	if a.OutputWriter != nil {
-		e.OutputWriter = a.OutputWriter
 	}
 	out, err := e.CombinedOutput()
 	if err != nil {

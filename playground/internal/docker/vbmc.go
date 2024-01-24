@@ -41,8 +41,8 @@ func (v VirtualBMC) RunVirtualBMCContainer(ctx context.Context) (netip.Addr, err
 		Image:       v.Image,
 		AuditWriter: v.AuditWriter,
 	}
-	if _, err := RunCommand(context.Background(), args); err != nil {
-		return netip.Addr{}, err
+	if out, err := RunCommand(context.Background(), args); err != nil {
+		return netip.Addr{}, fmt.Errorf("out: %s, err: %w", string(out), err)
 	}
 
 	// get the IP of the container
