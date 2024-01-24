@@ -2,16 +2,15 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"io"
-	"log"
 	"os/exec"
 	"strings"
 )
 
 type Cmd struct {
 	*exec.Cmd
-	AuditWriter  io.Writer
-	OutputWriter io.Writer
+	AuditWriter io.Writer
 }
 
 func CommandContext(ctx context.Context, name string, args ...string) *Cmd {
@@ -19,24 +18,36 @@ func CommandContext(ctx context.Context, name string, args ...string) *Cmd {
 }
 
 func (c *Cmd) CombinedOutput() ([]byte, error) {
+	// write the command to the audit writer
 	if c.AuditWriter != nil {
-		var formatted []string
+		o := []string{}
 		if len(c.Cmd.Env) > 0 {
-			formatted = append(formatted, c.Cmd.Environ()...)
+			o = append(o, c.Cmd.Environ()...)
 		}
-		formatted = append(formatted, c.Cmd.Args...)
-		formatted = append(formatted, "\n")
-		if _, err := c.AuditWriter.Write([]byte(strings.Join(formatted, " "))); err != nil {
-			log.Printf("error writing to audit writer: %s", err)
+		o = append(o, c.Cmd.Args...)
+		if _, err := c.AuditWriter.Write([]byte("==========================\n" + strings.Join(o, " ") + "\n")); err != nil {
+			return nil, fmt.Errorf("error writing to audit writer: %w", err)
 		}
 	}
 
+	// run the command
 	out, err := c.Cmd.CombinedOutput()
-	if c.OutputWriter != nil {
-		if _, err := c.OutputWriter.Write(out); err != nil {
-			log.Printf("error writing to output writer: %v", err)
+	if err != nil {
+		return nil, err
+	}
+
+	// write the output to the audit writer
+	if c.AuditWriter != nil {
+		o := out
+		suffix := []byte("==========================\n\n")
+		if !strings.HasSuffix(string(o), "\n") {
+			suffix = []byte("\n==========================\n\n")
+		}
+		o = append(o, suffix...)
+		if _, err := c.AuditWriter.Write(o); err != nil {
+			return nil, fmt.Errorf("error writing to audit writer: %w", err)
 		}
 	}
 
-	return out, err
+	return out, nil
 }
