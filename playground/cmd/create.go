@@ -69,25 +69,27 @@ func NewCreateCommand(rc *rootConfig) *ffcli.Command {
 		Options:    []ff.Option{ff.WithEnvVarPrefix("CAPT_PLAYGROUND")},
 		FlagSet:    fs,
 		Exec: func(ctx context.Context, _ []string) error {
-			println("create")
-
 			return c.exec(ctx)
 		},
 	}
 }
 
 func (c *Create) registerFlags(fs *flag.FlagSet) {
+	homedir := ""
+	if h, err := os.UserHomeDir(); err == nil {
+		homedir = h
+	}
 	fs.StringVar(&c.ClusterName, "name", ClusterName, "name of the cluster")
 	fs.StringVar(&c.OutputDir, "output-dir", "./output", "directory location for all created files")
 	fs.IntVar(&c.TotalHardware, "total-hardware", 4, "number of hardware CR that will be created in the management cluster")
 	fs.IntVar(&c.ControlPlaneNodes, "control-plane-nodes", 1, "number of control plane nodes that will be created in the workload cluster")
 	fs.IntVar(&c.WorkerNodes, "worker-nodes", 2, "number of worker nodes that will be created in the workload cluster")
 	fs.StringVar(&c.KubernetesVersion, "kubernetes-version", "v1.23.5", "version of Kubernetes that will be used to create the workload cluster")
-	fs.StringVar(&c.Namespace, "namespace", "capt-playground", "namespace to use for all Objects created")
-	fs.StringVar(&c.TinkerbellStackVersion, "tinkerbell-stack-version", "0.4.2", "version of the Tinkerbell stack that will be deployed to the management cluster")
-	fs.StringVar(&c.SSHPublicKeyFile, "ssh-public-key-file", "", "file location of the SSH public key that will be added to all control plane and worker nodes in the workload cluster")
-	fs.StringVar(&c.CAPTVersion, "capt-version", "0.4.0", "version of CAPT that will be installed in the management cluster")
-	fs.StringVar(&c.CAPTImageTag, "capt-image-tag", "0.4.0", "container image tag of CAPT manager that will be deployed to the management cluster")
+	fs.StringVar(&c.Namespace, "namespace", "tink-system", "namespace to use for all Objects created")
+	fs.StringVar(&c.TinkerbellStackVersion, "tinkerbell-stack-version", "0.4.3", "version of the Tinkerbell stack that will be deployed to the management cluster")
+	fs.StringVar(&c.SSHPublicKeyFile, "ssh-public-key-file", filepath.Join(homedir, ".ssh", "id_rsa.pub"), "file location of the SSH public key that will be added to all control plane and worker nodes in the workload cluster")
+	fs.StringVar(&c.CAPTVersion, "capt-version", "0.5.0", "version of CAPT that will be installed in the management cluster")
+	fs.StringVar(&c.CAPTImageTag, "capt-image-tag", "v0.5.0", "container image tag of CAPT manager that will be deployed to the management cluster")
 }
 
 func (c *Create) exec(ctx context.Context) error {
@@ -121,7 +123,7 @@ func (c *Create) exec(ctx context.Context) error {
 	if err := os.MkdirAll(p, 0755); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("error creating output dir: %w", err)
 	}
-	auditWriter, err := os.OpenFile(filepath.Join(c.OutputDir, "audit.log"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
+	auditWriter, err := os.OpenFile(filepath.Join(c.OutputDir, "output.log"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
 	if err != nil {
 		return fmt.Errorf("error opening audit log: %w", err)
 	}
@@ -132,22 +134,23 @@ func (c *Create) exec(ctx context.Context) error {
 	}
 	defer outputWriter.Close()
 	// We need the docker network created first so that other containers and VMs can connect to it.
-	log.Println("create kind cluster")
+	log.Println("Creating KinD cluster")
 	if err := kind.CreateCluster(ctx, kind.Args{Name: "playground", Kubeconfig: c.kubeconfig, AuditWriter: auditWriter}); err != nil {
 		return fmt.Errorf("error creating kind cluster: %w", err)
 	}
 
+	log.Println("Starting Virtual BMC server")
 	// This runs before creating the data slice so that we can get the IP of the Virtual BMC container.
 	vbmc := docker.VirtualBMC{
 		Network:       "kind",
 		ContainerName: "virtualbmc",
 		LibvirtSocket: "/var/run/libvirt/libvirt-sock",
 		Image:         "ghcr.io/jacobweinstock/virtualbmc",
+		AuditWriter:   auditWriter,
 	}
-	log.Println("Start Virtual BMC")
 	vbmcIP, err := vbmc.RunVirtualBMCContainer(context.Background())
 	if err != nil {
-		return fmt.Errorf("error starting Virtual BMC: %s", err)
+		return fmt.Errorf("error starting Virtual BMC server: %s", err)
 	}
 
 	// get the gateway of the kind network
@@ -165,19 +168,19 @@ func (c *Create) exec(ctx context.Context) error {
 	log.Println("Populating node data")
 	c.nodeData = c.populateNodeData(vbmcIP, subnet, gateway)
 
-	log.Println("deploy Tinkerbell stack")
+	log.Println("Deploying Tinkerbell stack")
 	base := fmt.Sprintf("%v.%v.100", vbmcIP.As4()[0], vbmcIP.As4()[1]) // x.x.100
 	tinkerbellVIP := fmt.Sprintf("%v.%d", base, 101)                   // x.x.100.101
 	if err := c.deployTinkerbellStack(tinkerbellVIP, auditWriter, outputWriter); err != nil {
 		return fmt.Errorf("error deploying Tinkerbell stack: %s", err)
 	}
 
-	log.Println("creating Tinkerbell Custom Resources")
+	log.Println("Creating Tinkerbell Custom Resource manifests")
 	if err := writeYamls(c.nodeData, p, c.Namespace); err != nil {
 		return fmt.Errorf("error writing yamls: %s", err)
 	}
 
-	log.Println("create VMs")
+	log.Println("Create VMs")
 	bridge, err := do.LinuxBridgeFrom("kind")
 	if err != nil {
 		return fmt.Errorf("error during VM creation: %w", err)
@@ -190,7 +193,7 @@ func (c *Create) exec(ctx context.Context) error {
 		}
 	}
 
-	log.Println("starting Virtual BMCs")
+	log.Println("Starting Virtual BMCs")
 	for _, d := range c.nodeData {
 		n := docker.BMCInfo{
 			Username: d.BMCUsername,
@@ -201,8 +204,6 @@ func (c *Create) exec(ctx context.Context) error {
 		vbmc.BMCInfo = append(vbmc.BMCInfo, n)
 		vbmc.AuditWriter = auditWriter
 	}
-
-	log.Println("starting Virtual BMCs")
 	if err := vbmc.RegisterVirtualBMC(context.Background()); err != nil {
 		return fmt.Errorf("error starting Virtual BMCs: %s", err)
 	}
@@ -210,47 +211,28 @@ func (c *Create) exec(ctx context.Context) error {
 		return fmt.Errorf("error starting Virtual BMCs: %s", err)
 	}
 
-	log.Println("update Rufio CRDs")
-	args := kubectl.Args{
-		Cmd:                  "delete",
-		AdditionalSuffixArgs: []string{"crd", "machines.bmc.tinkerbell.org", "tasks.bmc.tinkerbell.org"},
-		Kubeconfig:           c.kubeconfig,
-		CacheDir:             c.OutputDir,
-		AuditWriter:          auditWriter,
-	}
-	if _, err := kubectl.RunCommand(context.Background(), args); err != nil {
-		return fmt.Errorf("error deleting Rufio CRDs: %w", err)
-	}
-	rufioCRDs := []string{
-		"https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_machines.yaml",
-		"https://raw.githubusercontent.com/tinkerbell/rufio/main/config/crd/bases/bmc.tinkerbell.org_tasks.yaml",
-	}
+	log.Println("Apply Tinkerbell Custom Resource manifests")
 	ko := kubectl.Opts{
 		Kubeconfig:  c.kubeconfig,
 		CacheDir:    c.OutputDir,
 		AuditWriter: auditWriter,
 	}
-	if err := ko.ApplyFiles(context.Background(), rufioCRDs); err != nil {
-		return fmt.Errorf("update Rufio CRDs: %w", err)
-	}
-
-	log.Println("apply all Tinkerbell manifests")
 	if err := ko.ApplyFiles(context.Background(), []string{filepath.Join(c.OutputDir, "apply") + "/"}); err != nil {
 		return fmt.Errorf("error applying Tinkerbell manifests: %w", err)
 	}
 
-	log.Println("creating clusterctl.yaml")
+	log.Println("Creating clusterctl.yaml")
 	if err := capi.ClusterctlYamlToDisk(c.OutputDir, c.CAPTVersion, c.CAPTImageTag); err != nil {
 		return fmt.Errorf("error creating clusterctl.yaml: %w", err)
 	}
 
 	capiOpts := capi.Opts{AuditWriter: auditWriter}
-	log.Println("running clusterctl init")
+	log.Println("Running clusterctl init")
 	if _, err := capi.ClusterctlInit(c.OutputDir, c.kubeconfig, tinkerbellVIP, capiOpts); err != nil {
 		return fmt.Errorf("error running clusterctl init: %w", err)
 	}
 
-	log.Println("running clusterctl generate cluster")
+	log.Println("Running clusterctl generate cluster")
 	podCIDR := fmt.Sprintf("%v.100.0.0/16", vbmcIP.As4()[0]) // x.100.0.0/16 (172.25.0.0/16)
 	controlPlaneVIP := fmt.Sprintf("%v.%d", base, 100)       // x.x.100.100
 	if err := capi.ClusterYamlToDisk(c.OutputDir, c.ClusterName, c.Namespace, strconv.Itoa(c.ControlPlaneNodes), strconv.Itoa(c.WorkerNodes), c.KubernetesVersion, controlPlaneVIP, podCIDR, c.kubeconfig, capiOpts); err != nil {
@@ -368,12 +350,10 @@ LOOP:
 			"hegel.trustedProxies": fmt.Sprintf("{%s}", strings.Join(trustedProxies, ",")),
 			"stack.loadBalancerIP": tinkVIP,
 			"smee.publicIP":        tinkVIP,
-			"rufio.image":          "quay.io/tinkerbell/rufio:latest",
 		},
 		Kubeconfig:  c.kubeconfig,
 		CacheDir:    c.OutputDir,
 		AuditWriter: auditWriter,
-		OutputWriter: outputWriter,
 	}
 	if err := helm.Install(context.Background(), a); err != nil {
 		return fmt.Errorf("error deploying Tinkerbell stack: %w", err)
