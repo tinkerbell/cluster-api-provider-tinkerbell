@@ -51,7 +51,10 @@ type Create struct {
 	CAPTVersion string
 	// CAPTImageTag is the image tag of CAPT that will be used to create the workload cluster
 	CAPTImageTag string
-	// nodeData holds data for each node that will be created
+	// OSImage is the location to an image that lives in an OCI registry
+	// Image should have the format: {{.OSRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz
+	// example: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu-2004:v1.23.5.gz
+	OSImage    string
 	nodeData   []tinkerbell.NodeData
 	rootConfig *rootConfig
 	kubeconfig string
@@ -90,6 +93,7 @@ func (c *Create) registerFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.SSHPublicKeyFile, "ssh-public-key-file", filepath.Join(homedir, ".ssh", "id_rsa.pub"), "file location of the SSH public key that will be added to all control plane and worker nodes in the workload cluster")
 	fs.StringVar(&c.CAPTVersion, "capt-version", "0.5.0", "version of CAPT that will be installed in the management cluster")
 	fs.StringVar(&c.CAPTImageTag, "capt-image-tag", "v0.5.0", "container image tag of CAPT manager that will be deployed to the management cluster")
+	fs.StringVar(&c.OSImage, "os-image", "", "base OCI registry where OS image(s) lives (default: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu-2004:v1.23.5.gz) ")
 }
 
 func (c *Create) exec(ctx context.Context) error {
@@ -112,6 +116,7 @@ func (c *Create) exec(ctx context.Context) error {
 		OutputDir:     c.OutputDir,
 		TotalHardware: c.TotalHardware,
 	}
+
 	d, err := yaml.Marshal(st)
 	if err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
@@ -238,11 +243,64 @@ func (c *Create) exec(ctx context.Context) error {
 	if err := capi.ClusterYamlToDisk(c.OutputDir, c.ClusterName, c.Namespace, strconv.Itoa(c.ControlPlaneNodes), strconv.Itoa(c.WorkerNodes), c.KubernetesVersion, controlPlaneVIP, podCIDR, c.kubeconfig, capiOpts); err != nil {
 		return fmt.Errorf("error running clusterctl generate cluster: %w", err)
 	}
-	if err := ko.KustomizeClusterYaml(c.OutputDir, c.ClusterName, c.SSHPublicKeyFile, capi.KustomizeYaml, c.Namespace, string(CAPTRole)); err != nil {
+
+	img := kubectl.OSImage{}
+	if c.OSImage != "" {
+		// Parse OSImage to get the registry, distro, and version
+		registry, distro, distroVer, kubeVer, err := parseOSImage(c.OSImage)
+		if err != nil {
+			return fmt.Errorf("error parsing OS image from -os-image: %w", err)
+		}
+		img.Registry = registry
+		img.Distro = distro
+		img.Version = distroVer
+
+		if kubeVer != c.KubernetesVersion {
+			return fmt.Errorf("kubernetes version %s does not match the version in the OS image %s", c.KubernetesVersion, kubeVer)
+		}
+	}
+	if err := ko.KustomizeClusterYaml(c.OutputDir, c.ClusterName, c.SSHPublicKeyFile, capi.KustomizeYaml, c.Namespace, string(CAPTRole), img); err != nil {
 		return fmt.Errorf("error running kustomize: %w", err)
 	}
 
 	return nil
+}
+
+func parseOSImage(i string) (registry string, distro string, distroVer string, kubeVer string, err error) {
+	// expected format is: {{.OSRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz
+	// ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu-2004:v1.23.5.gz
+	// registry: ghcr.io
+	// distro: ubuntu
+	// version: 2004
+	// k8s version: v1.23.5
+
+	registry = filepath.Dir(i)
+	if registry == "" {
+		return "", "", "", "", fmt.Errorf("unable to parse registry from %s", i)
+	}
+	imageAndTag := filepath.Base(i)
+	image := strings.Split(imageAndTag, ":")[0]
+	if image == "" {
+		return "", "", "", "", fmt.Errorf("unable to parse image from %s", i)
+	}
+	tag := strings.Split(imageAndTag, ":")[1]
+	if tag == "" {
+		return "", "", "", "", fmt.Errorf("unable to parse tag from %s", i)
+	}
+	distro = strings.Split(image, "-")[0]
+	if distro == "" {
+		return "", "", "", "", fmt.Errorf("unable to parse distro from %s", i)
+	}
+	distroVer = strings.Split(image, "-")[1]
+	if distroVer == "" {
+		return "", "", "", "", fmt.Errorf("unable to parse distro version from %s", i)
+	}
+	kubeVer = strings.Split(tag, ".gz")[0]
+	if kubeVer == "" {
+		return "", "", "", "", fmt.Errorf("unable to parse kubernetes version from %s", i)
+	}
+
+	return registry, distro, distroVer, kubeVer, nil
 }
 
 func (c *Create) populateNodeData(vbmcIP netip.Addr, subnet net.IPMask, gateway netip.Addr) []tinkerbell.NodeData {

@@ -107,7 +107,13 @@ func generateTemplate(d any, tmpl string) (string, error) {
 	return buffer.String(), nil
 }
 
-func (o Opts) KustomizeClusterYaml(outputDir string, name, sshAuthKeyFile string, kustomizeYaml string, namespace string, nodeLabel string) error {
+type OSImage struct {
+	Registry string
+	Distro   string
+	Version  string
+}
+
+func (o Opts) KustomizeClusterYaml(outputDir string, name, sshAuthKeyFile string, kustomizeYaml string, namespace string, nodeLabel string, img OSImage) error {
 	/*
 		kubectl kustomize -o output/playground.yaml
 	*/
@@ -118,10 +124,16 @@ func (o Opts) KustomizeClusterYaml(outputDir string, name, sshAuthKeyFile string
 		SSHAuthorizedKey string
 		Namespace        string
 		NodeLabel        string
+		OSRegistry       string
+		OSDistro         string
+		OSVersion        string
 	}{
 		SSHAuthorizedKey: string(authorizedKey),
 		Namespace:        namespace,
 		NodeLabel:        nodeLabel,
+		OSRegistry:       img.Registry,
+		OSDistro:         img.Distro,
+		OSVersion:        img.Version,
 	}
 	patch, err := generateTemplate(s, kustomizeYaml)
 	if err != nil {

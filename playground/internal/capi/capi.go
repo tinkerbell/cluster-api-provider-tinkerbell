@@ -113,7 +113,7 @@ patches:
     patch: |- 
       - op: add
         path: /spec/template/spec
-        value: 
+        value:
           hardwareAffinity:
             required:
             - labelSelector:
@@ -127,12 +127,34 @@ patches:
     patch: |- 
       - op: add
         path: /spec/template/spec
-        value: 
+        value:
           hardwareAffinity:
             required:
             - labelSelector:
                 matchLabels:
                   {{ .NodeLabel }}: worker
+{{- if or .OSRegistry .OSDistro .OSVersion }}
+  - target:
+      group: infrastructure.cluster.x-k8s.io
+      kind: TinkerbellCluster
+      name: ".*"
+      version: v1beta1
+    patch: |-
+      - op: add
+        path: /spec
+        value:
+          {{- if .OSRegistry }}
+          imageLookupBaseRegistry: "{{ .OSRegistry }}"
+          {{- else }}
+          imageLookupBaseRegistry: ""
+          {{- end }}
+          {{- if .OSDistro }}
+          imageLookupOSDistro: "{{ .OSDistro }}"
+          {{- end }}
+          {{- if .OSVersion }}
+          imageLookupOSVersion: "{{ .OSVersion }}"
+          {{- end }}
+{{- end }}
 {{- if .SSHAuthorizedKey }}
   - target:
       group: bootstrap.cluster.x-k8s.io
