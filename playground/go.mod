@@ -1,6 +1,6 @@
 module github.com/tinkerbell/cluster-api-provider/playground
 
-go 1.21.2
+go 1.21
 
 require (
 	github.com/peterbourgon/ff/v3 v3.4.0
