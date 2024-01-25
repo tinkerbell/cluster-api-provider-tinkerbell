@@ -10,17 +10,17 @@
 
 ## Dependencies
 
-* Libvirtd
-* Docker
-* Helm
-* KinD
-* clusterctl
-* kubectl
-* virt-install
+* Libvirtd >= libvirtd (libvirt) 8.0.0
+* Docker >= 24.0.7
+* Helm >= v3.13.1
+* KinD >= v0.20.0
+* clusterctl >= v1.6.0
+* kubectl >= v1.28.2
+* virt-install >= 4.0.0
 
 ### Hardware Dependencies
 
-* 60GB of free disk space
+* 60GB of free and very fast disk space (etcd is very disk io sensitive)
 * 8GB of free RAM
 * 4 CPU cores
 

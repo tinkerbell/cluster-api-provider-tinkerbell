@@ -33,7 +33,7 @@ func (c *Cmd) CombinedOutput() ([]byte, error) {
 	// run the command
 	out, err := c.Cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error running command: %w: out: %s", err, out)
 	}
 
 	// write the output to the audit writer
