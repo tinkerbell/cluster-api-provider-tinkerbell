@@ -1,5 +1,23 @@
 # CAPT Playground
 
+## Usage
+
+The CAPT playground can be run as a standalone binary or via Docker.
+
+### Standalone
+
+```bash
+capt-playground -h
+```
+
+### Docker
+
+```bash
+docker build -t capt-playground .
+docker run -it --rm --network host -v /tmp:/tmp -v /var/run/docker.sock:/var/run/docker.sock -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock --name capt-playground capt-playground
+capt-playground -h
+```
+
 ## Known Issues
 
 ### DNS issue

@@ -1,5 +1,5 @@
-# docker build -t deps .
-# docker run -it --rm --network host -v /tmp:/tmp -v /var/run/docker.sock:/var/run/docker.sock -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock --name capt-playground deps
+# docker build -t capt-playground .
+# docker run -it --rm --network host -v /tmp:/tmp -v /var/run/docker.sock:/var/run/docker.sock -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock --name capt-playground capt-playground
 FROM alpine
 
 ADD https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.6.1/clusterctl-linux-amd64 /usr/local/bin/clusterctl 
