@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/tinkerbell/cluster-api-provider/playground/internal/exec"
@@ -41,4 +42,34 @@ func (o Opts) CreateVM(name string, netBridge string, mac net.HardwareAddr) erro
 	}
 
 	return nil
+}
+
+// VersionGTE checks if the version of virsh is greater than or equal to the given version
+func VersionGTE(version int) error {
+	cmd := "virsh"
+	args := []string{
+		"--version",
+	}
+	e := exec.CommandContext(context.Background(), cmd, args...)
+	out, err := e.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error running virsh --version: %s: out: %v", err, string(out))
+	}
+
+	// virsh --version returns "X.Y.Z" where X, Y, and Z are integers
+	// compare that the first number is greater than or equal to the given version
+	first := strings.Split(string(out), ".")
+	if len(first) < 1 {
+		return fmt.Errorf("error parsing virsh --version: %s", string(out))
+	}
+
+	got, err := strconv.Atoi(first[0])
+	if err != nil {
+		return fmt.Errorf("error parsing virsh --version: %s", string(out))
+	}
+	if got >= version {
+		return nil
+	}
+
+	return fmt.Errorf("virsh version %d is less than %d", got, version)
 }
