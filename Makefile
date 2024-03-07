@@ -49,7 +49,7 @@ BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 GO_INSTALL = ./scripts/go_install.sh
 
 # Binaries.
-CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10
+CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14
 
 GOLANGCI_LINT_VER := v1.54.2
 GOLANGCI_LINT_BIN := golangci-lint

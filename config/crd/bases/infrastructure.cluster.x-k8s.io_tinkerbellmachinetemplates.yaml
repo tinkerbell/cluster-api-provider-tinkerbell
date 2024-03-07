@@ -3,8 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.10.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: tinkerbellmachinetemplates.infrastructure.cluster.x-k8s.io
 spec:
   group: infrastructure.cluster.x-k8s.io
@@ -24,14 +23,19 @@ spec:
           API.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -51,14 +55,13 @@ spec:
                         description: HardwareAffinity allows filtering for hardware.
                         properties:
                           preferred:
-                            description: Preferred are the preferred hardware affinity
-                              terms. Hardware matching these terms are preferred according
-                              to the weights provided, but are not required.
+                            description: |-
+                              Preferred are the preferred hardware affinity terms. Hardware matching these terms are preferred according to the
+                              weights provided, but are not required.
                             items:
-                              description: WeightedHardwareAffinityTerm is a HardwareAffinityTerm
-                                with an associated weight.  The weights of all the
-                                matched WeightedHardwareAffinityTerm fields are added
-                                per-hardware to find the most preferred hardware.
+                              description: |-
+                                WeightedHardwareAffinityTerm is a HardwareAffinityTerm with an associated weight.  The weights of all the matched
+                                WeightedHardwareAffinityTerm fields are added per-hardware to find the most preferred hardware.
                               properties:
                                 hardwareAffinityTerm:
                                   description: HardwareAffinityTerm is the term associated
@@ -73,30 +76,25 @@ spec:
                                             of label selector requirements. The requirements
                                             are ANDed.
                                           items:
-                                            description: A label selector requirement
-                                              is a selector that contains values,
-                                              a key, and an operator that relates
-                                              the key and values.
+                                            description: |-
+                                              A label selector requirement is a selector that contains values, a key, and an operator that
+                                              relates the key and values.
                                             properties:
                                               key:
                                                 description: key is the label key
                                                   that the selector applies to.
                                                 type: string
                                               operator:
-                                                description: operator represents a
-                                                  key's relationship to a set of values.
-                                                  Valid operators are In, NotIn, Exists
-                                                  and DoesNotExist.
+                                                description: |-
+                                                  operator represents a key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists and DoesNotExist.
                                                 type: string
                                               values:
-                                                description: values is an array of
-                                                  string values. If the operator is
-                                                  In or NotIn, the values array must
-                                                  be non-empty. If the operator is
-                                                  Exists or DoesNotExist, the values
-                                                  array must be empty. This array
-                                                  is replaced during a strategic merge
-                                                  patch.
+                                                description: |-
+                                                  values is an array of string values. If the operator is In or NotIn,
+                                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                                  the values array must be empty. This array is replaced during a strategic
+                                                  merge patch.
                                                 items:
                                                   type: string
                                                 type: array
@@ -108,12 +106,10 @@ spec:
                                         matchLabels:
                                           additionalProperties:
                                             type: string
-                                          description: matchLabels is a map of {key,value}
-                                            pairs. A single {key,value} in the matchLabels
-                                            map is equivalent to an element of matchExpressions,
-                                            whose key field is "key", the operator
-                                            is "In", and the values array contains
-                                            only "value". The requirements are ANDed.
+                                          description: |-
+                                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                            operator is "In", and the values array contains only "value". The requirements are ANDed.
                                           type: object
                                       type: object
                                       x-kubernetes-map-type: atomic
@@ -134,9 +130,9 @@ spec:
                               type: object
                             type: array
                           required:
-                            description: Required are the required hardware affinity
-                              terms.  The terms are OR'd together, hardware must match
-                              one term to be considered.
+                            description: |-
+                              Required are the required hardware affinity terms.  The terms are OR'd together, hardware must match one term to
+                              be considered.
                             items:
                               description: HardwareAffinityTerm is used to select
                                 for a particular existing hardware resource.
@@ -150,28 +146,24 @@ spec:
                                         selector requirements. The requirements are
                                         ANDed.
                                       items:
-                                        description: A label selector requirement
-                                          is a selector that contains values, a key,
-                                          and an operator that relates the key and
-                                          values.
+                                        description: |-
+                                          A label selector requirement is a selector that contains values, a key, and an operator that
+                                          relates the key and values.
                                         properties:
                                           key:
                                             description: key is the label key that
                                               the selector applies to.
                                             type: string
                                           operator:
-                                            description: operator represents a key's
-                                              relationship to a set of values. Valid
-                                              operators are In, NotIn, Exists and
-                                              DoesNotExist.
+                                            description: |-
+                                              operator represents a key's relationship to a set of values.
+                                              Valid operators are In, NotIn, Exists and DoesNotExist.
                                             type: string
                                           values:
-                                            description: values is an array of string
-                                              values. If the operator is In or NotIn,
-                                              the values array must be non-empty.
-                                              If the operator is Exists or DoesNotExist,
-                                              the values array must be empty. This
-                                              array is replaced during a strategic
+                                            description: |-
+                                              values is an array of string values. If the operator is In or NotIn,
+                                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                              the values array must be empty. This array is replaced during a strategic
                                               merge patch.
                                             items:
                                               type: string
@@ -184,12 +176,10 @@ spec:
                                     matchLabels:
                                       additionalProperties:
                                         type: string
-                                      description: matchLabels is a map of {key,value}
-                                        pairs. A single {key,value} in the matchLabels
-                                        map is equivalent to an element of matchExpressions,
-                                        whose key field is "key", the operator is
-                                        "In", and the values array contains only "value".
-                                        The requirements are ANDed.
+                                      description: |-
+                                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                        operator is "In", and the values array contains only "value". The requirements are ANDed.
                                       type: object
                                   type: object
                                   x-kubernetes-map-type: atomic
@@ -199,49 +189,46 @@ spec:
                             type: array
                         type: object
                       hardwareName:
-                        description: Those fields are set programmatically, but they
-                          cannot be re-constructed from "state of the world", so we
-                          put them in spec instead of status.
+                        description: |-
+                          Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
+                          we put them in spec instead of status.
                         type: string
                       imageLookupBaseRegistry:
-                        description: ImageLookupBaseRegistry is the base Registry
-                          URL that is used for pulling images, if not set, the default
-                          will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
+                        description: |-
+                          ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
+                          if not set, the default will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
                         type: string
                       imageLookupFormat:
-                        description: 'ImageLookupFormat is the URL naming format to
-                          use for machine images when a machine does not specify.
-                          When set, this will be used for all cluster machines unless
-                          a machine specifies a different ImageLookupFormat. Supports
-                          substitutions for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}}
-                          and {{.KubernetesVersion}} with the basse URL, OS distribution,
-                          OS version, and kubernetes version, respectively. BaseRegistry
-                          will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-                          (the default), OSDistro will be the value in ImageLookupOSDistro
-                          or ubuntu (the default), OSVersion will be the value in
-                          ImageLookupOSVersion or default based on the OSDistro (if
-                          known), and the kubernetes version as defined by the packages
-                          produced by kubernetes/release: v1.13.0, v1.12.5-mybuild.1,
-                          or v1.17.3. For example, the default image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz
-                          will attempt to pull the image from that location. See also:
-                          https://golang.org/pkg/text/template/'
+                        description: |-
+                          ImageLookupFormat is the URL naming format to use for machine images when
+                          a machine does not specify. When set, this will be used for all cluster machines
+                          unless a machine specifies a different ImageLookupFormat. Supports substitutions
+                          for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
+                          the basse URL, OS distribution, OS version, and kubernetes version, respectively.
+                          BaseRegistry will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
+                          (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
+                          OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
+                          (if known), and the kubernetes version as defined by the packages produced by
+                          kubernetes/release: v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
+                          image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz will
+                          attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/
                         type: string
                       imageLookupOSDistro:
-                        description: ImageLookupOSDistro is the name of the OS distro
-                          to use when fetching machine images, if not set it will
-                          default to ubuntu.
+                        description: |-
+                          ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
+                          if not set it will default to ubuntu.
                         type: string
                       imageLookupOSVersion:
-                        description: ImageLookupOSVersion is the version of the OS
-                          distribution to use when fetching machine images. If not
-                          set it will default based on ImageLookupOSDistro.
+                        description: |-
+                          ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
+                          images. If not set it will default based on ImageLookupOSDistro.
                         type: string
                       providerID:
                         type: string
                       templateOverride:
-                        description: 'TemplateOverride overrides the default Tinkerbell
-                          template used by CAPT. You can learn more about Tinkerbell
-                          templates here: https://docs.tinkerbell.org/templates/'
+                        description: |-
+                          TemplateOverride overrides the default Tinkerbell template used by CAPT.
+                          You can learn more about Tinkerbell templates here: https://docs.tinkerbell.org/templates/
                         type: string
                     type: object
                 required:
