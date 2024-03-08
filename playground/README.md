@@ -18,6 +18,50 @@ docker run -it --rm --network host -v /tmp:/tmp -v /var/run/docker.sock:/var/run
 capt-playground -h
 ```
 
+### Apply the cluster spec
+
+Apply CAPI/CAPT cluster objects.
+
+```bash
+kubectl apply -f output/playground.yaml
+```
+
+Wait for the cluster to be ready.
+
+First wait for the control plane(s) to be ready.
+
+```bash
+# ready means DESIRED equal REPLICAS
+kubectl get -n tink-system kubeadmcontrolplanes -o wide -w
+```
+
+Then wait for the worker nodes to be ready.
+
+```bash
+# ready means DESIRED equal REPLICAS
+kubectl get machinedeployment -n tink-system -o wide -w
+```
+
+Then get the new clusters kubeconfig.
+
+```bash
+export KUBECONFIG=output/kind.kubeconfig
+clusterctl get kubeconfig playground -n tink-system > playground.kubeconfig 
+```
+
+Install a CNI.
+
+```bash
+export KUBECONFIG=playground.kubeconfig
+cilium install --version 1.14.5
+```
+
+Check the cluster is ready.
+
+```bash
+kubectl get nodes
+```
+
 ## Known Issues
 
 ### DNS issue
