@@ -307,7 +307,7 @@ func (c *Create) populateNodeData(vbmcIP netip.Addr, subnet net.IPMask, gateway 
 	// Use the vbmcIP in order to determine the subnet for the KinD network.
 	// This is used to create the IP addresses for the VMs, Tinkerbell stack LB IP, and the KubeAPI server VIP.
 	base := fmt.Sprintf("%v.%v.100", vbmcIP.As4()[0], vbmcIP.As4()[1]) // x.x.100
-	nd := make([]tinkerbell.NodeData, c.TotalHardware)
+	ndata := make([]tinkerbell.NodeData, c.TotalHardware)
 	curControlPlaneNodesCount := 0
 	curWorkerNodesCount := 0
 	for i := 0; i < c.TotalHardware; i++ {
@@ -335,10 +335,10 @@ func (c *Create) populateNodeData(vbmcIP netip.Addr, subnet net.IPMask, gateway 
 			d.Labels[string(CAPTRole)] = string(WorkerRole)
 			curWorkerNodesCount++
 		}
-		nd[i] = d
+		ndata[i] = d
 	}
 
-	return nd
+	return ndata
 }
 
 // GenerateRandMAC generates a random MAC address.

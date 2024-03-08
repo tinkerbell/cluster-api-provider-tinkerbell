@@ -88,8 +88,8 @@ func (o Opts) IPv4SubnetFrom(dockerNet string) (net.IPMask, error) {
 		return nil, fmt.Errorf("error getting subnet: %s: out: %v", err, string(out))
 	}
 
-	ot := strings.Trim(strings.Trim(string(out), "\n"), "'")
-	subnets := strings.Split(ot, ",")
+	outTrimmed := strings.Trim(strings.Trim(string(out), "\n"), "'")
+	subnets := strings.Split(outTrimmed, ",")
 	for _, s := range subnets {
 		_, ipnet, err := net.ParseCIDR(s)
 		if err == nil {
@@ -118,8 +118,8 @@ func (o Opts) IPv4GatewayFrom(dockerNet string) (netip.Addr, error) {
 		return netip.Addr{}, fmt.Errorf("error getting gateway: %w", err)
 	}
 
-	ot := strings.Trim(strings.Trim(string(out), "\n"), "'")
-	subnets := strings.Split(ot, ",")
+	outTrimmed := strings.Trim(strings.Trim(string(out), "\n"), "'")
+	subnets := strings.Split(outTrimmed, ",")
 	for _, s := range subnets {
 		ip, err := netip.ParseAddr(s)
 		if err == nil && ip.Is4() {
