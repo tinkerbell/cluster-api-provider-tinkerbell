@@ -28,6 +28,7 @@ import (
 	"text/template"
 
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
@@ -49,8 +50,6 @@ import (
 
 const (
 	providerIDPlaceholder = "PROVIDER_ID"
-	inUse                 = "in_use"
-	provisioned           = "provisioned"
 )
 
 var (
@@ -107,7 +106,20 @@ func (scope *machineReconcileScope) addFinalizer() error {
 }
 
 func isHardwareReady(hw *tinkv1.Hardware) bool {
-	return hw.Spec.Metadata.State == inUse && hw.Spec.Metadata.Instance.State == provisioned
+	// if allowpxe false for all interface, hardware ready
+	if len(hw.Spec.Interfaces) == 0 {
+		return false
+	}
+
+	for _, ifc := range hw.Spec.Interfaces {
+		if ifc.Netboot != nil {
+			if *ifc.Netboot.AllowPXE {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 type errRequeueRequested struct{}
@@ -184,7 +196,7 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		return nil
 	}
 
-	if err := scope.patchHardwareStates(hw, inUse, provisioned); err != nil {
+	if err := scope.patchHardwareStates(hw, false); err != nil {
 		return fmt.Errorf("failed to patch hardware: %w", err)
 	}
 
@@ -195,14 +207,17 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 }
 
 // patchHardwareStates patches a hardware's metadata and instance states.
-func (scope *machineReconcileScope) patchHardwareStates(hw *tinkv1.Hardware, mdState, iState string) error {
+func (scope *machineReconcileScope) patchHardwareStates(hw *tinkv1.Hardware, allowpxe bool) error {
 	patchHelper, err := patch.NewHelper(hw, scope.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
 
-	hw.Spec.Metadata.State = mdState
-	hw.Spec.Metadata.Instance.State = iState
+	for _, ifc := range hw.Spec.Interfaces {
+		if ifc.Netboot != nil {
+			ifc.Netboot.AllowPXE = ptr.To(allowpxe)
+		}
+	}
 
 	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
@@ -716,12 +731,15 @@ func (scope *machineReconcileScope) releaseHardware(hardware *tinkv1.Hardware) e
 
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hardware.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
-	// setting these Metadata.State and Metadata.Instance.State = "" indicates to Boots
-	// that this hardware should be allowed to netboot. FYI, this is not authoritative.
+	// setting the AllowPXE=true indicates to Smee that this hardware should be allowed
+	// to netboot. FYI, this is not authoritative.
 	// Other hardware values can be set to prohibit netbooting of a machine.
-	// See this Boots function for the logic around this: https://github.com/tinkerbell/boots/blob/main/job/dhcp.go#L115
-	hardware.Spec.Metadata.State = ""
-	hardware.Spec.Metadata.Instance.State = ""
+	// See this Boots function for the logic around this: https://github.com/tinkerbell/smee/blob/main/internal/ipxe/script/ipxe.go#L112
+	for _, ifc := range hardware.Spec.Interfaces {
+		if ifc.Netboot != nil {
+			ifc.Netboot.AllowPXE = ptr.To(true)
+		}
+	}
 
 	controllerutil.RemoveFinalizer(hardware, infrastructurev1.MachineFinalizer)
 

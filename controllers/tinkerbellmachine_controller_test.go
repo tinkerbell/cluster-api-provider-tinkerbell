@@ -190,6 +190,9 @@ func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardwa
 							Address: ip,
 						},
 					},
+					Netboot: &tinkv1.Netboot{
+						AllowPXE: ptr.To(true),
+					},
 				},
 			},
 			Metadata: &tinkv1.HardwareMetadata{
@@ -417,7 +420,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Machine status should be updated on every reconciliation")
 	})
 
-	t.Run("in_use_states_are_not_set", func(t *testing.T) {
+	t.Run("allowPXE_is_not_updated", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
@@ -428,10 +431,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 		updatedHardware := &tinkv1.Hardware{}
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
-		if diff := cmp.Diff(updatedHardware.Spec.Metadata.State, ""); diff != "" {
-			t.Errorf(diff)
-		}
-		if diff := cmp.Diff(updatedHardware.Spec.Metadata.Instance.State, ""); diff != "" {
+		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(true)); diff != "" {
 			t.Errorf(diff)
 		}
 	})
@@ -554,7 +554,7 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Machine status should be updated on every reconciliation")
 	})
 
-	t.Run("in_use_states_are_set", func(t *testing.T) {
+	t.Run("allowPXE_is_updated", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
@@ -565,10 +565,7 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 
 		updatedHardware := &tinkv1.Hardware{}
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
-		if diff := cmp.Diff(updatedHardware.Spec.Metadata.State, "in_use"); diff != "" {
-			t.Errorf(diff)
-		}
-		if diff := cmp.Diff(updatedHardware.Spec.Metadata.Instance.State, "provisioned"); diff != "" {
+		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(false)); diff != "" {
 			t.Errorf(diff)
 		}
 	})
