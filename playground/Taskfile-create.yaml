@@ -1,11 +1,22 @@
 version: '3'
 
+vars:
+  KIND_KUBECONFIG_NAME: kind.kubeconfig
+
 tasks:
   playground:
-    deps: [validate-deps, output-dir, kind-cluster, deploy-tinkerbell-helm-chart]
+    silent: true
     summary: |
       Create the CAPT playground.
-    cmds: []
+    cmds:
+      - task: validate-deps
+      - task: output-dir
+      - task: kind-cluster
+      - task: deploy-tinkerbell-helm-chart
+      - task: start-virtualbmc
+      - task: hardware-cr
+      - task: bmc-machine-cr
+      - task: bmc-secret
 
   validate-deps:
     summary: |
@@ -18,6 +29,7 @@ tasks:
   output-dir:
     summary: |
       Create the output directory.
+    silent: true
     cmds:
       - mkdir -p output/{yaml,}
 
@@ -25,13 +37,15 @@ tasks:
     deps: [validate-deps, output-dir]
     summary: |
       Install a KinD cluster.
+    silent: true
     cmds:
-      - kind create cluster --name capt-playground --kubeconfig ./output/kubeconfig
+      - kind create cluster --name capt-playground --kubeconfig ./output/{{.KIND_KUBECONFIG_NAME}}
     status:
       - kind get clusters | grep -q capt-playground
 
-  start-virtualbmc-server:
+  start-virtualbmc:
     deps: [validate-deps, kind-cluster]
+    silent: true
     summary: |
       Start the virtualbmc server.
     cmds:
@@ -39,36 +53,48 @@ tasks:
     status:
       - docker ps | grep -q virtualbmc
 
-  populate-node-data:
-    deps: [validate-deps, kind-cluster]
+  hardware-cr:
+    deps: [validate-deps, start-virtualbmc]
+    silent: true
     summary: |
-      Populate the node data.
+      Create BMC Machine object.
     vars:
-      #VBMC_IP:
-      #  sh: docker inspect -f '{{ .NetworkSettings.Networks.kind.IPAddress }}' virtualbmc
       KIND_GATEWAY_IP:
         sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
-      #KIND_SUBNET:
-      #  sh: echo "${KIND_GATEWAY_IP%${KIND_GATEWAY_IP##*.}}200"
-      KIND_IP:
-        sh: awk -F"." '{print $1"."$2".10.200"}' <<< "{{.KIND_GATEWAY_IP}}"
-      TOTAL_HARDWARE: 5
-      CONTROL_PLANE_NODES: 1
-      WORKER_NODES: 2
+      NODE_IP_BASE:
+        sh: awk -F"." '{print $1"."$2".10.20"}' <<< "{{.KIND_GATEWAY_IP}}"
     cmds:
-      - echo "{{.KIND_IP}}"
-    status:
+      - ./scripts/generate_hardware.sh "$NUM_CONTROL_PLANE_NODES" "$NUM_WORKER_NODES" "$NUM_SPARE_NODES" "{{.KIND_GATEWAY_IP}}" "{{.NODE_IP_BASE}}" output true
+
+  bmc-machine-cr:
+    deps: [validate-deps, start-virtualbmc, hardware-cr]
     silent: true
+    summary: |
+      Create BMC Machine objects.
+    vars:
+      VBMC_IP:
+        sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.IPAddress }}`}}' virtualbmc
+    cmds:
+      - ./scripts/generate_bmc.sh "$((NUM_CONTROL_PLANE_NODES + NUM_WORKER_NODES + NUM_SPARE_NODES))" 6230 "{{.VBMC_IP}}" tink-system output true
+
+  bmc-secret:
+    deps: [validate-deps, bmc-machine-cr]
+    silent: true
+    summary: |
+      Create BMC Machine objects.
+    cmds:
+      - ./scripts/generate_secret.sh output tink-system admin password
 
   deploy-tinkerbell-helm-chart:
     deps: [validate-deps, kind-cluster]
+    silent: true
     summary: |
       Deploy the Tinkerbell Helm chart.
     env:
-      KUBECONFIG: ./output/kubeconfig
+      KUBECONFIG: ./output/{{.KIND_KUBECONFIG_NAME}}
       STACK_CHART_VERSION: 0.4.4
     vars:
-      KUBECONFIG: ./output/kubeconfig
+      KUBECONFIG: ./output/{{.KIND_KUBECONFIG_NAME}}
       KIND_GATEWAY_IP:
         sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
       LB_IP:
@@ -79,3 +105,21 @@ tasks:
       - helm install tink-stack oci://ghcr.io/tinkerbell/charts/stack --version "$STACK_CHART_VERSION" --create-namespace --namespace tink-system --wait --set "smee.trustedProxies={{.TRUSTED_PROXIES}}" --set "hegel.trustedProxies={{.TRUSTED_PROXIES}}" --set "stack.loadBalancerIP={{.LB_IP}}" --set "smee.publicIP={{.LB_IP}}"
     status:
       - helm list -n tink-system | grep -q tink-stack
+
+
+
+  foo:
+    vars:
+      TOTAL_HARDWARE: 3
+      CONTROL_PLANE_NODES: 1
+      WORKER_NODES: 2
+      RANGE: '{{seq .TOTAL_HARDWARE | replace " " ","}}'
+      KIND_GATEWAY_IP:
+        sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
+      NODE_IP_BASE:
+        sh: awk -F"." '{print $1"."$2".10.20"}' <<< "{{.KIND_GATEWAY_IP}}"
+    cmds:
+      - for: { var: RANGE, split: ',' }
+        cmd: echo {{.ITEM}}
+      - for: { var: RANGE, split: ',' }
+        cmd: echo {{.NODE_IP_BASE}}{{.ITEM}} {{.KIND_GATEWAY_IP}} node{{.ITEM}}; echo node{{.ITEM}}|md5sum|sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*$/02:\1:\2:\3:\4:\5/'

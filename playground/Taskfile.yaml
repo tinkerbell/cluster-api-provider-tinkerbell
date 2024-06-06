@@ -4,27 +4,29 @@ includes:
   create: ./Taskfile-create.yaml
   delete: ./Taskfile-delete.yaml
 
+dotenv: ['.playground']
+
 tasks:
   create-playground:
     deps:
       - validate
-      - create:output-dir
-      - create:kind-cluster
+      - create:playground
+    silent: true
     summary: |
       Create the CAPT playground. Use the .playground file to define things like cluster size and Kubernetes version.
     cmds: []
 
   validate:
     deps: [system-deps-warnings, validate-binaries]
+    silent: true
     summary: |
       Run CAPT playground validation.
-    silent: true
     cmds: []
 
   validate-binaries:
+    silent: true
     summary: |
       Validate all required dependencies for the CAPT playground.
-    silent: true
     cmds:
       - for: ['virsh', 'docker', 'helm', 'kind', 'kubectl', 'clusterctl', 'virt-install']
         cmd: command -v {{ .ITEM }} >/dev/null || echo "'{{ .ITEM }}' was not found in the \$PATH, please ensure it is installed."
@@ -35,6 +37,13 @@ tasks:
     silent: true
     cmds:
       - echo "Please ensure you have the following:"
-      - echo "60GB of free and very fast disk space (etcd is very disk io sensitive)"
+      - echo "60GB of free and very fast disk space (etcd is very disk I/O sensitive)"
       - echo "8GB of free RAM"
       - echo "4 CPU cores"
+
+
+#NODE_ROLE
+#NODE_NAME
+#NODE_IP
+#GATEWAY_IP
+#NODE_MAC
