@@ -1,0 +1,81 @@
+version: '3'
+
+tasks:
+  playground:
+    deps: [validate-deps, output-dir, kind-cluster, deploy-tinkerbell-helm-chart]
+    summary: |
+      Create the CAPT playground.
+    cmds: []
+
+  validate-deps:
+    summary: |
+      Validate all required dependencies for the CAPT playground.
+    silent: true
+    cmds:
+      - for: ['docker', 'kind']
+        cmd: command -v {{.ITEM}} >/dev/null || echo "'{{.ITEM}}' was not found in the \$PATH, please ensure it is installed."
+
+  output-dir:
+    summary: |
+      Create the output directory.
+    cmds:
+      - mkdir -p output/{yaml,}
+
+  kind-cluster:
+    deps: [validate-deps, output-dir]
+    summary: |
+      Install a KinD cluster.
+    cmds:
+      - kind create cluster --name capt-playground --kubeconfig ./output/kubeconfig
+    status:
+      - kind get clusters | grep -q capt-playground
+
+  start-virtualbmc-server:
+    deps: [validate-deps, kind-cluster]
+    summary: |
+      Start the virtualbmc server.
+    cmds:
+      - docker run -d --rm --network kind -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock --name virtualbmc ghcr.io/jacobweinstock/virtualbmc
+    status:
+      - docker ps | grep -q virtualbmc
+
+  populate-node-data:
+    deps: [validate-deps, kind-cluster]
+    summary: |
+      Populate the node data.
+    vars:
+      #VBMC_IP:
+      #  sh: docker inspect -f '{{ .NetworkSettings.Networks.kind.IPAddress }}' virtualbmc
+      KIND_GATEWAY_IP:
+        sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
+      #KIND_SUBNET:
+      #  sh: echo "${KIND_GATEWAY_IP%${KIND_GATEWAY_IP##*.}}200"
+      KIND_IP:
+        sh: awk -F"." '{print $1"."$2".10.200"}' <<< "{{.KIND_GATEWAY_IP}}"
+      TOTAL_HARDWARE: 5
+      CONTROL_PLANE_NODES: 1
+      WORKER_NODES: 2
+    cmds:
+      - echo "{{.KIND_IP}}"
+    status:
+    silent: true
+
+  deploy-tinkerbell-helm-chart:
+    deps: [validate-deps, kind-cluster]
+    summary: |
+      Deploy the Tinkerbell Helm chart.
+    env:
+      KUBECONFIG: ./output/kubeconfig
+      STACK_CHART_VERSION: 0.4.4
+    vars:
+      KUBECONFIG: ./output/kubeconfig
+      KIND_GATEWAY_IP:
+        sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
+      LB_IP:
+        sh: awk -F"." '{print $1"."$2".10.200"}' <<< "{{.KIND_GATEWAY_IP}}"
+      TRUSTED_PROXIES:
+        sh: KUBECONFIG={{.KUBECONFIG}} kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}'
+    cmds:
+      - helm install tink-stack oci://ghcr.io/tinkerbell/charts/stack --version "$STACK_CHART_VERSION" --create-namespace --namespace tink-system --wait --set "smee.trustedProxies={{.TRUSTED_PROXIES}}" --set "hegel.trustedProxies={{.TRUSTED_PROXIES}}" --set "stack.loadBalancerIP={{.LB_IP}}" --set "smee.publicIP={{.LB_IP}}"
+    status:
+      - helm list -n tink-system | grep -q tink-stack
