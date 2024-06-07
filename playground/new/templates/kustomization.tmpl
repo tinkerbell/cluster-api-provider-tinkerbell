@@ -1,0 +1,73 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: $NAMESPACE
+resources:
+  - playground.yaml
+patches:
+  - target:
+      group: infrastructure.cluster.x-k8s.io
+      kind: TinkerbellMachineTemplate
+      name: ".*control-plane.*"
+      version: v1beta1
+    patch: |- 
+      - op: add
+        path: /spec/template/spec
+        value:
+          hardwareAffinity:
+            required:
+            - labelSelector:
+                matchLabels:
+                  tinkerbell.org/role: control-plane
+  - target:
+      group: infrastructure.cluster.x-k8s.io
+      kind: TinkerbellMachineTemplate
+      name: ".*worker.*"
+      version: v1beta1
+    patch: |- 
+      - op: add
+        path: /spec/template/spec
+        value:
+          hardwareAffinity:
+            required:
+            - labelSelector:
+                matchLabels:
+                  tinkerbell.org/role: worker
+  - target:
+      group: infrastructure.cluster.x-k8s.io
+      kind: TinkerbellCluster
+      name: ".*"
+      version: v1beta1
+    patch: |-
+      - op: add
+        path: /spec
+        value:
+          imageLookupBaseRegistry: "$OS_REGISTRY"
+          imageLookupOSDistro: "$OS_DISTRO"
+          imageLookupOSVersion: "$OS_VERSION"
+  - target:
+      group: bootstrap.cluster.x-k8s.io
+      kind: KubeadmConfigTemplate
+      name: "playground-.*"
+      version: v1beta1
+    patch: |-
+      - op: add
+        path: /spec/template/spec/users
+        value:
+          - name: tink
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            sshAuthorizedKeys:
+            - $SSH_AUTH_KEY
+  - target:
+      group: controlplane.cluster.x-k8s.io
+      kind: KubeadmControlPlane
+      name: "playground-.*"
+      version: v1beta1
+    patch: |-
+      - op: add
+        path: /spec/kubeadmConfigSpec/users
+        value:
+          - name: tink
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            sshAuthorizedKeys:
+            - $SSH_AUTH_KEY
+

@@ -133,8 +133,8 @@ func (o Opts) IPv4GatewayFrom(dockerNet string) (netip.Addr, error) {
 func (o Opts) LinuxBridgeFrom(dockerNet string) (string, error) {
 	/*
 		network_id=$(docker network inspect -f {{.Id}} kind)
-		    bridge_name="br-${network_id:0:11}"
-		    brctl show $bridge_name
+		bridge_name="br-${network_id:0:12}"
+		brctl show $bridge_name
 	*/
 	args := Args{
 		Cmd:                  "network",

@@ -1,0 +1,107 @@
+version: '3'
+
+vars:
+  KIND_KUBECONFIG_NAME: kind.kubeconfig
+
+tasks:
+
+  validate-deps:
+    summary: |
+      Validate required dependencies for virtual bmc tasks.
+    silent: true
+    cmds:
+      - for: ['clusterctl', "kubectl"]
+        cmd: command -v {{.ITEM}} >/dev/null || echo "'{{.ITEM}}' was not found in the \$PATH, please ensure it is installed."
+
+  output-dir:
+    summary: |
+      Create the output directory.
+    silent: true
+    cmds:
+      - mkdir -p output/{yaml,}
+
+  create-cluster-yaml:
+    deps: [output-dir]
+    summary: |
+      Create the cluster yaml.
+    cmds:
+      - envsubst '$CAPT_VERSION' < templates/clusterctl.tmpl > output/clusterctl.yaml
+    status:
+      - grep -q "$CAPT_VERSION" output/clusterctl.yaml
+
+  init:
+    deps: [create-cluster-yaml]
+    summary: |
+      Initialize the cluster.
+    env:
+      KUBECONFIG: ./output/{{.KIND_KUBECONFIG_NAME}}
+      CLUSTERCTL_DISABLE_VERSIONCHECK: true
+      XDG_CONFIG_HOME: /tmp/xdg
+      XDG_CONFIG_DIRS: /tmp/xdg
+      XDG_STATE_HOME: /tmp/xdg
+      XDG_CACHE_HOME: /tmp/xdg
+      XDG_RUNTIME_DIR: /tmp/xdg
+      XDG_DATA_HOME: /tmp/xdg
+      XDG_DATA_DIRS: /tmp/xdg
+    vars:
+      KIND_GATEWAY_IP:
+        sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
+      TINKERBELL_IP:
+        sh: awk -F"." '{print $1"."$2".10.200"}' <<< "{{.KIND_GATEWAY_IP}}"
+    cmds:
+      - TINKERBELL_IP={{.TINKERBELL_IP}} clusterctl --config output/clusterctl.yaml init --infrastructure tinkerbell
+    status:
+      - expected=1; got=$(kubectl get pods -n capt-system |grep -ce "capt-controller"); [[ "$got" == "$expected" ]]
+
+  generate-cluster-yaml:
+    deps: [init]
+    summary: |
+      Generate the cluster yaml.
+    env:
+      KUBECONFIG: ./output/{{.KIND_KUBECONFIG_NAME}}
+      CLUSTERCTL_DISABLE_VERSIONCHECK: true
+      XDG_CONFIG_HOME: /tmp/xdg
+      XDG_CONFIG_DIRS: /tmp/xdg
+      XDG_STATE_HOME: /tmp/xdg
+      XDG_CACHE_HOME: /tmp/xdg
+      XDG_RUNTIME_DIR: /tmp/xdg
+      XDG_DATA_HOME: /tmp/xdg
+      XDG_DATA_DIRS: /tmp/xdg
+    vars:
+      KIND_GATEWAY_IP:
+        sh: docker inspect -f '{{`{{ .NetworkSettings.Networks.kind.Gateway }}`}}' capt-playground-control-plane
+      CONTROL_PLANE_VIP:
+        sh: awk -F"." '{print $1"."$2".100.100"}' <<< "{{.KIND_GATEWAY_IP}}"
+      POD_CIDR:
+        sh: awk -F"." '{print $1".100.0.0/16"}' <<< "{{.KIND_GATEWAY_IP}}"
+    cmds:
+      - CONTROL_PLANE_VIP="{{.CONTROL_PLANE_VIP}}" POD_CIDR="{{.POD_CIDR}}" clusterctl generate cluster playground --config output/clusterctl.yaml --kubernetes-version "$KUBE_VERSION" --control-plane-machine-count="$NUM_CONTROL_PLANE_NODES" --worker-machine-count="$NUM_WORKER_NODES" --target-namespace=tink-system --write-to playground.yaml
+    status:
+      - grep -q "$KUBE_VERSION" playground.yaml
+
+  create-kustomize-file:
+    deps: [validate-deps, generate-cluster-yaml]
+    summary: |
+      Kustomize file for the CAPI generated config file (playground.yaml).
+    env:
+      NAMESPACE: tink-system
+    sources:
+      - .playground
+    generates:
+      - kustomization.yaml
+    cmds:
+      - envsubst '$NAMESPACE,$OS_REGISTRY,$OS_DISTRO,$OS_VERSION,$SSH_AUTH_KEY' < templates/kustomization.tmpl > kustomization.yaml
+
+  apply-kustomization:
+    deps: [validate-deps, create-kustomize-file]
+    summary: |
+      Kustomize the cluster yaml.
+    env:
+      KUBECONFIG: ./output/{{.KIND_KUBECONFIG_NAME}}
+    sources:
+      - kustomization.yaml
+      - playground.yaml
+    generates:
+      - output/playground.yaml
+    cmds:
+      - kubectl kustomize . -o output/playground.yaml 

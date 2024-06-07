@@ -3,6 +3,8 @@ version: '3'
 includes:
   create: ./Taskfile-create.yaml
   delete: ./Taskfile-delete.yaml
+  vbmc: ./Taskfile-vbmc.yaml
+  capi: ./Taskfile-capi.yaml
 
 dotenv: ['.playground']
 

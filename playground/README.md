@@ -31,7 +31,7 @@ Wait for the cluster to be ready.
 First wait for the control plane(s) to be ready.
 
 ```bash
-# ready means DESIRED equal REPLICAS
+# ready means DESIRED equal REPLICAS and INITIALIZED is true
 kubectl get -n tink-system kubeadmcontrolplanes -o wide -w
 ```
 

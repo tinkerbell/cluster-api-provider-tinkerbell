@@ -50,3 +50,10 @@ playground/output
 playground/.kube
 playground/.cache
 playground/state.yaml
+
+.task/
+output/
+playground.yaml
+kustomization.yaml
+playground.kubeconfig
+kind.kubeconfig

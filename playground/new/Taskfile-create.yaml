@@ -29,7 +29,8 @@ tasks:
       - task: capi:create-cluster-yaml
       - task: capi:init
       - task: capi:generate-cluster-yaml
-      - task: capi:kustomize-cluster-yaml
+      - task: capi:create-kustomize-file
+      - task: capi:apply-kustomization
 
   validate-deps:
     summary: |
@@ -54,7 +55,8 @@ tasks:
     env:
       KUBECONFIG: ./output/{{.KIND_KUBECONFIG_NAME}}
     cmds:
-      - kind create cluster --name capt-playground --kubeconfig ./output/{{.KIND_KUBECONFIG_NAME}} && kubectl wait --for=condition=ready node --all --timeout=5m
+      - kind create cluster --name capt-playground --kubeconfig ./output/{{.KIND_KUBECONFIG_NAME}}
+      - kubectl wait --for=condition=ready node --all --timeout=5m
     status:
       - kind get clusters | grep -q capt-playground
 
