@@ -72,7 +72,7 @@ function main() {
     if [[ "$output_dir" = /* ]]; then
         echo
     else
-        current_dir=$(realpath)
+        current_dir=$(pwd)
         output_dir="$current_dir/$output_dir"
     fi
     config_file=$(realpath "$CONFIG_FILE")

@@ -56,10 +56,12 @@ tasks:
         sh: echo $(yq eval '.outputDir' config.yaml)
       KIND_GATEWAY_IP:
         sh: yq eval '.kind.gatewayIP' {{.STATE_FILE_FQ_PATH}}
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     cmds:
-      - clusterctl --config {{.OUTPUT_DIR}}/clusterctl.yaml init --infrastructure tinkerbell
+      - KUBECONFIG="{{.KUBECONFIG}}" clusterctl --config {{.OUTPUT_DIR}}/clusterctl.yaml init --infrastructure tinkerbell
     status:
-      - expected=1; got=$(kubectl get pods -n capt-system |grep -ce "capt-controller"); [[ "$got" == "$expected" ]]
+      - expected=1; got=$(KUBECONFIG="{{.KUBECONFIG}}" kubectl get pods -n capt-system |grep -ce "capt-controller"); [[ "$got" == "$expected" ]]
 
   generate-cluster-yaml:
     summary: |
@@ -92,8 +94,10 @@ tasks:
         sh: yq eval '.counts.workers' {{.STATE_FILE_FQ_PATH}}
       NAMESPACE:
         sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     cmds:
-      - clusterctl generate cluster {{.CLUSTER_NAME}} --config {{.OUTPUT_DIR}}/clusterctl.yaml --kubernetes-version "{{.KUBE_VERSION}}" --control-plane-machine-count="{{.CP_COUNT}}" --worker-machine-count="{{.WORKER_COUNT}}" --target-namespace={{.NAMESPACE}} --write-to {{.OUTPUT_DIR}}/prekustomization.yaml
+      - KUBECONFIG="{{.KUBECONFIG}}" clusterctl generate cluster {{.CLUSTER_NAME}} --config {{.OUTPUT_DIR}}/clusterctl.yaml --kubernetes-version "{{.KUBE_VERSION}}" --control-plane-machine-count="{{.CP_COUNT}}" --worker-machine-count="{{.WORKER_COUNT}}" --target-namespace={{.NAMESPACE}} --write-to {{.OUTPUT_DIR}}/prekustomization.yaml
     status:
       - grep -q "{{.KUBE_VERSION}}" {{.OUTPUT_DIR}}/prekustomization.yaml
 
@@ -133,6 +137,8 @@ tasks:
     vars:
       CLUSTER_NAME:
         sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     env:
       KUBECONFIG:
         sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
@@ -142,4 +148,4 @@ tasks:
     generates:
       - "{{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.yaml"
     cmds:
-      - kubectl kustomize {{.OUTPUT_DIR}} -o {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.yaml 
+      - KUBECONFIG="{{.KUBECONFIG}}" kubectl kustomize {{.OUTPUT_DIR}} -o {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.yaml 

@@ -8,6 +8,7 @@ function main() {
   # Generate hardware
   declare -r STATE_FILE="$1"
   declare -r OUTPUT_DIR=$(yq eval '.outputDir' "$STATE_FILE")
+  declare -r NS=$(yq eval '.namespace' "$STATE_FILE")
 
   rm -f "$OUTPUT_DIR"/hardware*.yaml
 
@@ -16,7 +17,8 @@ function main() {
     export NODE_MAC="$mac"
     export NODE_ROLE="$role"
     export NODE_IP="$ip"
-    export GATEWAY_IP="$gateway"
+    export GATEWAY_IP="$gateway"   
+    export NAMESPACE="$NS"
     envsubst "$(printf '${%s} ' $(env | cut -d'=' -f1))" < templates/hardware.tmpl > "$OUTPUT_DIR"/hardware-"$NODE_NAME".yaml
     unset NODE_ROLE
     unset NODE_NAME

@@ -1,10 +1,10 @@
 ---
 clusterName: "capt-playground"
-outputDir: "/home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/playground/new/output"
-namespace: "tink-system"
+outputDir: "output"
+namespace: "tink"
 counts:
   controlPlanes: 1
-  workers: 2
+  workers: 1
   spares: 1
 versions:
   capt: 0.5.3
@@ -24,5 +24,5 @@ vm:
 virtualBMC:
   containerName: "virtualbmc"
   image: ghcr.io/jacobweinstock/virtualbmc
-  user: "admin"
-  pass: "passwordq"
+  user: "root"
+  pass: "calvin"
