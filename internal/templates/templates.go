@@ -88,7 +88,7 @@ tasks:
     actions:
       - name: "stream-image"
         image: quay.io/tinkerbell-actions/oci2disk:v1.0.0
-        timeout: 1200
+        timeout: 600
         environment:
           IMG_URL: {{.ImageURL}}
           DEST_DISK: {{.DestDisk}}
