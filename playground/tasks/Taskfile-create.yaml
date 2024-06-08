@@ -96,7 +96,7 @@ tasks:
 
   deploy-tinkerbell-helm-chart:
     #deps: [validate-deps, kind-cluster, update-state]
-    sumary: |
+    summary: |
       Deploy the Tinkerbell Helm chart.
     env:
       KUBECONFIG:

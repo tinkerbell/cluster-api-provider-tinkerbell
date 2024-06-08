@@ -61,7 +61,7 @@ jobs:
         with:
           check_filenames: true
           check_hidden: true
-          skip: "./.git,./go.mod,./go.sum,./go.work.sum"
+          skip: "./.git,./go.mod,./go.sum"
           ignore_words_list: ro
 
   build-and-push-image:
