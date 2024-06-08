@@ -57,3 +57,4 @@ playground.yaml
 kustomization.yaml
 playground.kubeconfig
 kind.kubeconfig
+.state

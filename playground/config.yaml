@@ -1,0 +1,28 @@
+---
+clusterName: "capt-playground"
+outputDir: "/home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/playground/new/output"
+namespace: "tink-system"
+counts:
+  controlPlanes: 1
+  workers: 2
+  spares: 1
+versions:
+  capt: 0.5.3
+  chart: 0.4.4
+  kube: v1.28.8
+  os: 22.04
+os:
+  registry: reg.weinstocklabs.com/tinkerbell/cluster-api-provider-tinkerbell
+  distro: ubuntu
+  sshKey: ""
+vm:
+  baseName: "node"
+  cpusPerVM: 2
+  memInMBPerVM: 2048
+  diskSizeInGBPerVM: 10
+  diskPath: "/tmp"
+virtualBMC:
+  containerName: "virtualbmc"
+  image: ghcr.io/jacobweinstock/virtualbmc
+  user: "admin"
+  pass: "passwordq"

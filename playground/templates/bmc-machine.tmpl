@@ -1,7 +1,7 @@
 apiVersion: bmc.tinkerbell.org/v1alpha1
 kind: Machine
 metadata:
-    name: bmc-$NODE_NAME
+    name: $NODE_NAME
     namespace: $NAMESPACE
 spec:
     connection:
@@ -10,6 +10,7 @@ spec:
             namespace: $NAMESPACE
         host: $BMC_IP
         insecureTLS: true
+        port: $BMC_PORT
         providerOptions:
             ipmitool:
                 port: $BMC_PORT

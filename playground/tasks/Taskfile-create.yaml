@@ -1,0 +1,193 @@
+version: '3'
+
+includes:
+  vbmc: ./Taskfile-vbmc.yaml
+  capi: ./Taskfile-capi.yaml
+
+tasks:
+  playground-ordered:
+    silent: true
+    summary: |
+      Create the CAPT playground.
+    cmds:
+      - task: validate-deps
+      - task: kind-cluster
+      - task: update-state
+      - task: deploy-tinkerbell-helm-chart
+      - task: vbmc:start-server
+      - task: vbmc:update-state
+      - task: hardware-cr
+      - task: bmc-machine-cr
+      - task: bmc-secret
+      - task: vms
+      - task: vbmc:start-vbmcs
+      - task: apply-bmc-secret
+      - task: apply-bmc-machines
+      - task: apply-hardware
+      - task: capi:ordered
+
+  validate-deps:
+    summary: |
+      Validate all required dependencies for the CAPT playground.
+    silent: true
+    cmds:
+      - for: ['docker', 'kind', "virt-install", "yq", "kubectl"]
+        cmd: command -v {{.ITEM}} >/dev/null || echo "'{{.ITEM}}' was not found in the \$PATH, please ensure it is installed."
+
+  kind-cluster:
+    #deps: [validate-deps]
+    summary: |
+      Install a KinD cluster.
+    vars:
+      CLUSTER_NAME:
+        sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    env:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - kind create cluster --name {{.CLUSTER_NAME}} --kubeconfig "{{.KUBECONFIG}}"
+      - until kubectl wait --for=condition=ready node --all --timeout=5m; do echo "Waiting for nodes to be ready..."; sleep 1; done
+    status:
+      - kind get clusters | grep -q {{.CLUSTER_NAME}}
+
+  update-state:
+    #deps: [validate-deps, kind-cluster]
+    silent: true
+    summary: |
+      Update the state file with the KinD cluster information. Should be run only after the KinD cluster is created.
+    cmds:
+      - ./scripts/update_state.sh "{{.STATE_FILE_FQ_PATH}}"
+
+  hardware-cr:
+    #deps: [validate-deps, kind-cluster, update-state]
+    summary: |
+      Create BMC Machine object.
+    sources:
+      - "{{.STATE_FILE_FQ_PATH}}"
+    generates:
+      - "{{.OUTPUT_DIR}}/hardware-*.yaml"
+    cmds:
+      - ./scripts/generate_hardware.sh {{.STATE_FILE_FQ_PATH}}
+
+  bmc-machine-cr:
+    #deps: [validate-deps, vbmc:start-server, hardware-cr]
+    silent: true
+    summary: |
+      Create BMC Machine objects.
+    sources:
+      - "{{.STATE_FILE_FQ_PATH}}"
+    generates:
+      - "{{.OUTPUT_DIR}}/bmc-machine-*.yaml"
+    cmds:
+      - ./scripts/generate_bmc.sh {{.STATE_FILE_FQ_PATH}}
+
+  bmc-secret:
+    #deps: [validate-deps]
+    summary: |
+      Create BMC Machine objects.
+    sources:
+      - "{{.STATE_FILE_FQ_PATH}}"
+    generates:
+      - "{{.OUTPUT_DIR}}/bmc-secret.yaml"
+    cmds:
+      - ./scripts/generate_secret.sh {{.STATE_FILE_FQ_PATH}}
+
+  deploy-tinkerbell-helm-chart:
+    #deps: [validate-deps, kind-cluster, update-state]
+    sumary: |
+      Deploy the Tinkerbell Helm chart.
+    env:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    vars:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+      LB_IP:
+        sh: yq eval '.tinkerbell.vip' {{.STATE_FILE_FQ_PATH}}
+      TRUSTED_PROXIES:
+        sh: KUBECONFIG={{.KUBECONFIG}} kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}'
+      STACK_CHART_VERSION:
+        sh: yq eval '.versions.chart' {{.STATE_FILE_FQ_PATH}}
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+      CHART_NAME: tink-stack
+    cmds:
+      - helm install {{.CHART_NAME}} oci://ghcr.io/tinkerbell/charts/stack --version "{{.STACK_CHART_VERSION}}" --create-namespace --namespace {{.NAMESPACE}} --wait --set "smee.trustedProxies={{.TRUSTED_PROXIES}}" --set "hegel.trustedProxies={{.TRUSTED_PROXIES}}" --set "stack.loadBalancerIP={{.LB_IP}}" --set "smee.publicIP={{.LB_IP}}"
+    status:
+      - helm list -n {{.NAMESPACE}} | grep -q {{.CHART_NAME}}
+
+  vms:
+    #deps: [validate-deps, kind-cluster, update-state]
+    summary: |
+      Create Libvirt VMs.
+    vars:
+      TOTAL_HARDWARE:
+        sh: yq eval '.totalNodes' {{.STATE_FILE_FQ_PATH}}
+      VM_BASE_NAME:
+        sh: yq eval '.vm.baseName' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - ./scripts/create_vms.sh "{{.STATE_FILE_FQ_PATH}}"
+    status:
+      - expected={{.TOTAL_HARDWARE}}; got=$(virsh --connect qemu:///system list --all --name |grep -ce "{{.VM_BASE_NAME}}*"); [[ "$got" == "$expected" ]]
+
+  apply-bmc-secret:
+    #deps: [validate-deps, bmc-secret]
+    summary: |
+      Apply the BMC secret.
+    vars:
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+    env:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - kubectl apply -f {{.OUTPUT_DIR}}/bmc-secret.yaml
+    status:
+      - kubectl get secret bmc-creds -n {{.NAMESPACE}}
+
+  apply-bmc-machines:
+    #deps: [validate-deps, bmc-machine-cr]
+    #silent: true
+    summary: |
+      Apply the BMC machines.
+    vars:
+      NAMES:
+        sh: yq eval '.vm.names[]' {{.STATE_FILE_FQ_PATH}}
+      TOTAL_HARDWARE:
+        sh: yq eval '.totalNodes' {{.STATE_FILE_FQ_PATH}}
+      VM_BASE_NAME:
+        sh: yq eval '.vm.baseName' {{.STATE_FILE_FQ_PATH}}
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+    env:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - for: { var: NAMES }
+        cmd: kubectl apply -f {{.OUTPUT_DIR}}/bmc-machine-{{.ITEM}}.yaml
+    status:
+      - expected={{.TOTAL_HARDWARE}}; got=$(kubectl get machines.bmc -n {{.NAMESPACE}} | grep -ce "{{.VM_BASE_NAME}}*"); [[ "$got" == "$expected" ]]
+
+  apply-hardware:
+    #deps: [validate-deps, hardware-cr]
+    summary: |
+      Apply the hardware.
+    vars:
+      NAMES:
+        sh: yq eval '.vm.names[]' {{.STATE_FILE_FQ_PATH}}
+      TOTAL_HARDWARE:
+        sh: yq eval '.totalNodes' {{.STATE_FILE_FQ_PATH}}
+      VM_BASE_NAME:
+        sh: yq eval '.vm.baseName' {{.STATE_FILE_FQ_PATH}}
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+    env:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - for: { var: NAMES }
+        cmd: kubectl apply -f {{.OUTPUT_DIR}}/hardware-{{.ITEM}}.yaml
+    status:
+      - expected={{.TOTAL_HARDWARE}}; got=$(kubectl get hardware -n {{.NAMESPACE}} | grep -ce "{{.VM_BASE_NAME}}*"); [[ "$got" == "$expected" ]]
