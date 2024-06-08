@@ -5,11 +5,11 @@
 cat <<EOF > /dev/null
 ---
 clusterName: "capt-playground"
-outputDir: "/home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/playground/new/output"
-namespace: "tink-system"
+outputDir: "/home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/playground/output"
+namespace: "tink"
 counts:
   controlPlanes: 1
-  workers: 2
+  workers: 1
   spares: 1
 versions:
   capt: 0.5.3
@@ -20,38 +20,53 @@ os:
   registry: reg.weinstocklabs.com/tinkerbell/cluster-api-provider-tinkerbell
   distro: ubuntu
   sshKey: ""
+  version: "2204"
 vm:
-  baseName: "machine"
-  names:
-    - machine1
-    - machine2
-    - machine3
-    - machine4
+  baseName: "node"
+  cpusPerVM: 2
+  memInMBPerVM: 2048
+  diskSizeInGBPerVM: 10
+  diskPath: "/tmp"
   details:
-    machine1:
-      mac: 02:ab:14:52:5f:c9
+    node1:
+      mac: 02:7f:92:bd:2d:57
       bmc:
         port: 6231
-    machine2:
-      mac: 02:fd:d0:11:16:85
+      role: control-plane
+      ip: 172.18.10.21
+      gateway: 172.18.0.1
+    node2:
+      mac: 02:f3:eb:c1:aa:2b
       bmc:
         port: 6232
-    machine3:
-      mac: 02:aa:58:69:f7:de
+      role: worker
+      ip: 172.18.10.22
+      gateway: 172.18.0.1
+    node3:
+      mac: 02:3c:e6:70:1b:5e
       bmc:
         port: 6233
-    machine4:
-      mac: 02:ca:c3:59:f0:51
-      bmc:
-        port: 6234
+      role: spare
+      ip: 172.18.10.23
+      gateway: 172.18.0.1
 virtualBMC:
   containerName: "virtualbmc"
   image: ghcr.io/jacobweinstock/virtualbmc
   user: "root"
   pass: "calvin"
-totalNodes: 4
+  ip: 172.18.0.3
+totalNodes: 3
 kind:
-  kubeconfig: /home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/playground/new/output/kind.kubeconfig
+  kubeconfig: /home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/playground/output/kind.kubeconfig
+  gatewayIP: 172.18.0.1
+  nodeIPBase: 172.18.10.20
+  bridgeName: br-d086780dac6b
+tinkerbell:
+  vip: 172.18.10.74
+cluster:
+  controlPlane:
+    vip: 172.18.10.75
+  podCIDR: 172.100.0.0/16
 EOF
 
 set -euo pipefail
@@ -91,12 +106,6 @@ function main() {
     for i in $(seq 1 $total_nodes); do
         name="$base_name$i"
         mac=$(generate_mac "$name")
-        if [[ "$(yq '.vm.names | length' "$state_file")" -eq 0 ]]; then
-            yq e -i ".vm.names = [\"$name\"]" "$state_file"
-        fi
-        if ! $(yq '.vm.names | any_c(. == "'$name'")' "$state_file"); then
-            yq e -i ".vm.names += [\"$name\"]" "$state_file"            
-        fi
         yq e -i ".vm.details.$name.mac = \"$mac\"" "$state_file"
         yq e -i ".vm.details.$name.bmc.port = $(($base_ipmi_port + $i))" "$state_file"
         # set the node role

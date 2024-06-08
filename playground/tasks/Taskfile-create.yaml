@@ -156,7 +156,7 @@ tasks:
       Apply the BMC machines.
     vars:
       NAMES:
-        sh: yq eval '.vm.names[]' {{.STATE_FILE_FQ_PATH}}
+        sh: yq e '.vm.details[] | [key] | @csv' {{.STATE_FILE_FQ_PATH}}
       TOTAL_HARDWARE:
         sh: yq eval '.totalNodes' {{.STATE_FILE_FQ_PATH}}
       VM_BASE_NAME:
@@ -180,7 +180,7 @@ tasks:
       Apply the hardware.
     vars:
       NAMES:
-        sh: yq eval '.vm.names[]' {{.STATE_FILE_FQ_PATH}}
+        sh: yq e '.vm.details[] | [key] | @csv' {{.STATE_FILE_FQ_PATH}}
       TOTAL_HARDWARE:
         sh: yq eval '.totalNodes' {{.STATE_FILE_FQ_PATH}}
       VM_BASE_NAME:

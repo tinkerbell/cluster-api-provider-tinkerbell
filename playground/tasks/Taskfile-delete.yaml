@@ -27,14 +27,12 @@ tasks:
       Delete the VMs.
     vars:
       VM_NAMES:
-        sh: yq eval '.vm.names[]' {{.STATE_FILE_FQ_PATH}}
+        sh: yq e '.vm.details[] | [key] | @csv' {{.STATE_FILE_FQ_PATH}}
       VM_BASE_NAME:
         sh: yq eval '.vm.baseName' {{.STATE_FILE_FQ_PATH}}
     cmds:
       - for: { var: VM_NAMES }
-        cmd: echo "{{.ITEM}}"
-      - for: { var: VM_NAMES }
-        cmd: virsh --connect qemu:///system destroy {{.ITEM}} || true ## if the VM is already off, this will fail
+        cmd: (virsh --connect qemu:///system destroy {{.ITEM}} || true) ## if the VM is already off, this will fail
       - for: { var: VM_NAMES }
         cmd: virsh --connect qemu:///system undefine --nvram --remove-all-storage {{.ITEM}}
     status:
