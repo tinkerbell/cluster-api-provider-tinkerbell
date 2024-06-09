@@ -25,6 +25,8 @@ tasks:
       - task: apply-bmc-machines
       - task: apply-hardware
       - task: capi:ordered
+      - task: create-workload-cluster
+      - task: get-workload-cluster-kubeconfig
 
   validate-deps:
     summary: |
@@ -197,3 +199,33 @@ tasks:
         cmd: KUBECONFIG="{{.KUBECONFIG}}" kubectl apply -f {{.OUTPUT_DIR}}/hardware-{{.ITEM}}.yaml
     status:
       - expected={{.TOTAL_HARDWARE}}; got=$(KUBECONFIG="{{.KUBECONFIG}}" kubectl get hardware -n {{.NAMESPACE}} | grep -ce "{{.VM_BASE_NAME}}*"); [[ "$got" == "$expected" ]]
+
+  create-workload-cluster:
+    summary: |
+      Create the workload cluster by applying the generated manifest file.
+    vars:
+      CLUSTER_NAME:
+        sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - KUBECONFIG="{{.KUBECONFIG}}" kubectl apply -f {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.yaml
+    status:
+      - KUBECONFIG="{{.KUBECONFIG}}" kubectl get -n {{.NAMESPACE}} cluster {{.CLUSTER_NAME}}
+
+  get-workload-cluster-kubeconfig:
+    summary: |
+      Get the workload cluster's kubeconfig.
+    vars:
+      KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+      CLUSTER_NAME:
+        sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - until KUBECONFIG="{{.KUBECONFIG}}" clusterctl get kubeconfig -n {{.NAMESPACE}} {{.CLUSTER_NAME}} > {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig; do echo "Waiting for workload cluster kubeconfig to be available..."; sleep 1; done
+    status:
+      - echo ; [ -f {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig ]

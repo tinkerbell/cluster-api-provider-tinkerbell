@@ -39,8 +39,10 @@ tasks:
     summary: |
       Validate all required dependencies for the CAPT playground.
     cmds:
-      - for: ['virsh', 'docker', 'helm', 'kind', 'kubectl', 'clusterctl', 'virt-install']
+      - for: ['virsh', 'docker', 'helm', 'kind', 'kubectl', 'clusterctl', 'virt-install', 'brctl', 'yq']
         cmd: command -v {{ .ITEM }} >/dev/null || echo "'{{ .ITEM }}' was not found in the \$PATH, please ensure it is installed."
+        # sudo apt install virtinst # for virt-install
+        # sudo apt install bridge-utils # for brctl
 
   system-deps-warnings:
     summary: |
