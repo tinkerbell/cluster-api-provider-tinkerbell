@@ -2,16 +2,7 @@ version: '3'
 
 tasks:
 
-  validate-deps:
-    summary: |
-      Validate required dependencies for virtual bmc tasks.
-    silent: true
-    cmds:
-      - for: ['docker', "yq"]
-        cmd: command -v {{.ITEM}} >/dev/null || echo "'{{.ITEM}}' was not found in the \$PATH, please ensure it is installed."
-
   start-server:
-    deps: [validate-deps]
     summary: |
       Start the virtualbmc server. Requires the "kind" docker network to exist.
     vars:
@@ -25,7 +16,6 @@ tasks:
       - docker ps | grep -q {{.VBMC_CONTAINER_NAME}}
 
   start-vbmcs:
-    deps: [validate-deps, start-server]
     summary: |
       Register and start the virtualbmc servers. Requires that the virtual machines exist.
     vars:
@@ -37,7 +27,6 @@ tasks:
       - expected=$(yq e '.totalNodes' {{.STATE_FILE_FQ_PATH}}); got=$(docker exec {{.VBMC_NAME}} vbmc list | grep -c "running" || :); [[ "$got" == "$expected" ]]
   
   update-state:
-    deps: [validate-deps, start-server]
     summary: |
       Update the state file with the virtual bmc server information.
     vars:

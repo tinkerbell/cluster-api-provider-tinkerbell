@@ -10,7 +10,6 @@ tasks:
     summary: |
       Create the CAPT playground.
     cmds:
-      - task: validate-deps
       - task: kind-cluster
       - task: update-state
       - task: deploy-tinkerbell-helm-chart
@@ -28,24 +27,12 @@ tasks:
       - task: create-workload-cluster
       - task: get-workload-cluster-kubeconfig
 
-  validate-deps:
-    summary: |
-      Validate all required dependencies for the CAPT playground.
-    silent: true
-    cmds:
-      - for: ['docker', 'kind', "virt-install", "yq", "kubectl"]
-        cmd: command -v {{.ITEM}} >/dev/null || echo "'{{.ITEM}}' was not found in the \$PATH, please ensure it is installed."
-
   kind-cluster:
-    #deps: [validate-deps]
     summary: |
       Install a KinD cluster.
     vars:
       CLUSTER_NAME:
         sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
-      KUBECONFIG:
-        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
-    env:
       KUBECONFIG:
         sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     cmds:
@@ -55,7 +42,6 @@ tasks:
       - KUBECONFIG="{{.KUBECONFIG}}" kind get clusters | grep -q {{.CLUSTER_NAME}}
 
   update-state:
-    #deps: [validate-deps, kind-cluster]
     silent: true
     summary: |
       Update the state file with the KinD cluster information. Should be run only after the KinD cluster is created.
@@ -63,7 +49,6 @@ tasks:
       - ./scripts/update_state.sh "{{.STATE_FILE_FQ_PATH}}"
 
   hardware-cr:
-    #deps: [validate-deps, kind-cluster, update-state]
     summary: |
       Create BMC Machine object.
     sources:
@@ -74,8 +59,6 @@ tasks:
       - ./scripts/generate_hardware.sh {{.STATE_FILE_FQ_PATH}}
 
   bmc-machine-cr:
-    #deps: [validate-deps, vbmc:start-server, hardware-cr]
-    silent: true
     summary: |
       Create BMC Machine objects.
     sources:
@@ -86,7 +69,6 @@ tasks:
       - ./scripts/generate_bmc.sh {{.STATE_FILE_FQ_PATH}}
 
   bmc-secret:
-    #deps: [validate-deps]
     summary: |
       Create BMC Machine objects.
     sources:
@@ -97,12 +79,8 @@ tasks:
       - ./scripts/generate_secret.sh {{.STATE_FILE_FQ_PATH}}
 
   deploy-tinkerbell-helm-chart:
-    #deps: [validate-deps, kind-cluster, update-state]
     summary: |
       Deploy the Tinkerbell Helm chart.
-    env:
-      KUBECONFIG:
-        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     vars:
       KUBECONFIG:
         sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
@@ -121,7 +99,6 @@ tasks:
       - KUBECONFIG="{{.KUBECONFIG}}" helm list -n {{.NAMESPACE}} | grep -q {{.CHART_NAME}}
 
   vms:
-    #deps: [validate-deps, kind-cluster, update-state]
     summary: |
       Create Libvirt VMs.
     vars:
@@ -135,15 +112,11 @@ tasks:
       - expected={{.TOTAL_HARDWARE}}; got=$(virsh --connect qemu:///system list --all --name |grep -ce "{{.VM_BASE_NAME}}*"); [[ "$got" == "$expected" ]]
 
   apply-bmc-secret:
-    #deps: [validate-deps, bmc-secret]
     summary: |
       Apply the BMC secret.
     vars:
       NAMESPACE:
         sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
-      KUBECONFIG:
-        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
-    env:
       KUBECONFIG:
         sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     cmds:
@@ -152,8 +125,6 @@ tasks:
       - KUBECONFIG="{{.KUBECONFIG}}" kubectl get secret bmc-creds -n {{.NAMESPACE}}
 
   apply-bmc-machines:
-    #deps: [validate-deps, bmc-machine-cr]
-    #silent: true
     summary: |
       Apply the BMC machines.
     vars:
@@ -167,9 +138,6 @@ tasks:
         sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
       KUBECONFIG:
         sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
-    env:
-      KUBECONFIG:
-        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     cmds:
       - for: { var: NAMES }
         cmd: KUBECONFIG="{{.KUBECONFIG}}" kubectl apply -f {{.OUTPUT_DIR}}/bmc-machine-{{.ITEM}}.yaml
@@ -177,7 +145,6 @@ tasks:
       - expected={{.TOTAL_HARDWARE}}; got=$(KUBECONFIG="{{.KUBECONFIG}}" kubectl get machines.bmc -n {{.NAMESPACE}} | grep -ce "{{.VM_BASE_NAME}}*"); [[ "$got" == "$expected" ]]
 
   apply-hardware:
-    #deps: [validate-deps, hardware-cr]
     summary: |
       Apply the hardware.
     vars:
@@ -189,9 +156,6 @@ tasks:
         sh: yq eval '.vm.baseName' {{.STATE_FILE_FQ_PATH}}
       NAMESPACE:
         sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
-      KUBECONFIG:
-        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
-    env:
       KUBECONFIG:
         sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
     cmds:

@@ -22,8 +22,8 @@ tasks:
       Create the CAPT playground. Use the .playground file to define things like cluster size and Kubernetes version.
     cmds:
       - task: system-deps-warnings
-      - task: ensure-output-dir
       - task: validate-binaries
+      - task: ensure-output-dir
       - task: generate-state
       - task: create:playground-ordered
 
@@ -32,6 +32,7 @@ tasks:
     summary: |
       Delete the CAPT playground.
     cmds:
+      - task: validate-binaries
       - task: delete:playground
 
   validate-binaries:
