@@ -1,8 +1,41 @@
 # CAPT Playground
 
+The CAPT playground is a tool that will create a local CAPT deployment. This includes a Kubernetes cluster (KinD), the Tinkerbell stack, all CAPI and CAPT components, Virtual machines that will be used to create a workload cluster, and a Virtual BMC to manage the VMs.
+
+Start by reviewing and installing the [prerequisites] and understanding and customizing the [configuration](config.yaml) as needed.
+
+## Prerequisites
+
+### Binaries
+
+* Libvirtd >= libvirtd (libvirt) 8.0.0
+* Docker >= 24.0.7
+* Helm >= v3.13.1
+* KinD >= v0.20.0
+* clusterctl >= v1.6.0
+* kubectl >= v1.28.2
+* virt-install >= 4.0.0
+* task >= 3.37.2
+
+### Hardware
+
+* at least 60GB of free and very fast disk space (etcd is very disk io sensitive)
+* at least 8GB of free RAM
+* at least 4 CPU cores
+
 ## Usage
 
-The CAPT playground can be run as a standalone binary or via Docker.
+Create the CAPT playground:
+
+```bash
+task create-playground
+```
+
+Delete the CAPT playground:
+
+```bash
+task delete-playground
+```
 
 ### Standalone
 

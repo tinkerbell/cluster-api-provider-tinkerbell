@@ -26,6 +26,7 @@ tasks:
       - task: ensure-output-dir
       - task: generate-state
       - task: create:playground-ordered
+      - task: next-steps
 
   delete-playground:
     silent: true
@@ -60,8 +61,10 @@ tasks:
       Create the output directory.
     cmds:
       - mkdir -p {{.OUTPUT_DIR}}
+      - mkdir -p {{.OUTPUT_DIR}}/xdg
     status:
       - echo ;[ -d {{.OUTPUT_DIR}} ]
+      - echo ;[ -d {{.OUTPUT_DIR}}/xdg ]
 
   generate-state:
     summary: |
@@ -72,3 +75,41 @@ tasks:
       - .state
     cmds:
       - ./scripts/generate_state.sh config.yaml .state
+
+  next-steps:
+    silent: true
+    summary: |
+      Next steps after creating the CAPT playground.
+    vars:
+      NAMESPACE:
+        sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
+      NODE_BASE:
+        sh: yq eval '.vm.baseName' {{.STATE_FILE_FQ_PATH}}
+      CLUSTER_NAME:
+        sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
+      KIND_KUBECONFIG:
+        sh: yq eval '.kind.kubeconfig' {{.STATE_FILE_FQ_PATH}}
+    cmds:
+      - |
+        echo
+        echo The workload cluster is now being created.
+        echo Once the cluster nodes are up and running, you will need to deploy a CNI for the cluster to be fully functional.
+        echo
+        echo 1. Watch and wait for the first control plane node to be provisioned successfully: STATE_SUCCESS
+        echo "KUBECONFIG={{.KIND_KUBECONFIG}} kubectl get workflows -n {{.NAMESPACE}} -w"
+        echo
+        echo
+        echo 2. Watch and wait for the Kubernetes API server to be ready and responding:
+        echo "until KUBECONFIG={{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig kubectl get node; do echo 'Waiting for Kube API server to respond...'; sleep 3; done"
+        echo
+        echo 3. Deploy a CNI
+        echo Cilium
+        echo "KUBECONFIG={{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig cilium install"
+        echo or KUBEROUTER
+        echo "KUBECONFIG={{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter.yaml"
+        echo
+        echo 4. Watch and wait for all nodes to join the cluster and be ready:
+        echo "KUBECONFIG={{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig kubectl get nodes -w"
+      - touch {{.OUTPUT_DIR}}/.next-steps-displayed
+    status:
+      - echo ;[ -f {{.OUTPUT_DIR}}/.next-steps-displayed ]

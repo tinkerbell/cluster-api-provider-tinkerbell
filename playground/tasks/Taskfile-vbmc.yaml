@@ -3,6 +3,7 @@ version: '3'
 tasks:
 
   start-server:
+    run: once
     summary: |
       Start the virtualbmc server. Requires the "kind" docker network to exist.
     vars:
@@ -16,6 +17,8 @@ tasks:
       - docker ps | grep -q {{.VBMC_CONTAINER_NAME}}
 
   start-vbmcs:
+    run: once
+    deps: [start-server]
     summary: |
       Register and start the virtualbmc servers. Requires that the virtual machines exist.
     vars:
@@ -27,6 +30,8 @@ tasks:
       - expected=$(yq e '.totalNodes' {{.STATE_FILE_FQ_PATH}}); got=$(docker exec {{.VBMC_NAME}} vbmc list | grep -c "running" || :); [[ "$got" == "$expected" ]]
   
   update-state:
+    run: once
+    deps: [start-server]
     summary: |
       Update the state file with the virtual bmc server information.
     vars:

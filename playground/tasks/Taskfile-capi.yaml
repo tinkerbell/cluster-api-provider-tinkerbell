@@ -6,22 +6,14 @@ tasks:
     summary: |
       CAPI tasks run in order of dependency.
     cmds:
-      - task: validate-deps
       - task: create-cluster-yaml
       - task: init
       - task: generate-cluster-yaml
       - task: create-kustomize-file
       - task: apply-kustomization
 
-  validate-deps:
-    summary: |
-      Validate required dependencies for virtual bmc tasks.
-    silent: true
-    cmds:
-      - for: ['clusterctl', "kubectl"]
-        cmd: command -v {{.ITEM}} >/dev/null || echo "'{{.ITEM}}' was not found in the \$PATH, please ensure it is installed."
-
   create-cluster-yaml:
+    run: once
     summary: |
       Create the cluster yaml.
     env:
@@ -36,19 +28,21 @@ tasks:
       - grep -q "$CAPT_VERSION" {{.OUTPUT_DIR}}/clusterctl.yaml
 
   init:
+    run: once
+    deps: [create-cluster-yaml]
     summary: |
       Initialize the cluster.
     env:
       TINKERBELL_IP:
         sh: yq eval '.tinkerbell.vip' {{.STATE_FILE_FQ_PATH}}
       CLUSTERCTL_DISABLE_VERSIONCHECK: true
-      XDG_CONFIG_HOME: /tmp/xdg
-      XDG_CONFIG_DIRS: /tmp/xdg
-      XDG_STATE_HOME: /tmp/xdg
-      XDG_CACHE_HOME: /tmp/xdg
-      XDG_RUNTIME_DIR: /tmp/xdg
-      XDG_DATA_HOME: /tmp/xdg
-      XDG_DATA_DIRS: /tmp/xdg
+      XDG_CONFIG_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_CONFIG_DIRS: "{{.OUTPUT_DIR}}/xdg"
+      XDG_STATE_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_CACHE_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_RUNTIME_DIR: "{{.OUTPUT_DIR}}/xdg"
+      XDG_DATA_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_DATA_DIRS: "{{.OUTPUT_DIR}}/xdg"
     vars:
       OUTPUT_DIR:
         sh: echo $(yq eval '.outputDir' config.yaml)
@@ -62,6 +56,8 @@ tasks:
       - expected=1; got=$(KUBECONFIG="{{.KUBECONFIG}}" kubectl get pods -n capt-system |grep -ce "capt-controller"); [[ "$got" == "$expected" ]]
 
   generate-cluster-yaml:
+    run: once
+    deps: [init]
     summary: |
       Generate the cluster yaml.
     env:
@@ -70,13 +66,13 @@ tasks:
       POD_CIDR:
         sh: yq eval '.cluster.podCIDR' {{.STATE_FILE_FQ_PATH}}
       CLUSTERCTL_DISABLE_VERSIONCHECK: true
-      XDG_CONFIG_HOME: /tmp/xdg
-      XDG_CONFIG_DIRS: /tmp/xdg
-      XDG_STATE_HOME: /tmp/xdg
-      XDG_CACHE_HOME: /tmp/xdg
-      XDG_RUNTIME_DIR: /tmp/xdg
-      XDG_DATA_HOME: /tmp/xdg
-      XDG_DATA_DIRS: /tmp/xdg
+      XDG_CONFIG_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_CONFIG_DIRS: "{{.OUTPUT_DIR}}/xdg"
+      XDG_STATE_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_CACHE_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_RUNTIME_DIR: "{{.OUTPUT_DIR}}/xdg"
+      XDG_DATA_HOME: "{{.OUTPUT_DIR}}/xdg"
+      XDG_DATA_DIRS: "{{.OUTPUT_DIR}}/xdg"
     vars:
       CLUSTER_NAME:
         sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
@@ -98,6 +94,7 @@ tasks:
       - grep -q "{{.KUBE_VERSION}}" {{.OUTPUT_DIR}}/prekustomization.yaml
 
   create-kustomize-file:
+    run: once
     summary: |
       Kustomize file for the CAPI generated config file (prekustomization.yaml).
     env:
@@ -128,6 +125,8 @@ tasks:
       - envsubst "$(printf '${%s} ' $(env | cut -d'=' -f1))" < templates/kustomization.tmpl > {{.OUTPUT_DIR}}/kustomization.yaml
 
   apply-kustomization:
+    run: once
+    deps: [generate-cluster-yaml, create-kustomize-file]
     summary: |
       Kustomize the cluster yaml.
     vars:
