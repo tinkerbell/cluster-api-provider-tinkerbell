@@ -100,7 +100,7 @@ tasks:
         echo
         echo
         echo 2. Watch and wait for the Kubernetes API server to be ready and responding:
-        echo "until KUBECONFIG={{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig kubectl get node; do echo 'Waiting for Kube API server to respond...'; sleep 3; done"
+        echo "until KUBECONFIG={{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig kubectl get node; do echo 'Waiting for Kube API server to respond...'; sleep 5; done"
         echo
         echo 3. Deploy a CNI
         echo Cilium
