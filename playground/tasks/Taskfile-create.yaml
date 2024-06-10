@@ -196,7 +196,7 @@ tasks:
       NAMESPACE:
         sh: yq eval '.namespace' {{.STATE_FILE_FQ_PATH}}
     cmds:
-      - until KUBECONFIG="{{.KUBECONFIG}}" kubectl apply -f {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.yaml 2>&1/dev/null; do echo "Trying kubectl apply again..."; sleep 1; done
+      - until KUBECONFIG="{{.KUBECONFIG}}" kubectl apply -f {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.yaml >>{{.OUTPUT_DIR}}/error.log 2>&1; do echo "Trying kubectl apply again..."; sleep 1; done
       - echo "Workload manifest applied to cluster."
     status:
       - KUBECONFIG="{{.KUBECONFIG}}" kubectl get -n {{.NAMESPACE}} cluster {{.CLUSTER_NAME}}
