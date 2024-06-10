@@ -214,7 +214,8 @@ tasks:
       CLUSTER_NAME:
         sh: yq eval '.clusterName' {{.STATE_FILE_FQ_PATH}}
     cmds:
-      - until KUBECONFIG="{{.KUBECONFIG}}" clusterctl get kubeconfig -n {{.NAMESPACE}} {{.CLUSTER_NAME}} > {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig; do echo "Waiting for workload cluster kubeconfig to be available..."; sleep 1; done
+      - until KUBECONFIG="{{.KUBECONFIG}}" clusterctl get kubeconfig -n {{.NAMESPACE}} {{.CLUSTER_NAME}} >>{{.OUTPUT_DIR}}/error.log 2>&1 ; do echo "Waiting for workload cluster kubeconfig to be available..."; sleep 1; done
+      - KUBECONFIG="{{.KUBECONFIG}}" clusterctl get kubeconfig -n {{.NAMESPACE}} {{.CLUSTER_NAME}} > {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig
       - echo "Workload cluster kubeconfig saved to {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig."
     status:
       - echo ; [ -f {{.OUTPUT_DIR}}/{{.CLUSTER_NAME}}.kubeconfig ]
