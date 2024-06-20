@@ -62,7 +62,7 @@ jobs:
           check_filenames: true
           check_hidden: true
           skip: "./.git,./go.mod,./go.sum"
-          ignore_words_list: ro
+          ignore_words_list: ro,NotIn
 
   build-and-push-image:
     name: Build and push manager image
