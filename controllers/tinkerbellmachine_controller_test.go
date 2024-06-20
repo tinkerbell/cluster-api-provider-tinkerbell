@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -431,6 +431,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 		updatedHardware := &tinkv1.Hardware{}
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
+
 		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(true)); diff != "" {
 			t.Errorf(diff)
 		}
@@ -565,6 +566,7 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 
 		updatedHardware := &tinkv1.Hardware{}
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
+
 		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(false)); diff != "" {
 			t.Errorf(diff)
 		}

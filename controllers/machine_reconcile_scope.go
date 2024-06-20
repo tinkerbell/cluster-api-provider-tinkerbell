@@ -734,7 +734,8 @@ func (scope *machineReconcileScope) releaseHardware(hardware *tinkv1.Hardware) e
 	// setting the AllowPXE=true indicates to Smee that this hardware should be allowed
 	// to netboot. FYI, this is not authoritative.
 	// Other hardware values can be set to prohibit netbooting of a machine.
-	// See this Boots function for the logic around this: https://github.com/tinkerbell/smee/blob/main/internal/ipxe/script/ipxe.go#L112
+	// See this Boots function for the logic around this:
+	// https://github.com/tinkerbell/smee/blob/main/internal/ipxe/script/ipxe.go#L112
 	for _, ifc := range hardware.Spec.Interfaces {
 		if ifc.Netboot != nil {
 			ifc.Netboot.AllowPXE = ptr.To(true)

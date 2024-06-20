@@ -295,11 +295,13 @@ func main() { //nolint:funlen
 		HealthProbeBindAddress:  healthAddr,
 		EventBroadcaster:        broadcaster,
 	}
+
 	if watchNamespace != "" {
 		opts.Cache = cache.Options{
 			DefaultNamespaces: map[string]cache.Config{watchNamespace: {}},
 		}
 	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), opts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

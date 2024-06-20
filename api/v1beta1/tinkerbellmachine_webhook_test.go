@@ -19,7 +19,7 @@ package v1beta1_test
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
