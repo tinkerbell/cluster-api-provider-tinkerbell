@@ -19,7 +19,7 @@ package controllers //nolint:testpackage
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
@@ -48,7 +48,7 @@ func Test_Machine(t *testing.T) {
 		ready         bool
 	}{
 		"is_not_ready_when_it_is_nil": {
-			mutateF: func(m *clusterv1.Machine) *clusterv1.Machine {
+			mutateF: func(_ *clusterv1.Machine) *clusterv1.Machine {
 				return nil
 			},
 		},

@@ -19,7 +19,7 @@ package templates_test
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	"sigs.k8s.io/yaml"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
@@ -62,11 +62,11 @@ func Test_Cloud_config_template(t *testing.T) {
 		},
 
 		"renders_with_valid_config": {
-			mutateF: func(wt *templates.WorkflowTemplate) {},
+			mutateF: func(_ *templates.WorkflowTemplate) {},
 		},
 
 		"rendered_output_should_be_valid_YAML": {
-			validateF: func(t *testing.T, wt *templates.WorkflowTemplate, renderResult string) { //nolint:thelper
+			validateF: func(t *testing.T, _ *templates.WorkflowTemplate, renderResult string) { //nolint:thelper
 				g := NewWithT(t)
 				x := &map[string]interface{}{}
 
