@@ -25,22 +25,22 @@ See the [Quick Start](docs/QUICK-START.md)
 
 This provider's versions are compatible with the following versions of Cluster API:
 
-
-|                                    | v1beta1 (v1.0) |
-| ---------------------------------- | -------------- |
-| Tinkerbell Provider v1beta1 (v0.1) | ✓              |
-
+|                                    | v1beta1 (v1.2) | v1beta1 (v1.6) |
+| ---------------------------------- | -------------- | -------------- |
+| Tinkerbell Provider v1beta1 (v0.4) | ✓              |                |
+| Tinkerbell Provider v1beta1 (v0.5) |                | ✓              |
 
 This provider's versions are able to install and manage the following versions of Kubernetes:
 
-|                                     | v1.19 | v1.20 | v1.21 | v1.22 |
-| ----------------------------------- | ----- | ----- | ----- | ----- |
-| Tinkerbell Provider v1beta1 (v0.1)  | ✓     | ✓     | ✓     | ✓     |
+|                                     | v1.20 | v1.21 | v1.22 | v1.23 | v1.24 | v1.25 | v1.26 | v1.27 | v1.28 | v1.29 |
+| ----------------------------------- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| Tinkerbell Provider v1beta1 (v0.4)  | ✓     | ✓     | ✓     | ✓     |       |       |       |       |       |       |
+| Tinkerbell Provider v1beta1 (v0.5)  |       |       |       |       |       | ✓     | ✓     | ✓     | ✓     | ✓     |
 
-Each version of Cluster API for Tinkerbell will attempt to support all community supported Kubernetes versions during it's maintenance cycle; e.g., Cluster API for Tinkerbell `v0.1` supports Kubernetes 1.19, 1.20, 1.21, 1.22 etc.
+Each version of Cluster API for Tinkerbell will attempt to support all community supported Kubernetes versions during it's maintenance cycle; e.g., Cluster API for Tinkerbell `v0.5` supports Kubernetes 1.25, 1.26, 1.27, 1.28, 1.29.
 
 **NOTE:** As the versioning for this project is tied to the versioning of Cluster API, future modifications to this
-policy may be made to more closely align with other providers in the Cluster API ecosystem.
+policy may be made to more closely align with other providers in the Cluster API ecosystem. See https://cluster-api.sigs.k8s.io/reference/versions
 
 ## Kubernetes versions with published Images
 
