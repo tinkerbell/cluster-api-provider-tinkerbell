@@ -288,6 +288,7 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	objs := []client.Object{
 		&infrastructurev1.TinkerbellMachine{},
 		&infrastructurev1.TinkerbellCluster{},
+		&tinkv1.Hardware{},
 	}
 
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()

@@ -25,6 +25,10 @@ const (
 	// HardwareOwnerNamespaceLabel is a label set by either CAPT controllers or Tinkerbell controller to indicate
 	// that given hardware takes part of at least one workflow.
 	HardwareOwnerNamespaceLabel = "v1alpha1.tinkerbell.org/ownerNamespace"
+	AnnotationHardwareState     = "hardware.tinkerbell.org/state"
+	AnnotationStateAvailable    = "capt-available"
+	AnnotationStateProvisioning = "capt-provisioning"
+	AnnotationStateReady        = "capt-ready"
 )
 
 var (
@@ -71,25 +75,17 @@ func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	return hardware.Spec.Interfaces[0].DHCP.IP.Address, nil
 }
 
+// isHardwareReady defines ready to be when the given Hardware has completed
+// successfully its assigned Workflow. At this point, the Hardware is considered
+// ready/provisioned.
 func isHardwareReady(hw *tinkv1.Hardware) bool {
-	// if allowpxe false for all interface, hardware ready
-	if len(hw.Spec.Interfaces) == 0 {
-		return false
-	}
-
-	for _, ifc := range hw.Spec.Interfaces {
-		if ifc.Netboot != nil {
-			if *ifc.Netboot.AllowPXE {
-				return false
-			}
-		}
-	}
-
-	return true
+	// "ready" is determined by the existence of the annotation
+	// "hardware.tinkerbell.org/state=capt-ready" (AnnotationHardwareState=AnnotationStateReady)
+	return hw.Annotations[AnnotationHardwareState] == AnnotationStateReady
 }
 
-// patchHardwareStates patches a hardware's metadata and instance states.
-func (scope *machineReconcileScope) patchHardwareStates(hw *tinkv1.Hardware, allowpxe bool) error {
+// patchHardwareAllowPXE patches a Hardware object to disable or enable PXE.
+func (scope *machineReconcileScope) patchHardwareAllowPXE(hw *tinkv1.Hardware, allowpxe bool) error {
 	patchHelper, err := patch.NewHelper(hw, scope.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
@@ -165,7 +161,47 @@ func (scope *machineReconcileScope) ensureHardware() (*tinkv1.Hardware, error) {
 		return nil, fmt.Errorf("ensuring Hardware user data: %w", err)
 	}
 
+	// at this point the Hardware has been selected so we can set the state to provisioning
+	// only set the state if the current state is not already provisioning or ready and
+	// no Workflows are running on the hardware
+	a := hw.GetAnnotations()
+	if a == nil {
+		a = map[string]string{}
+	}
+	if a[AnnotationHardwareState] != AnnotationStateProvisioning && a[AnnotationHardwareState] != AnnotationStateReady {
+		if err := scope.ensureStateAnnotation(hw, AnnotationStateProvisioning); err != nil {
+			return nil, fmt.Errorf("ensuring Hardware state annotation: %w", err)
+		}
+	}
+
 	return hw, scope.setStatus(hw)
+}
+
+// ensureAnnotation makes sure the Hardware object has the state annotation set to the desired value.
+func (scope *machineReconcileScope) ensureStateAnnotation(hw *tinkv1.Hardware, value string) error {
+	patchHelper, err := patch.NewHelper(hw, scope.client)
+	if err != nil {
+		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
+	}
+
+	a := hw.GetAnnotations()
+	if a == nil {
+		a = map[string]string{}
+	}
+
+	if a[AnnotationHardwareState] == value {
+		return nil
+	}
+
+	a[AnnotationHardwareState] = value
+	hw.SetAnnotations(a)
+	hw.Status.State = tinkv1.HardwareState(value)
+
+	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
+		return fmt.Errorf("patching Hardware object: %w", err)
+	}
+
+	return nil
 }
 
 func (scope *machineReconcileScope) hardwareForMachine() (*tinkv1.Hardware, error) {
@@ -228,8 +264,8 @@ func (scope *machineReconcileScope) hardwareForMachine() (*tinkv1.Hardware, erro
 	return nil, ErrNoHardwareAvailable
 }
 
-// assignedHardware returns hardware that is already assigned. In the event of no hardware being assigned, it returns
-// nil, nil.
+// assignedHardware returns hardware that is already assigned.
+// In the event of no hardware being assigned, it returns nil, nil.
 func (scope *machineReconcileScope) assignedHardware() (*tinkv1.Hardware, error) {
 	var selectedHardware tinkv1.HardwareList
 	if err := scope.client.List(scope.ctx, &selectedHardware, client.MatchingLabels{
@@ -303,6 +339,8 @@ func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
 			ifc.Netboot.AllowPXE = ptr.To(true)
 		}
 	}
+	hw.Annotations[AnnotationHardwareState] = AnnotationStateAvailable
+	hw.Status.State = tinkv1.HardwareState(AnnotationStateAvailable)
 
 	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineFinalizer)
 
