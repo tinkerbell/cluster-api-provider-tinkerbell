@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -14,6 +13,8 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
 
 const (
@@ -45,6 +46,7 @@ var (
 	ErrHardwareMissingDiskConfiguration = fmt.Errorf("disk configuration is required")
 )
 
+// HardwareIP returns the IP address of the first network interface of the given hardware.
 func HardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	if hardware == nil {
 		return "", ErrHardwareIsNil

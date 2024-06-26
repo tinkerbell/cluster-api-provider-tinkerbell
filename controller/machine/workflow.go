@@ -9,10 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-var (
-	// errWorkflowFailed is the error returned when the workflow fails.
-	errWorkflowFailed = fmt.Errorf("workflow failed")
-)
+// errWorkflowFailed is the error returned when the workflow fails.
+var errWorkflowFailed = fmt.Errorf("workflow failed")
 
 // lastActionStarted returns the state of the final action in a hardware's workflow or an error if the workflow
 // has not reached the final action.

@@ -113,6 +113,7 @@ func validCluster(name, namespace string) *clusterv1.Cluster {
 	}
 }
 
+//nolint:unparam
 func validTinkerbellCluster(name, namespace string) *infrastructurev1.TinkerbellCluster {
 	tinkCluster := &infrastructurev1.TinkerbellCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -178,9 +179,9 @@ func validSecret(name, namespace string) *corev1.Secret {
 func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardware {
 	hw := &tinkv1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   clusterNamespace,
-			UID:         types.UID(uuid),
+			Name:      name,
+			Namespace: clusterNamespace,
+			UID:       types.UID(uuid),
 		},
 		Spec: tinkv1.HardwareSpec{
 			Disks: []tinkv1.Disk{

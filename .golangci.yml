@@ -84,7 +84,7 @@ issues:
       source: "^// \\+kubebuilder:"
     - linters:
         - lll
-      path: "controllers/(.+)_test.go"
+      path: "controller/*/(.+)_test.go"
   exclude-files:
     - "zz_generated.*\\.go$"
     - ".*conversion.*\\.go$"

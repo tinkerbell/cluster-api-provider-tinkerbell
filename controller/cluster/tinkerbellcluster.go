@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controller contains Cluster API controllers for Tinkerbell.
+// Package cluster contains Cluster API controller for the TinkerbellCluster CR.
 package cluster
 
 import (

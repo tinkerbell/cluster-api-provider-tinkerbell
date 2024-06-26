@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package machine contains Cluster API controller for the TinkerbellMachine CR.
 package machine
 
 import (

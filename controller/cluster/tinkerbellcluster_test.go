@@ -111,9 +111,9 @@ type testOptions struct {
 func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardware {
 	hw := &tinkv1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   clusterNamespace,
-			UID:         types.UID(uuid),
+			Name:      name,
+			Namespace: clusterNamespace,
+			UID:       types.UID(uuid),
 		},
 		Spec: tinkv1.HardwareSpec{
 			Disks: []tinkv1.Disk{

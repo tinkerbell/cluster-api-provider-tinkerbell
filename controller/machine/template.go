@@ -8,11 +8,12 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
 	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
 )
 
 func (scope *machineReconcileScope) templateExists() (bool, error) {
@@ -188,6 +189,7 @@ func imageURL(imageFormat, baseRegistry, osDistro, osVersion, kubernetesVersion 
 		OSVersion         string
 		KubernetesVersion string
 	}
+
 	imageParams := image{
 		BaseRegistry:      baseRegistry,
 		OSDistro:          strings.ToLower(osDistro),
