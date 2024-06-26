@@ -179,7 +179,7 @@ func (scope *machineReconcileScope) setStatus(hw *tinkv1.Hardware) error {
 		}
 	}
 
-	ip, err := HardwareIP(hw)
+	ip, err := hardwareIP(hw)
 	if err != nil {
 		return fmt.Errorf("extracting Hardware IP address: %w", err)
 	}

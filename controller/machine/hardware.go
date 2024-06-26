@@ -46,8 +46,8 @@ var (
 	ErrHardwareMissingDiskConfiguration = fmt.Errorf("disk configuration is required")
 )
 
-// HardwareIP returns the IP address of the first network interface of the given hardware.
-func HardwareIP(hardware *tinkv1.Hardware) (string, error) {
+// hardwareIP returns the IP address of the first network interface of the given hardware.
+func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	if hardware == nil {
 		return "", ErrHardwareIsNil
 	}
