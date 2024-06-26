@@ -43,7 +43,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -220,14 +221,14 @@ func addHealthChecks(mgr ctrl.Manager) error {
 }
 
 func setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
-	if err := (&controllers.TinkerbellClusterReconciler{
+	if err := (&cluster.TinkerbellClusterReconciler{
 		Client:           mgr.GetClient(),
 		WatchFilterValue: watchFilterValue,
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellClusterConcurrency}); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster controller:%w", err)
 	}
 
-	if err := (&controllers.TinkerbellMachineReconciler{
+	if err := (&machine.TinkerbellMachineReconciler{
 		Client:           mgr.GetClient(),
 		WatchFilterValue: watchFilterValue,
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellMachineConcurrency}); err != nil {

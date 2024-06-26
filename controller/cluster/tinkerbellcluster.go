@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controllers contains Cluster API controllers for Tinkerbell.
-package controllers
+// Package controller contains Cluster API controllers for Tinkerbell.
+package cluster
 
 import (
 	"context"
@@ -35,9 +35,30 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
-
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+)
+
+const (
+	// ClusterNameLabel is used to mark Hardware as assigned controlplane machine.
+	ClusterNameLabel = "v1alpha1.tinkerbell.org/clusterName"
+
+	// ClusterNamespaceLabel is used to mark in which Namespace hardware is used.
+	ClusterNamespaceLabel = "v1alpha1.tinkerbell.org/clusterNamespace"
+
+	// KubernetesAPIPort is a port used by Tinkerbell clusters for Kubernetes API.
+	KubernetesAPIPort = 6443
+)
+
+var (
+	// ErrClusterNotReady is returned when trying to reconcile prior to the Cluster resource being ready.
+	ErrClusterNotReady = fmt.Errorf("cluster resource not ready")
+	// ErrControlPlaneEndpointNotSet is returned when trying to reconcile when the ControlPlane Endpoint is not defined.
+	ErrControlPlaneEndpointNotSet = fmt.Errorf("controlplane endpoint is not set")
+	// ErrConfigurationNil is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler is nil.
+	ErrConfigurationNil = fmt.Errorf("configuration is nil")
+	// ErrMissingClient is the error returned when TinkerbellMachineReconciler or TinkerbellClusterReconciler do
+	// not have a Client configured.
+	ErrMissingClient = fmt.Errorf("client is nil")
 )
 
 // TinkerbellClusterReconciler implements Reconciler interface.
@@ -124,69 +145,6 @@ type clusterReconcileContext struct {
 	log               logr.Logger
 	client            client.Client
 	namespacedName    types.NamespacedName
-}
-
-const (
-	// HardwareOwnerNameLabel is a label set by either CAPT controllers or Tinkerbell controller to indicate
-	// that given hardware takes part of at least one workflow.
-	HardwareOwnerNameLabel = "v1alpha1.tinkerbell.org/ownerName"
-
-	// HardwareOwnerNamespaceLabel is a label set by either CAPT controllers or Tinkerbell controller to indicate
-	// that given hardware takes part of at least one workflow.
-	HardwareOwnerNamespaceLabel = "v1alpha1.tinkerbell.org/ownerNamespace"
-
-	// ClusterNameLabel is used to mark Hardware as assigned controlplane machine.
-	ClusterNameLabel = "v1alpha1.tinkerbell.org/clusterName"
-
-	// ClusterNamespaceLabel is used to mark in which Namespace hardware is used.
-	ClusterNamespaceLabel = "v1alpha1.tinkerbell.org/clusterNamespace"
-
-	// KubernetesAPIPort is a port used by Tinkerbell clusters for Kubernetes API.
-	KubernetesAPIPort = 6443
-)
-
-var (
-	// ErrNoHardwareAvailable is the error returned when there is no hardware available for provisioning.
-	ErrNoHardwareAvailable = fmt.Errorf("no hardware available")
-	// ErrHardwareIsNil is the error returned when the given hardware resource is nil.
-	ErrHardwareIsNil = fmt.Errorf("given Hardware object is nil")
-	// ErrHardwareMissingInterfaces is the error returned when the referenced hardware does not have any
-	// network interfaces defined.
-	ErrHardwareMissingInterfaces = fmt.Errorf("hardware has no interfaces defined")
-	// ErrHardwareFirstInterfaceNotDHCP is the error returned when the referenced hardware does not have it's
-	// first network interface configured for DHCP.
-	ErrHardwareFirstInterfaceNotDHCP = fmt.Errorf("hardware's first interface has no DHCP address defined")
-	// ErrHardwareFirstInterfaceDHCPMissingIP is the error returned when the referenced hardware does not have a
-	// DHCP IP address assigned for it's first interface.
-	ErrHardwareFirstInterfaceDHCPMissingIP = fmt.Errorf("hardware's first interface has no DHCP IP address defined")
-	// ErrClusterNotReady is returned when trying to reconcile prior to the Cluster resource being ready.
-	ErrClusterNotReady = fmt.Errorf("cluster resource not ready")
-	// ErrControlPlaneEndpointNotSet is returned when trying to reconcile when the ControlPlane Endpoint is not defined.
-	ErrControlPlaneEndpointNotSet = fmt.Errorf("controlplane endpoint is not set")
-)
-
-func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
-	if hardware == nil {
-		return "", ErrHardwareIsNil
-	}
-
-	if len(hardware.Spec.Interfaces) == 0 {
-		return "", ErrHardwareMissingInterfaces
-	}
-
-	if hardware.Spec.Interfaces[0].DHCP == nil {
-		return "", ErrHardwareFirstInterfaceNotDHCP
-	}
-
-	if hardware.Spec.Interfaces[0].DHCP.IP == nil {
-		return "", ErrHardwareFirstInterfaceDHCPMissingIP
-	}
-
-	if hardware.Spec.Interfaces[0].DHCP.IP.Address == "" {
-		return "", ErrHardwareFirstInterfaceDHCPMissingIP
-	}
-
-	return hardware.Spec.Interfaces[0].DHCP.IP.Address, nil
 }
 
 func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoint, error) {
