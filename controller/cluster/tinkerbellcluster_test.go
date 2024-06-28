@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers_test
+package cluster_test
 
 import (
 	"context"
@@ -23,8 +23,10 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +35,7 @@ import (
 	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
 )
 
 //nolint:unparam
@@ -60,7 +62,7 @@ func Test_Cluster_reconciliation_when_controlplane_endpoint_not_set(t *testing.T
 	client := kubernetesClientWithObjects(t, objects)
 
 	_, err := reconcileClusterWithClient(client, clusterName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrControlPlaneEndpointNotSet))
+	g.Expect(err).To(MatchError(cluster.ErrControlPlaneEndpointNotSet))
 }
 
 func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_cluster(t *testing.T) {
@@ -98,6 +100,58 @@ func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_cluster(t *te
 		To(BeEquivalentTo(cluster.Spec.ControlPlaneEndpoint.Port), "Expected controlplane endpoint port to be set")
 
 	g.Expect(updatedTinkerbellCluster.Status.Ready).To(BeTrue(), "Expected infrastructure to be ready")
+}
+
+type testOptions struct {
+	// Labels allow providing labels for the machine
+	Labels           map[string]string
+	HardwareAffinity *infrastructurev1.HardwareAffinity
+}
+
+func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardware {
+	hw := &tinkv1.Hardware{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: clusterNamespace,
+			UID:       types.UID(uuid),
+		},
+		Spec: tinkv1.HardwareSpec{
+			Disks: []tinkv1.Disk{
+				{
+					Device: "/dev/sda",
+				},
+			},
+			Interfaces: []tinkv1.Interface{
+				{
+					DHCP: &tinkv1.DHCP{
+						IP: &tinkv1.IP{
+							Address: ip,
+						},
+					},
+					Netboot: &tinkv1.Netboot{
+						AllowPXE: ptr.To(true),
+					},
+				},
+			},
+			Metadata: &tinkv1.HardwareMetadata{
+				Instance: &tinkv1.MetadataInstance{
+					ID: ip,
+				},
+			},
+		},
+	}
+
+	for _, o := range options {
+		for k, v := range o.Labels {
+			if hw.Labels == nil {
+				hw.Labels = map[string]string{}
+			}
+
+			hw.Labels[k] = v
+		}
+	}
+
+	return hw
 }
 
 func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_tinkerbellCluster(t *testing.T) {
@@ -171,7 +225,7 @@ func clusterReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	clusterController := &controllers.TinkerbellClusterReconciler{}
+	clusterController := &cluster.TinkerbellClusterReconciler{}
 
 	request := ctrl.Request{
 		NamespacedName: types.NamespacedName{
@@ -181,7 +235,7 @@ func clusterReconciliationFailsWhenReconcilerHasNoClientSet(t *testing.T) {
 	}
 
 	_, err := clusterController.Reconcile(context.TODO(), request)
-	g.Expect(err).To(MatchError(controllers.ErrMissingClient))
+	g.Expect(err).To(MatchError(cluster.ErrMissingClient))
 }
 
 func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.Client {
@@ -205,7 +259,7 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 
 //nolint:unparam
 func reconcileClusterWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
-	clusterController := &controllers.TinkerbellClusterReconciler{
+	clusterController := &cluster.TinkerbellClusterReconciler{
 		Client: client,
 	}
 
@@ -234,6 +288,51 @@ const (
 	hardwareIP       = "1.1.1.1"
 	hardwareName     = "myHardwareName"
 )
+
+//nolint:unparam
+func validCluster(name, namespace string) *clusterv1.Cluster {
+	return &clusterv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: clusterv1.ClusterSpec{
+			InfrastructureRef: &corev1.ObjectReference{
+				Name: name,
+			},
+		},
+	}
+}
+
+func validTinkerbellCluster(name, namespace string) *infrastructurev1.TinkerbellCluster {
+	tinkCluster := &infrastructurev1.TinkerbellCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  namespace,
+			Finalizers: []string{infrastructurev1.ClusterFinalizer},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "cluster.x-k8s.io/v1beta1",
+					Kind:       "Cluster",
+					Name:       name,
+				},
+			},
+		},
+		Spec: infrastructurev1.TinkerbellClusterSpec{
+			ControlPlaneEndpoint: clusterv1.APIEndpoint{
+				Host: hardwareIP,
+				Port: 6443,
+			},
+		},
+		Status: infrastructurev1.TinkerbellClusterStatus{
+			Ready: true,
+		},
+	}
+
+	tinkCluster.Default()
+
+	return tinkCluster
+}
 
 func clusterReconciliationIsNotRequeuedWhenClusterHasNoOwnerSet(t *testing.T) {
 	t.Parallel()

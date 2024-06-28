@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers_test
+package machine_test
 
 import (
 	"context"
@@ -32,16 +32,21 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controllers"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 )
 
 const (
 	machineName           = "myMachineName"
 	tinkerbellMachineName = "myTinkerbellMachineName"
+	clusterName           = "myClusterName"
+	clusterNamespace      = "myClusterNamespace"
+	hardwareIP            = "1.1.1.1"
+	hardwareName          = "myHardwareName"
 )
 
 func notImplemented(t *testing.T) {
@@ -108,6 +113,7 @@ func validCluster(name, namespace string) *clusterv1.Cluster {
 	}
 }
 
+//nolint:unparam
 func validTinkerbellCluster(name, namespace string) *infrastructurev1.TinkerbellCluster {
 	tinkCluster := &infrastructurev1.TinkerbellCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -125,7 +131,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 		Spec: infrastructurev1.TinkerbellClusterSpec{
 			ControlPlaneEndpoint: clusterv1.APIEndpoint{
 				Host: hardwareIP,
-				Port: controllers.KubernetesAPIPort,
+				Port: 6443,
 			},
 		},
 		Status: infrastructurev1.TinkerbellClusterStatus{
@@ -268,6 +274,25 @@ func validWorkflow(name, namespace string) *tinkv1.Workflow {
 	}
 }
 
+func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.Client {
+	t.Helper()
+	g := NewWithT(t)
+
+	scheme := runtime.NewScheme()
+
+	g.Expect(tinkv1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell objects to scheme should succeed")
+	g.Expect(infrastructurev1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell CAPI objects to scheme should succeed")
+	g.Expect(clusterv1.AddToScheme(scheme)).To(Succeed(), "Adding CAPI objects to scheme should succeed")
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed(), "Adding Core V1 objects to scheme should succeed")
+
+	objs := []client.Object{
+		&infrastructurev1.TinkerbellMachine{},
+		&infrastructurev1.TinkerbellCluster{},
+	}
+
+	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()
+}
+
 //nolint:funlen
 func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	t.Parallel()
@@ -386,11 +411,11 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
 
 		g.Expect(updatedHardware.ObjectMeta.Labels).To(
-			HaveKeyWithValue(controllers.HardwareOwnerNameLabel, tinkerbellMachineName),
+			HaveKeyWithValue(machine.HardwareOwnerNameLabel, tinkerbellMachineName),
 			"Expected owner name label to be set on Hardware")
 
 		g.Expect(updatedHardware.ObjectMeta.Labels).To(
-			HaveKeyWithValue(controllers.HardwareOwnerNamespaceLabel, clusterNamespace),
+			HaveKeyWithValue(machine.HardwareOwnerNamespaceLabel, clusterNamespace),
 			"Expected owner namespace label to be set on Hardware")
 	})
 
@@ -521,11 +546,11 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
 
 		g.Expect(updatedHardware.ObjectMeta.Labels).To(
-			HaveKeyWithValue(controllers.HardwareOwnerNameLabel, tinkerbellMachineName),
+			HaveKeyWithValue(machine.HardwareOwnerNameLabel, tinkerbellMachineName),
 			"Expected owner name label to be set on Hardware")
 
 		g.Expect(updatedHardware.ObjectMeta.Labels).To(
-			HaveKeyWithValue(controllers.HardwareOwnerNamespaceLabel, clusterNamespace),
+			HaveKeyWithValue(machine.HardwareOwnerNamespaceLabel, clusterNamespace),
 			"Expected owner namespace label to be set on Hardware")
 	})
 
@@ -704,9 +729,9 @@ func Test_Machine_reconciliation_when_machine_is_scheduled_for_removal_it(t *tes
 		t.Parallel()
 		g := NewWithT(t)
 
-		g.Expect(updatedHardware.ObjectMeta.Labels).NotTo(HaveKey(controllers.HardwareOwnerNameLabel),
+		g.Expect(updatedHardware.ObjectMeta.Labels).NotTo(HaveKey(machine.HardwareOwnerNameLabel),
 			"Found hardware owner name label")
-		g.Expect(updatedHardware.ObjectMeta.Labels).NotTo(HaveKey(controllers.HardwareOwnerNamespaceLabel),
+		g.Expect(updatedHardware.ObjectMeta.Labels).NotTo(HaveKey(machine.HardwareOwnerNamespaceLabel),
 			"Found hardware owner namespace label")
 	})
 }
@@ -715,7 +740,7 @@ func machineReconciliationPanicsWhenReconcilerIsNil(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	var machineController *controllers.TinkerbellMachineReconciler
+	var machineController *machine.TinkerbellMachineReconciler
 
 	request := ctrl.Request{
 		NamespacedName: types.NamespacedName{
@@ -731,14 +756,14 @@ func machineReconciliationPanicsWhenReconcilerIsNil(t *testing.T) {
 	}()
 
 	_, err := machineController.Reconcile(context.TODO(), request)
-	g.Expect(err).To(MatchError(controllers.ErrConfigurationNil))
+	g.Expect(err).To(MatchError(machine.ErrConfigurationNil))
 }
 
 func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	machineController := &controllers.TinkerbellMachineReconciler{}
+	machineController := &machine.TinkerbellMachineReconciler{}
 
 	request := ctrl.Request{
 		NamespacedName: types.NamespacedName{
@@ -754,12 +779,12 @@ func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 	}()
 
 	_, err := machineController.Reconcile(context.TODO(), request)
-	g.Expect(err).To(MatchError(controllers.ErrMissingClient))
+	g.Expect(err).To(MatchError(machine.ErrMissingClient))
 }
 
 //nolint:unparam
 func reconcileMachineWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
-	machineController := &controllers.TinkerbellMachineReconciler{
+	machineController := &machine.TinkerbellMachineReconciler{
 		Client: client,
 	}
 
@@ -873,7 +898,7 @@ func machineReconciliationFailsWhenMachineHasNoVersionSet(t *testing.T) {
 	client := kubernetesClientWithObjects(t, objects)
 
 	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrMachineVersionEmpty))
+	g.Expect(err).To(MatchError(machine.ErrMachineVersionEmpty))
 }
 
 func machineReconciliationFailsWhenBootstrapConfigIsEmpty(t *testing.T) {
@@ -894,7 +919,7 @@ func machineReconciliationFailsWhenBootstrapConfigIsEmpty(t *testing.T) {
 	}
 
 	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrBootstrapUserDataEmpty))
+	g.Expect(err).To(MatchError(machine.ErrBootstrapUserDataEmpty))
 }
 
 func machineReconciliationFailsWhenBootstrapConfigHasNoValueKey(t *testing.T) {
@@ -915,7 +940,7 @@ func machineReconciliationFailsWhenBootstrapConfigHasNoValueKey(t *testing.T) {
 	}
 
 	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrMissingBootstrapDataSecretValueKey))
+	g.Expect(err).To(MatchError(machine.ErrMissingBootstrapDataSecretValueKey))
 }
 
 func machineReconciliationFailsWhenAssociatedClusterObjectDoesNotExist(t *testing.T) {
@@ -972,7 +997,7 @@ func machineReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
 	}
 
 	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrNoHardwareAvailable))
+	g.Expect(err).To(MatchError(machine.ErrNoHardwareAvailable))
 }
 
 func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.T) {
@@ -991,7 +1016,7 @@ func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.
 	}
 
 	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(controllers.ErrHardwareFirstInterfaceDHCPMissingIP))
+	g.Expect(err).To(MatchError(machine.ErrHardwareFirstInterfaceDHCPMissingIP))
 }
 
 func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine(t *testing.T) {
@@ -1057,8 +1082,8 @@ func machineReconciliationUsesAlreadySelectedHardwareIfPatchingTinkerbellMachine
 	expectedHardwareName := "alreadyOwnedHardware"
 	alreadyOwnedHardware := validHardware(expectedHardwareName, uuid.New().String(), "2.2.2.2")
 	alreadyOwnedHardware.ObjectMeta.Labels = map[string]string{
-		controllers.HardwareOwnerNameLabel:      tinkerbellMachineName,
-		controllers.HardwareOwnerNamespaceLabel: clusterNamespace,
+		machine.HardwareOwnerNameLabel:      tinkerbellMachineName,
+		machine.HardwareOwnerNamespaceLabel: clusterNamespace,
 	}
 
 	hardwareUUID := uuid.New().String()
