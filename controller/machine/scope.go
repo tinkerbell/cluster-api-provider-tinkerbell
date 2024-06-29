@@ -155,8 +155,14 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		return nil
 	}
 
-	if err := scope.patchHardwareStates(hw, false); err != nil {
+	if err := scope.patchHardwareAllowPXE(hw, false); err != nil {
 		return fmt.Errorf("failed to patch hardware: %w", err)
+	}
+
+	// When the Workflow has completed successfully the Hardware state annotation
+	// should be set to ready.
+	if err := scope.ensureStateAnnotation(hw, AnnotationStateReady); err != nil {
+		return fmt.Errorf("failed to ensure hardware state annotation: %w", err)
 	}
 
 	scope.log.Info("Marking TinkerbellMachine as Ready")
