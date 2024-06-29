@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package templates_test
+package machine_test
 
 import (
 	"testing"
@@ -22,11 +22,11 @@ import (
 	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	"sigs.k8s.io/yaml"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 )
 
-func validWorkflowTemplate() *templates.WorkflowTemplate {
-	return &templates.WorkflowTemplate{
+func validWorkflowTemplate() *machine.WorkflowTemplate {
+	return &machine.WorkflowTemplate{
 		Name:          "foo",
 		MetadataURL:   "http://10.10.10.10",
 		ImageURL:      "http://foo.bar.baz/do/it",
@@ -40,33 +40,33 @@ func Test_Cloud_config_template(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		mutateF       func(*templates.WorkflowTemplate)
+		mutateF       func(*machine.WorkflowTemplate)
 		expectError   bool
 		expectedError error
-		validateF     func(*testing.T, *templates.WorkflowTemplate, string)
+		validateF     func(*testing.T, *machine.WorkflowTemplate, string)
 	}{
 		"requires_non_empty_ImageURL": {
-			mutateF: func(wt *templates.WorkflowTemplate) {
+			mutateF: func(wt *machine.WorkflowTemplate) {
 				wt.ImageURL = ""
 			},
 			expectError:   true,
-			expectedError: templates.ErrMissingImageURL,
+			expectedError: machine.ErrMissingImageURL,
 		},
 
 		"requires_non_empty_Name": {
-			mutateF: func(wt *templates.WorkflowTemplate) {
+			mutateF: func(wt *machine.WorkflowTemplate) {
 				wt.Name = ""
 			},
 			expectError:   true,
-			expectedError: templates.ErrMissingName,
+			expectedError: machine.ErrMissingName,
 		},
 
 		"renders_with_valid_config": {
-			mutateF: func(_ *templates.WorkflowTemplate) {},
+			mutateF: func(_ *machine.WorkflowTemplate) {},
 		},
 
 		"rendered_output_should_be_valid_YAML": {
-			validateF: func(t *testing.T, _ *templates.WorkflowTemplate, renderResult string) { //nolint:thelper
+			validateF: func(t *testing.T, _ *machine.WorkflowTemplate, renderResult string) { //nolint:thelper
 				g := NewWithT(t)
 				x := &map[string]interface{}{}
 

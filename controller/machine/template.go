@@ -12,9 +12,126 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/internal/templates"
 )
+
+var (
+	// ErrMissingName is the error returned when the WorfklowTemplate Name is not specified.
+	ErrMissingName = fmt.Errorf("name can't be empty")
+
+	// ErrMissingImageURL is the error returned when the WorfklowTemplate ImageURL is not specified.
+	ErrMissingImageURL = fmt.Errorf("imageURL can't be empty")
+)
+
+const (
+	workflowTemplate = `
+version: "0.1"
+name: {{.Name}}
+global_timeout: 6000
+tasks:
+  - name: "{{.Name}}"
+    worker: "{{.DeviceTemplateName}}"
+    volumes:
+      - /dev:/dev
+      - /dev/console:/dev/console
+      - /lib/firmware:/lib/firmware:ro
+    actions:
+      - name: "stream-image"
+        image: quay.io/tinkerbell-actions/oci2disk:v1.0.0
+        timeout: 600
+        environment:
+          IMG_URL: {{.ImageURL}}
+          DEST_DISK: {{.DestDisk}}
+          COMPRESSED: true
+      - name: "add-tink-cloud-init-config"
+        image: quay.io/tinkerbell-actions/writefile:v1.0.0
+        timeout: 90
+        environment:
+          DEST_DISK: {{.DestPartition}}
+          FS_TYPE: ext4
+          DEST_PATH: /etc/cloud/cloud.cfg.d/10_tinkerbell.cfg
+          UID: 0
+          GID: 0
+          MODE: 0600
+          DIRMODE: 0700
+          CONTENTS: |
+            datasource:
+              Ec2:
+                metadata_urls: ["{{.MetadataURL}}"]
+                strict_id: false
+            system_info:
+              default_user:
+                name: tink
+                groups: [wheel, adm]
+                sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+                shell: /bin/bash
+            manage_etc_hosts: localhost
+            warnings:
+              dsid_missing_source: off
+      - name: "add-tink-cloud-init-ds-config"
+        image: quay.io/tinkerbell-actions/writefile:v1.0.0
+        timeout: 90
+        environment:
+          DEST_DISK: {{.DestPartition}}
+          FS_TYPE: ext4
+          DEST_PATH: /etc/cloud/ds-identify.cfg
+          UID: 0
+          GID: 0
+          MODE: 0600
+          DIRMODE: 0700
+          CONTENTS: |
+            datasource: Ec2
+      - name: "kexec-image"
+        image: ghcr.io/jacobweinstock/waitdaemon:0.1.2
+        timeout: 90
+        pid: host
+        environment:
+          BLOCK_DEVICE: {{.DestPartition}}
+          FS_TYPE: ext4
+          IMAGE: quay.io/tinkerbell-actions/kexec:v1.0.0
+          WAIT_SECONDS: 10
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+`
+)
+
+// WorkflowTemplate is a helper struct for rendering CAPT Template data.
+type WorkflowTemplate struct {
+	Name               string
+	MetadataURL        string
+	ImageURL           string
+	DestDisk           string
+	DestPartition      string
+	DeviceTemplateName string
+}
+
+// Render renders workflow template for a given machine including user-data.
+func (wt *WorkflowTemplate) Render() (string, error) {
+	if wt.Name == "" {
+		return "", ErrMissingName
+	}
+
+	if wt.ImageURL == "" {
+		return "", ErrMissingImageURL
+	}
+
+	if wt.DeviceTemplateName == "" {
+		wt.DeviceTemplateName = "{{.device_1}}"
+	}
+
+	tpl, err := template.New("template").Parse(workflowTemplate)
+	if err != nil {
+		return "", fmt.Errorf("unable to parse template: %w", err)
+	}
+
+	buf := &bytes.Buffer{}
+
+	err = tpl.Execute(buf, wt)
+	if err != nil {
+		return "", fmt.Errorf("unable to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
 
 func (scope *machineReconcileScope) templateExists() (bool, error) {
 	namespacedName := types.NamespacedName{
@@ -56,7 +173,7 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 
 		metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
 
-		workflowTemplate := templates.WorkflowTemplate{
+		workflowTemplate := WorkflowTemplate{
 			Name:          scope.tinkerbellMachine.Name,
 			MetadataURL:   metadataURL,
 			ImageURL:      imageURL,
