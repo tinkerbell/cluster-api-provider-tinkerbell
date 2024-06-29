@@ -17,6 +17,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # these variable are from image-builder: https://image-builder.sigs.k8s.io/capi/capi#customization
+  # example versions can be found here: https://github.com/kubernetes-sigs/image-builder/tree/main/images/capi/packer/gce/ci/nightly
   KUBERNETES_DEB_VERSION: ${{ github.event.inputs.kubernetesDebVersion }}
   KUBERNETES_RPM_VERSION: ${{ github.event.inputs.kubernetesRPMVersion }}
   KUBERNETES_SEM_VERSION: ${{ github.event.inputs.kubernetesSemanticVersion }}
@@ -31,16 +33,20 @@ jobs:
         with:
           repository: kubernetes-sigs/image-builder
           path: image-builder
-          # Workaround for breaking changes in upstream image-builder that need to be verified
-          # ref: 9eea1153526d37969e96697cb1dacd15e28dbccf
+          ref: v0.1.29
 
       - name: Install QEMU
         run: |
           sudo apt update
-          sudo -i apt install qemu-system-x86
+          sudo -i apt install -y qemu-kvm libvirt-daemon-system libvirt-clients virtinst cpu-checker libguestfs-tools libosinfo-bin qemu-system-x86 wget unzip
 
       - name: Build the images
         run: |
+          set -x
+          # https://github.com/hashicorp/packer/issues/12830
+          wget https://releases.hashicorp.com/packer/1.9.5/packer_1.9.5_linux_amd64.zip
+          unzip packer_1.9.5_linux_amd64.zip
+          sudo mv packer /usr/local/bin/
           export PATH=$PWD/.bin:$PATH
           cd image-builder/images/capi
           cat << EOF > packer/raw/overwrite-kubernetes.json
@@ -54,7 +60,7 @@ jobs:
           EOF
           make deps-raw
           packer plugins install github.com/hashicorp/qemu
-          PACKER_VAR_FILES=packer/raw/overwrite-kubernetes.json make build-raw-all
+          PACKER_VAR_FILES=packer/raw/overwrite-kubernetes.json make build-raw-ubuntu-2004
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -65,5 +71,5 @@ jobs:
 
       - name: Push the images
         run: |
-          # oras push ${REGISTRY}/${{ github.repository }}/ubuntu-1804:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config image-builder/images/capi/output/ubuntu-1804-kube-${KUBERNETES_SEM_VERSION}.gz
-          oras push ${REGISTRY}/${{ github.repository }}/ubuntu-2004:${KUBERNETES_SEM_VERSION}.gz --manifest-config /dev/null:application/vnd.acme.rocket.config image-builder/images/capi/output/ubuntu-2004-kube-${KUBERNETES_SEM_VERSION}.gz
+          oras version
+          oras push ${REGISTRY}/${{ github.repository }}/ubuntu-2004:${KUBERNETES_SEM_VERSION}.gz --artifact-type application/vnd.acme.rocket.config image-builder/images/capi/output/ubuntu-2004-kube-${KUBERNETES_SEM_VERSION}.gz
