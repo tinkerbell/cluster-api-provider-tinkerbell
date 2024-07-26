@@ -23,7 +23,7 @@ require (
 	k8s.io/utils v0.0.0-20231127182322-b307cd553661
 	sigs.k8s.io/cluster-api v1.6.3
 	sigs.k8s.io/controller-runtime v0.17.0
-	sigs.k8s.io/kustomize/kustomize/v5 v5.4.2
+	sigs.k8s.io/kustomize/kustomize/v5 v5.4.3
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -66,6 +66,7 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/sergi/go-diff v1.2.0 // indirect
 	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.starlark.net v0.0.0-20231121155337-90ade8b19d09 // indirect
@@ -89,8 +90,8 @@ require (
 	k8s.io/cluster-bootstrap v0.29.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20231214164306-ab13479f8bf8 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
-	sigs.k8s.io/kustomize/api v0.17.2 // indirect
-	sigs.k8s.io/kustomize/cmd/config v0.14.1 // indirect
-	sigs.k8s.io/kustomize/kyaml v0.17.1 // indirect
+	sigs.k8s.io/kustomize/api v0.17.3 // indirect
+	sigs.k8s.io/kustomize/cmd/config v0.14.2 // indirect
+	sigs.k8s.io/kustomize/kyaml v0.17.2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
