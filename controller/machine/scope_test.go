@@ -84,8 +84,6 @@ func Test_Machine(t *testing.T) {
 	}
 
 	for name, c := range cases {
-		name, c := name, c
-
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
