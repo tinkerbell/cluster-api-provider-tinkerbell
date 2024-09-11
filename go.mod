@@ -1,8 +1,8 @@
 module github.com/tinkerbell/cluster-api-provider-tinkerbell
 
-go 1.21.0
+go 1.23.0
 
-toolchain go1.21.2
+toolchain go1.23.1
 
 require (
 	github.com/go-logr/logr v1.4.1
