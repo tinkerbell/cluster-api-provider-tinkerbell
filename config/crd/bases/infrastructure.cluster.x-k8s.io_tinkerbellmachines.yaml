@@ -108,11 +108,13 @@ spec:
                                         items:
                                           type: string
                                         type: array
+                                        x-kubernetes-list-type: atomic
                                     required:
                                     - key
                                     - operator
                                     type: object
                                   type: array
+                                  x-kubernetes-list-type: atomic
                                 matchLabels:
                                   additionalProperties:
                                     type: string
@@ -176,11 +178,13 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                    x-kubernetes-list-type: atomic
                                 required:
                                 - key
                                 - operator
                                 type: object
                               type: array
+                              x-kubernetes-list-type: atomic
                             matchLabels:
                               additionalProperties:
                                 type: string
@@ -245,19 +249,7 @@ spec:
               addresses:
                 description: Addresses contains the Tinkerbell device associated addresses.
                 items:
-                  description: NodeAddress contains information for the node's address.
-                  properties:
-                    address:
-                      description: The node address.
-                      type: string
-                    type:
-                      description: Node address type, one of Hostname, ExternalIP
-                        or InternalIP.
-                      type: string
-                  required:
-                  - address
-                  - type
-                  type: object
+                  $ref: '#/definitions/k8s.io~1api~1core~1v1~0NodeAddress'
                 type: array
               errorMessage:
                 description: |-
