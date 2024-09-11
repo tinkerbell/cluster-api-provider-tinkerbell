@@ -251,8 +251,6 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 	scores := map[client.ObjectKey]int32{}
 	// compute scores for each item based on the preferred term weights
 	for _, term := range preferred {
-		term := term
-
 		selector, err := metav1.LabelSelectorAsSelector(&term.HardwareAffinityTerm.LabelSelector)
 		if err != nil {
 			return nil, fmt.Errorf("constructing label selector: %w", err)

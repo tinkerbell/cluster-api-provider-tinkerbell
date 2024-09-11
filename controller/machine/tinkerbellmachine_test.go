@@ -458,7 +458,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
 
 		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(true)); diff != "" {
-			t.Errorf(diff)
+			t.Error(diff)
 		}
 	})
 }
@@ -593,7 +593,7 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
 
 		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(false)); diff != "" {
-			t.Errorf(diff)
+			t.Error(diff)
 		}
 	})
 }
