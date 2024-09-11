@@ -51,7 +51,7 @@ GO_INSTALL = ./scripts/go_install.sh
 # Binaries.
 CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14
 
-GOLANGCI_LINT_VER := v1.59.1
+GOLANGCI_LINT_VER := v1.61.0
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
