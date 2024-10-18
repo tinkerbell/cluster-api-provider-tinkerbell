@@ -3,6 +3,8 @@ package machine
 import (
 	"fmt"
 
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+
 	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,12 +13,6 @@ import (
 
 // errWorkflowFailed is the error returned when the workflow fails.
 var errWorkflowFailed = fmt.Errorf("workflow failed")
-
-// lastActionStarted returns the state of the final action in a hardware's workflow or an error if the workflow
-// has not reached the final action.
-func lastActionStarted(wf *tinkv1.Workflow) bool {
-	return wf.GetCurrentActionIndex() == wf.GetTotalNumberOfActions()-1
-}
 
 func (scope *machineReconcileScope) getWorkflow() (*tinkv1.Workflow, error) {
 	namespacedName := types.NamespacedName{
@@ -28,12 +24,11 @@ func (scope *machineReconcileScope) getWorkflow() (*tinkv1.Workflow, error) {
 
 	err := scope.client.Get(scope.ctx, namespacedName, t)
 	if err != nil {
-		msg := "failed to get workflow: %w"
 		if !apierrors.IsNotFound(err) {
-			msg = "no workflow exists: %w"
+			return t, fmt.Errorf("no workflow exists: %w", err)
 		}
 
-		return t, fmt.Errorf(msg, err) //nolint:goerr113
+		return t, fmt.Errorf("failed to get workflow: %w", err)
 	}
 
 	return t, nil
@@ -60,6 +55,20 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			HardwareRef: hw.Name,
 			HardwareMap: map[string]string{"device_1": hw.Spec.Metadata.Instance.ID},
 		},
+	}
+
+	// We check the BMCRef so that the implementation behaves similar to how it was when
+	// CAPT was creating the BMCJob.
+	if hw.Spec.BMCRef != nil {
+		switch scope.tinkerbellMachine.Spec.BootOptions.BootMode {
+		case v1beta1.BootMode("netboot"):
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("netboot")
+			workflow.Spec.BootOptions.ToggleAllowNetboot = true
+		case v1beta1.BootMode("iso"):
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
+			workflow.Spec.BootOptions.ISOURL = scope.tinkerbellMachine.Spec.BootOptions.ISOURL
+			workflow.Spec.BootOptions.ToggleAllowNetboot = true
+		}
 	}
 
 	if err := scope.client.Create(scope.ctx, workflow); err != nil {
