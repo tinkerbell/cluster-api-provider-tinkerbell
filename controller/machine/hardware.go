@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -25,6 +24,9 @@ const (
 	// HardwareOwnerNamespaceLabel is a label set by either CAPT controllers or Tinkerbell controller to indicate
 	// that given hardware takes part of at least one workflow.
 	HardwareOwnerNamespaceLabel = "v1alpha1.tinkerbell.org/ownerNamespace"
+
+	// HardwareInUseLabel signifies that the Hardware with this label has be provisioned by CAPT.
+	HardwareInUseLabel = "v1alpha1.tinkerbell.org/inUse"
 )
 
 var (
@@ -71,34 +73,15 @@ func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 	return hardware.Spec.Interfaces[0].DHCP.IP.Address, nil
 }
 
-func isHardwareReady(hw *tinkv1.Hardware) bool {
-	// if allowpxe false for all interface, hardware ready
-	if len(hw.Spec.Interfaces) == 0 {
-		return false
-	}
-
-	for _, ifc := range hw.Spec.Interfaces {
-		if ifc.Netboot != nil {
-			if *ifc.Netboot.AllowPXE {
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
 // patchHardwareStates patches a hardware's metadata and instance states.
-func (scope *machineReconcileScope) patchHardwareStates(hw *tinkv1.Hardware, allowpxe bool) error {
+func (scope *machineReconcileScope) patchHardwareLabel(hw *tinkv1.Hardware, labels map[string]string) error {
 	patchHelper, err := patch.NewHelper(hw, scope.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
 
-	for _, ifc := range hw.Spec.Interfaces {
-		if ifc.Netboot != nil {
-			ifc.Netboot.AllowPXE = ptr.To(allowpxe)
-		}
+	for k, v := range labels {
+		hw.ObjectMeta.Labels[k] = v
 	}
 
 	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
@@ -291,16 +274,19 @@ func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
 
 	delete(hw.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hw.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
-	// setting the AllowPXE=true indicates to Smee that this hardware should be allowed
-	// to netboot. FYI, this is not authoritative.
-	// Other hardware values can be set to prohibit netbooting of a machine.
-	// See this Boots function for the logic around this:
-	// https://github.com/tinkerbell/smee/blob/main/internal/ipxe/script/ipxe.go#L112
-	for _, ifc := range hw.Spec.Interfaces {
-		if ifc.Netboot != nil {
-			ifc.Netboot.AllowPXE = ptr.To(true)
+	delete(hw.ObjectMeta.Labels, HardwareInUseLabel)
+	/*
+		// setting the AllowPXE=true indicates to Smee that this hardware should be allowed
+		// to netboot. FYI, this is not authoritative.
+		// Other hardware values can be set to prohibit netbooting of a machine.
+		// See this Boots function for the logic around this:
+		// https://github.com/tinkerbell/smee/blob/main/internal/ipxe/script/ipxe.go#L112
+		for _, ifc := range hw.Spec.Interfaces {
+			if ifc.Netboot != nil {
+				ifc.Netboot.AllowPXE = ptr.To(true)
+			}
 		}
-	}
+	*/
 
 	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineFinalizer)
 

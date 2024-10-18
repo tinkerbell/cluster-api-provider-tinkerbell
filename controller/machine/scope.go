@@ -126,15 +126,10 @@ func (scope *machineReconcileScope) Reconcile() error {
 }
 
 func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
-	if isHardwareReady(hw) {
+	// If the workflow has completed the TinkerbellMachine is ready.
+	if v, found := hw.ObjectMeta.Labels[HardwareInUseLabel]; found && v == "true" {
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
-
-		return nil
-	}
-
-	if ensureJobErr := scope.ensureHardwareProvisionJob(hw); ensureJobErr != nil {
-		return fmt.Errorf("failed to ensure hardware ready for provisioning: %w", ensureJobErr)
 	}
 
 	wf, err := scope.ensureTemplateAndWorkflow(hw)
@@ -151,16 +146,16 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		return errWorkflowFailed
 	}
 
-	if !lastActionStarted(wf) {
+	if wf.Status.State != tinkv1.WorkflowStateSuccess {
 		return nil
-	}
-
-	if err := scope.patchHardwareStates(hw, false); err != nil {
-		return fmt.Errorf("failed to patch hardware: %w", err)
 	}
 
 	scope.log.Info("Marking TinkerbellMachine as Ready")
 	scope.tinkerbellMachine.Status.Ready = true
+
+	if err := scope.patchHardwareLabel(hw, map[string]string{HardwareInUseLabel: "true"}); err != nil {
+		return fmt.Errorf("failed to patch hardware: %w", err)
+	}
 
 	return nil
 }
