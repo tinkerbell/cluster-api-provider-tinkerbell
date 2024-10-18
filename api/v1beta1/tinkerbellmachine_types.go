@@ -28,6 +28,9 @@ const (
 	MachineFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
 )
 
+// BootMode defines the type of booting that will be done. i.e. netboot, iso, etc.
+type BootMode string
+
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
 type TinkerbellMachineSpec struct {
 	// ImageLookupFormat is the URL naming format to use for machine images when
@@ -69,10 +72,30 @@ type TinkerbellMachineSpec struct {
 	// +optional
 	HardwareAffinity *HardwareAffinity `json:"hardwareAffinity,omitempty"`
 
+	// BootOptions are options that control the booting of Hardware.
+	// +optional
+	BootOptions BootOptions `json:"bootOptions,omitempty"`
+
 	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
 	// we put them in spec instead of status.
 	HardwareName string `json:"hardwareName,omitempty"`
 	ProviderID   string `json:"providerID,omitempty"`
+}
+
+// BootOptions are options that control the booting of Hardware.
+type BootOptions struct {
+	// ISOURL is the URL of the ISO that will be one-time booted.
+	// When this field is set, the controller will create a job.bmc.tinkerbell.org object
+	// for getting the associated hardware into a CDROM booting state.
+	// A HardwareRef that contains a spec.BmcRef must be provided.
+	// +optional
+	// +kubebuilder:validation:Format=url
+	ISOURL string `json:"isoURL,omitempty"`
+
+	// BootMode is the type of booting that will be done.
+	// +optional
+	// +kubebuilder:validation:Enum=none;netboot;iso
+	BootMode BootMode `json:"bootMode,omitempty"`
 }
 
 // HardwareAffinity defines the required and preferred hardware affinities.

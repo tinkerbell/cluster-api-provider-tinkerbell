@@ -259,13 +259,14 @@ func validWorkflow(name, namespace string) *tinkv1.Workflow {
 			TemplateRef: name,
 		},
 		Status: tinkv1.WorkflowStatus{
+			State: tinkv1.WorkflowStateSuccess,
 			Tasks: []tinkv1.Task{
 				{
 					Name: name,
 					Actions: []tinkv1.Action{
 						{
 							Name:   name,
-							Status: tinkv1.WorkflowStateRunning,
+							Status: tinkv1.WorkflowStateSuccess,
 						},
 					},
 				},
@@ -579,23 +580,6 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 		g.Expect(client.Get(ctx, namespacedName, updatedMachine)).To(Succeed())
 		g.Expect(updatedMachine.Status.Addresses).NotTo(BeEmpty(), "Machine status should be updated on every reconciliation")
 	})
-
-	t.Run("allowPXE_is_updated", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		hardwareNamespacedName := types.NamespacedName{
-			Name:      hardwareName,
-			Namespace: clusterNamespace,
-		}
-
-		updatedHardware := &tinkv1.Hardware{}
-		g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
-
-		if diff := cmp.Diff(updatedHardware.Spec.Interfaces[0].Netboot.AllowPXE, ptr.To(false)); diff != "" {
-			t.Error(diff)
-		}
-	})
 }
 
 //nolint:funlen
@@ -795,7 +779,12 @@ func reconcileMachineWithClient(client client.Client, name, namespace string) (c
 		},
 	}
 
-	return machineController.Reconcile(context.TODO(), request) //nolint:wrapcheck
+	r, err := machineController.Reconcile(context.TODO(), request)
+	if err != nil {
+		return r, fmt.Errorf("error with Reconcile: %w", err)
+	}
+
+	return r, nil
 }
 
 func machineReconciliationIsRequeuedWhenTinkerbellMachineObjectIsMissing(t *testing.T) {

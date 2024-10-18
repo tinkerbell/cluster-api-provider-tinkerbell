@@ -68,6 +68,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	log := ctrl.LoggerFrom(ctx)
+	log.Info("starting reconcile")
 
 	scope := &machineReconcileScope{
 		log:               log,
