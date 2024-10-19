@@ -54,6 +54,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			TemplateRef: scope.tinkerbellMachine.Name,
 			HardwareRef: hw.Name,
 			HardwareMap: map[string]string{"device_1": hw.Spec.Metadata.Instance.ID},
+			BootOptions: tinkv1.BootOptions{
+				ToggleAllowNetboot: true,
+			},
 		},
 	}
 
@@ -63,11 +66,12 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 		switch scope.tinkerbellMachine.Spec.BootOptions.BootMode {
 		case v1beta1.BootMode("netboot"):
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("netboot")
-			workflow.Spec.BootOptions.ToggleAllowNetboot = true
 		case v1beta1.BootMode("iso"):
+			if scope.tinkerbellMachine.Spec.BootOptions.ISOURL == "" {
+				return fmt.Errorf("iso boot mode requires an isoURL")
+			}
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
 			workflow.Spec.BootOptions.ISOURL = scope.tinkerbellMachine.Spec.BootOptions.ISOURL
-			workflow.Spec.BootOptions.ToggleAllowNetboot = true
 		}
 	}
 
