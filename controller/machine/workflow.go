@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -12,7 +13,10 @@ import (
 )
 
 // errWorkflowFailed is the error returned when the workflow fails.
-var errWorkflowFailed = fmt.Errorf("workflow failed")
+var errWorkflowFailed = errors.New("workflow failed")
+
+// errISOBootURLRequired is the error returned when the isoURL is required for iso boot mode.
+var errISOBootURLRequired = errors.New("iso boot mode requires an isoURL")
 
 func (scope *machineReconcileScope) getWorkflow() (*tinkv1.Workflow, error) {
 	namespacedName := types.NamespacedName{
@@ -68,8 +72,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("netboot")
 		case v1beta1.BootMode("iso"):
 			if scope.tinkerbellMachine.Spec.BootOptions.ISOURL == "" {
-				return fmt.Errorf("iso boot mode requires an isoURL")
+				return errISOBootURLRequired
 			}
+
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
 			workflow.Spec.BootOptions.ISOURL = scope.tinkerbellMachine.Spec.BootOptions.ISOURL
 		}
