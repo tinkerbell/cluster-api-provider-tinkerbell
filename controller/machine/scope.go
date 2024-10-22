@@ -127,22 +127,21 @@ func (scope *machineReconcileScope) Reconcile() error {
 
 func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 	// If the workflow has completed the TinkerbellMachine is ready.
-	if v, found := hw.ObjectMeta.Labels[HardwareInUseLabel]; found && v == "true" {
+	if v, found := hw.ObjectMeta.GetAnnotations()[HardwareProvisionedAnnotation]; found && v == "true" {
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
 	}
 
 	wf, err := scope.ensureTemplateAndWorkflow(hw)
+	if err != nil {
+		if errors.Is(err, &errRequeueRequested{}) {
+			return nil
+		}
 
-	switch {
-	case errors.Is(err, &errRequeueRequested{}):
-		return nil
-	case err != nil:
 		return fmt.Errorf("ensure template and workflow returned: %w", err)
 	}
 
-	s := wf.GetCurrentActionState()
-	if s == tinkv1.WorkflowStateFailed || s == tinkv1.WorkflowStateTimeout {
+	if wf.Status.State == tinkv1.WorkflowStateFailed || wf.Status.State == tinkv1.WorkflowStateTimeout {
 		return errWorkflowFailed
 	}
 
@@ -153,7 +152,7 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 	scope.log.Info("Marking TinkerbellMachine as Ready")
 	scope.tinkerbellMachine.Status.Ready = true
 
-	if err := scope.patchHardwareLabel(hw, map[string]string{HardwareInUseLabel: "true"}); err != nil {
+	if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
 		return fmt.Errorf("failed to patch hardware: %w", err)
 	}
 

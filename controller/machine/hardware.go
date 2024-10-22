@@ -25,8 +25,8 @@ const (
 	// that given hardware takes part of at least one workflow.
 	HardwareOwnerNamespaceLabel = "v1alpha1.tinkerbell.org/ownerNamespace"
 
-	// HardwareInUseLabel signifies that the Hardware with this label has be provisioned by CAPT.
-	HardwareInUseLabel = "v1alpha1.tinkerbell.org/inUse"
+	// HardwareProvisionedAnnotation signifies that the Hardware with this annotation has be provisioned by CAPT.
+	HardwareProvisionedAnnotation = "v1alpha1.tinkerbell.org/provisioned"
 )
 
 var (
@@ -74,14 +74,18 @@ func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 }
 
 // patchHardwareStates patches a hardware's metadata and instance states.
-func (scope *machineReconcileScope) patchHardwareLabel(hw *tinkv1.Hardware, labels map[string]string) error {
+func (scope *machineReconcileScope) patchHardwareAnnotations(hw *tinkv1.Hardware, annotations map[string]string) error {
 	patchHelper, err := patch.NewHelper(hw, scope.client)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
 
-	for k, v := range labels {
-		hw.ObjectMeta.Labels[k] = v
+	if hw.ObjectMeta.Annotations == nil {
+		hw.ObjectMeta.Annotations = map[string]string{}
+	}
+
+	for k, v := range annotations {
+		hw.ObjectMeta.Annotations[k] = v
 	}
 
 	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
@@ -274,7 +278,7 @@ func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
 
 	delete(hw.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hw.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
-	delete(hw.ObjectMeta.Labels, HardwareInUseLabel)
+	delete(hw.ObjectMeta.Annotations, HardwareProvisionedAnnotation)
 	/*
 		// setting the AllowPXE=true indicates to Smee that this hardware should be allowed
 		// to netboot. FYI, this is not authoritative.
