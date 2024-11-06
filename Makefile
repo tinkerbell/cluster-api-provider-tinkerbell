@@ -301,6 +301,9 @@ release-metadata: $(RELEASE_DIR)
 release-templates: $(RELEASE_DIR)
 	cp templates/cluster-template*.yaml $(RELEASE_DIR)/
 
+release-local: ## Builds the manifests for use in local development
+	$(MAKE) release RELEASE_DIR=out/release/infrastructure-tinkerbell/$(RELEASE_TAG)
+
 ## --------------------------------------
 ## Cleanup / Verification
 ## --------------------------------------
