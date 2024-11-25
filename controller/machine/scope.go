@@ -199,8 +199,28 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error {
 	scope.log.Info("Removing machine", "hardwareName", scope.tinkerbellMachine.Spec.HardwareName)
 	// Fetch hw for the machine.
 	hw := &tinkv1.Hardware{}
-	if err := scope.getHardwareForMachine(hw); err != nil {
+
+	err := scope.getHardwareForMachine(hw)
+	if err != nil && !apierrors.IsNotFound(err) {
 		return err
+	}
+
+	// If the Hardware is not found, we can't do any BMC operations. In this case we just remove all
+	// the other dependencies and remove the finalizer from the TinkerbellMachine object so that it can be deleted.
+	if apierrors.IsNotFound(err) {
+		scope.log.Info("Hardware not found, only template, workflow and finalizer will be removed",
+			"hardwareName", scope.tinkerbellMachine.Spec.HardwareName,
+		)
+
+		if err := scope.removeTemplate(); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("removing Template: %w", err)
+		}
+
+		if err := scope.removeWorkflow(); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("removing Workflow: %w", err)
+		}
+
+		return scope.removeFinalizer()
 	}
 
 	if err := scope.removeDependencies(hw); err != nil {
