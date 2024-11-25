@@ -279,18 +279,6 @@ func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
 	delete(hw.ObjectMeta.Labels, HardwareOwnerNameLabel)
 	delete(hw.ObjectMeta.Labels, HardwareOwnerNamespaceLabel)
 	delete(hw.ObjectMeta.Annotations, HardwareProvisionedAnnotation)
-	/*
-		// setting the AllowPXE=true indicates to Smee that this hardware should be allowed
-		// to netboot. FYI, this is not authoritative.
-		// Other hardware values can be set to prohibit netbooting of a machine.
-		// See this Boots function for the logic around this:
-		// https://github.com/tinkerbell/smee/blob/main/internal/ipxe/script/ipxe.go#L112
-		for _, ifc := range hw.Spec.Interfaces {
-			if ifc.Netboot != nil {
-				ifc.Netboot.AllowPXE = ptr.To(true)
-			}
-		}
-	*/
 
 	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineFinalizer)
 
