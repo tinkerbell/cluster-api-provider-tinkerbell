@@ -88,11 +88,13 @@ type BootOptions struct {
 	// When this field is set, the controller will create a job.bmc.tinkerbell.org object
 	// for getting the associated hardware into a CDROM booting state.
 	// A HardwareRef that contains a spec.BmcRef must be provided.
+	//
 	// The format of the ISOURL must be http://$IP:$Port/iso/:macAddress/hook.iso
 	// The name of the ISO file must have the .iso extension, but the name can be anything.
-	// The $IP and $Port should generally point to the IP and Port of the Smee server as this is where
-	// the ISO patching endpoint lives.
-	// The ":macAddress" is a placeholder for the MAC address of the hardware and should be provided exactly as is: ":macAddress".
+	// The $IP and $Port should generally point to the IP and Port of the Smee server
+	// as this is where the ISO patching endpoint lives.
+	// The ":macAddress" is a placeholder for the MAC address of the hardware and
+	// should be provided exactly as is: ":macAddress".
 	// +optional
 	// +kubebuilder:validation:Format=url
 	ISOURL string `json:"isoURL,omitempty"`

@@ -77,13 +77,14 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 				return errISOBootURLRequired
 			}
 
-			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
 			u, err := url.Parse(scope.tinkerbellMachine.Spec.BootOptions.ISOURL)
 			if err != nil {
 				return fmt.Errorf("boot option isoURL is not parse-able: %w", err)
 			}
+
 			u.Path = strings.Replace(u.Path, ":macAddress", strings.Replace(hw.Spec.Metadata.Instance.ID, ":", "-", 5), 1)
 			workflow.Spec.BootOptions.ISOURL = u.String()
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
 		}
 	}
 
