@@ -127,12 +127,32 @@ func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context,
 	}
 
 	if cluster == nil {
-		crc.log.Info("OwnerCluster is not set yet.")
+		crc.log.Info("OwnerCluster is not set yet; trying by label")
+		cluster, err = findClusterOwnerByLabelAndAdopt(crc)
+		if err != nil {
+			return nil, fmt.Errorf("getting by-label owner cluster: %w", err)
+		}
 	}
 
 	crc.cluster = cluster
 
 	return crc, nil
+}
+
+func findClusterOwnerByLabelAndAdopt(crc *clusterReconcileContext) (*clusterv1.Cluster, error) {
+	clusterByLabel, err := util.GetClusterFromMetadata(crc.ctx, crc.client, crc.tinkerbellCluster.ObjectMeta)
+	if err == nil && clusterByLabel != nil {
+		crc.log.Info("Cluster found by label, setting as owner reference")
+		// "Set" the owner reference so that future reconciliations don't have to do this again.
+		if err := ctrl.SetControllerReference(clusterByLabel, crc.tinkerbellCluster, crc.client.Scheme()); err != nil {
+			return nil, fmt.Errorf("setting owner reference: %w", err)
+		}
+		if err := crc.patchHelper.Patch(crc.ctx, crc.tinkerbellCluster); err != nil {
+			return nil, fmt.Errorf("patching TinkerbellCluster with owner reference: %w", err)
+		}
+		crc.log.Info("Owner reference set via label lookup")
+	}
+	return clusterByLabel, nil
 }
 
 // clusterReconcileContext implements ReconcileContext by reconciling TinkerbellCluster object.
