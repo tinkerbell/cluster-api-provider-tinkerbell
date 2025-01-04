@@ -130,6 +130,8 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 	if v, found := hw.ObjectMeta.GetAnnotations()[HardwareProvisionedAnnotation]; found && v == "true" {
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
+
+		return nil
 	}
 
 	wf, err := scope.ensureTemplateAndWorkflow(hw)
