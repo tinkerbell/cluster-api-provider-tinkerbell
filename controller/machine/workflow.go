@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -82,7 +83,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 				return fmt.Errorf("boot option isoURL is not parse-able: %w", err)
 			}
 
-			u.Path = strings.Replace(u.Path, ":macAddress", strings.Replace(hw.Spec.Metadata.Instance.ID, ":", "-", 5), 1)
+			urlPath, file := path.Split(u.Path)
+			u.Path = path.Join(urlPath, strings.Replace(hw.Spec.Metadata.Instance.ID, ":", "-", 5), file)
+
 			workflow.Spec.BootOptions.ISOURL = u.String()
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
 		}
