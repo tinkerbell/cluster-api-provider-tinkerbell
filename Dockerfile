@@ -14,7 +14,7 @@
 
 # Build the manager binary
 ARG GOVER=1.23
-FROM golang:${GOVER} as builder
+FROM golang:${GOVER} AS builder
 
 WORKDIR /workspace
 
