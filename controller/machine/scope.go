@@ -197,7 +197,7 @@ func (scope *machineReconcileScope) MachineScheduledForDeletion() bool {
 }
 
 // DeleteMachineWithDependencies removes template and workflow objects associated with given machine.
-func (scope *machineReconcileScope) DeleteMachineWithDependencies() error {
+func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //nolint:cyclop
 	scope.log.Info("Removing machine", "hardwareName", scope.tinkerbellMachine.Spec.HardwareName)
 	// Fetch hw for the machine.
 	hw := &tinkv1.Hardware{}
@@ -234,6 +234,7 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error {
 		if err := scope.releaseHardware(hw); err != nil {
 			return fmt.Errorf("error releasing Hardware: %w", err)
 		}
+
 		return scope.removeFinalizer()
 	}
 
