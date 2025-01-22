@@ -582,7 +582,6 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 	})
 }
 
-//nolint:funlen
 func Test_Machine_reconciliation(t *testing.T) {
 	t.Parallel()
 
