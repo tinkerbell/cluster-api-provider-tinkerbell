@@ -214,18 +214,14 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error {
 			"hardwareName", scope.tinkerbellMachine.Spec.HardwareName,
 		)
 
-		if err := scope.removeTemplate(); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("removing Template: %w", err)
-		}
-
-		if err := scope.removeWorkflow(); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("removing Workflow: %w", err)
+		if err := scope.removeDependencies(); err != nil {
+			return err
 		}
 
 		return scope.removeFinalizer()
 	}
 
-	if err := scope.removeDependencies(hw); err != nil {
+	if err := scope.removeDependencies(); err != nil {
 		return err
 	}
 
@@ -235,25 +231,35 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error {
 		scope.log.Info("Hardware BMC reference not present; skipping hardware power off",
 			"BMCRef", hw.Spec.BMCRef, "Hardware", hw.Name)
 
+		if err := scope.releaseHardware(hw); err != nil {
+			return fmt.Errorf("error releasing Hardware: %w", err)
+		}
 		return scope.removeFinalizer()
 	}
 
-	return scope.ensureBMCJobCompletionForDelete(hw)
+	if err := scope.ensureBMCJobCompletionForDelete(hw); err != nil {
+		return fmt.Errorf("error ensuring BMC job completion for delete: %w", err)
+	}
+
+	if err := scope.releaseHardware(hw); err != nil {
+		return fmt.Errorf("error releasing Hardware: %w", err)
+	}
+
+	if err := scope.removeFinalizer(); err != nil {
+		return fmt.Errorf("error removing finalizer: %w", err)
+	}
+
+	return nil
 }
 
-// removeDependencies removes the Template, Workflow linked to the machine.
-// Deletes the machine hardware labels for the machine.
-func (scope *machineReconcileScope) removeDependencies(hardware *tinkv1.Hardware) error {
-	if err := scope.removeTemplate(); err != nil {
+// removeDependencies removes the Template and Workflow linked to the Machine/Hardware.
+func (scope *machineReconcileScope) removeDependencies() error {
+	if err := scope.removeTemplate(); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("removing Template: %w", err)
 	}
 
-	if err := scope.removeWorkflow(); err != nil {
+	if err := scope.removeWorkflow(); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("removing Workflow: %w", err)
-	}
-
-	if err := scope.releaseHardware(hardware); err != nil {
-		return fmt.Errorf("releasing Hardware: %w", err)
 	}
 
 	return nil

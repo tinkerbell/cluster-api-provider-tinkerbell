@@ -83,7 +83,7 @@ func (scope *machineReconcileScope) ensureBMCJobCompletionForDelete(hardware *ti
 
 	// Check the Job conditions to ensure the power off job is complete.
 	if bmcJob.HasCondition(rufiov1.JobCompleted, rufiov1.ConditionTrue) {
-		return scope.removeFinalizer()
+		return nil
 	}
 
 	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
