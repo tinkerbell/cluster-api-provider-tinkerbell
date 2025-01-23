@@ -48,7 +48,7 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		"Name", bmcJob.Name,
 		"Namespace", bmcJob.Namespace)
 
-	return nil
+	return fmt.Errorf("requeue to wait for job.bmc completion: %s/%s", bmcJob.Namespace, bmcJob.Name) //nolint:goerr113
 }
 
 // getJob fetches the Job by name.
@@ -90,5 +90,5 @@ func (scope *machineReconcileScope) ensureBMCJobCompletionForDelete(hardware *ti
 		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) //nolint:goerr113
 	}
 
-	return nil
+	return fmt.Errorf("requeue, bmc job %s/%s is not completed", bmcJob.Namespace, bmcJob.Name) //nolint:goerr113
 }
