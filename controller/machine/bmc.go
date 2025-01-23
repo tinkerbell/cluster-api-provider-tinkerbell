@@ -48,7 +48,7 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		"Name", bmcJob.Name,
 		"Namespace", bmcJob.Namespace)
 
-	return fmt.Errorf("requeue to wait for job.bmc completion: %s/%s", bmcJob.Namespace, bmcJob.Name)
+	return fmt.Errorf("requeue to wait for job.bmc completion: %s/%s", bmcJob.Namespace, bmcJob.Name) //nolint:goerr113
 }
 
 // getJob fetches the Job by name.
