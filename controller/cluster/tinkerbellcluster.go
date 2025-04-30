@@ -243,6 +243,9 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	// TODO(enhancement): Currently using simple annotation-based pause checking. Need to implement
+	// proper pause handling using paused.EnsurePausedCondition() as per:
+	// https://cluster-api.sigs.k8s.io/developer/providers/contracts/infra-cluster#infracluster-pausing
 	if annotations.IsPaused(crc.cluster, crc.tinkerbellCluster) {
 		crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile")
 
