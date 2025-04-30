@@ -109,15 +109,16 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	cluster, err := util.GetClusterFromMetadata(ctx, scope.client, machine.ObjectMeta)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("getting owner cluster: %w", err)
+			return ctrl.Result{}, fmt.Errorf("getting cluster from metadata:: %w", err)
 		}
 	}
 
 	// TODO(enhancement): Currently using simple annotation-based pause checking. Need to implement
 	// proper pause handling using paused.EnsurePausedCondition() as per:
 	// https://cluster-api.sigs.k8s.io/developer/providers/contracts/infra-cluster#infracluster-pausing
-	if annotations.IsPaused(cluster, scope.tinkerbellMachine) {
+	if cluster != nil && annotations.IsPaused(cluster, scope.tinkerbellMachine) {
 		log.Info("TinkerbellMachine is paused, skipping reconciliation")
+
 		return ctrl.Result{}, nil
 	}
 
