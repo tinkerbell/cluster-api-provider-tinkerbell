@@ -13,7 +13,7 @@ require (
 	github.com/onsi/gomega v1.37.0
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/pflag v1.0.6
-	github.com/tinkerbell/rufio v0.6.3
+	github.com/tinkerbell/rufio v0.6.5
 	github.com/tinkerbell/tink v0.12.2
 	k8s.io/api v0.31.3
 	k8s.io/apimachinery v0.31.3
