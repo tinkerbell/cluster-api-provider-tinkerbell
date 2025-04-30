@@ -25,6 +25,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/collections"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/cluster-api/util/predicates"
@@ -94,10 +95,6 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	scope.patchHelper = patchHelper
 
-	if scope.MachineScheduledForDeletion() {
-		return ctrl.Result{}, scope.DeleteMachineWithDependencies()
-	}
-
 	// We must be bound to a CAPI Machine object before we can continue.
 	machine, err := scope.getReadyMachine()
 	if err != nil {
@@ -106,6 +103,26 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if machine == nil {
 		return ctrl.Result{}, nil
+	}
+
+	// Fetch the capi cluster owning the machine and check if the cluster is paused
+	cluster, err := util.GetClusterFromMetadata(ctx, scope.client, machine.ObjectMeta)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("getting owner cluster: %w", err)
+		}
+	}
+
+	// TODO(enhancement): Currently using simple annotation-based pause checking. Need to implement
+	// proper pause handling using paused.EnsurePausedCondition() as per:
+	// https://cluster-api.sigs.k8s.io/developer/providers/contracts/infra-cluster#infracluster-pausing
+	if annotations.IsPaused(cluster, scope.tinkerbellMachine) {
+		log.Info("TinkerbellMachine is paused, skipping reconciliation")
+		return ctrl.Result{}, nil
+	}
+
+	if scope.MachineScheduledForDeletion() {
+		return ctrl.Result{}, scope.DeleteMachineWithDependencies()
 	}
 
 	// We need a bootstrap cloud config secret to bootstrap the node so we can't proceed without it.
