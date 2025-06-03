@@ -7,11 +7,11 @@
 <a href="https://kubernetes.io"><img src="https://github.com/kubernetes/kubernetes/raw/master/logo/logo.png"  height="100"></a>
 <a href="https://tinkerbell.org"><img src="https://raw.githubusercontent.com/tinkerbell/artwork/main/Tinkerbell-Logo-Landscape-Dark.png" height="100"></a>
 
-Kubernetes-native declarative infrastructure for Kubernetes clusters on Tinkerbell.
+Kubernetes-native declarative infrastructure for Kubernetes clusters using Tinkerbell.
 
 ## What is the Cluster API Provider Tinkerbell
 
-The [Cluster API][cluster_api] brings declarative, Kubernetes-style APIs to Kubernetes
+The [Cluster API](https://cluster-api.sigs.k8s.io) brings declarative, Kubernetes-style APIs to Kubernetes
 cluster creation, configuration and management.
 
 The API itself is shared across multiple cloud providers allowing for true hybrid
@@ -19,9 +19,7 @@ deployments of Kubernetes, both on-premises and off.
 
 ## Quick Start
 
-See the [Quick Start](docs/QUICK-START.md)
-
-
+See the [Quick Start](docs/QUICK-START.md).
 
 ## Kubernetes versions with published Images
 
@@ -33,6 +31,3 @@ See the [release docs](https://github.com/tinkerbell/cluster-api-provider-tinker
 
 See [docs/README.md](docs/README.md) for more information on setting up a development
 environment.
-
-<!-- links -->
-[cluster_api]: https://cluster-api.sigs.k8s.io
