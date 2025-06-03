@@ -188,7 +188,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
-			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(sch, log)),
+			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureReady(sch, log)),
 		).
 		Watches(
 			&tinkv1.Workflow{},
