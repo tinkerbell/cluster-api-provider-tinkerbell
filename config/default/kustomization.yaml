@@ -7,51 +7,156 @@ namePrefix: capt-
 namespace: capt-system
 
 # Labels to add to all resources and selectors.
-commonLabels:
-  cluster.x-k8s.io/provider: infrastructure-tinkerbell
 
 resources:
   - namespace.yaml
-
-bases:
   - ../crd
   - ../rbac
   - ../manager
   - ../webhook
   - ../certmanager
 
-patchesStrategicMerge:
-  - manager_image_patch.yaml
-  - manager_webhook_patch.yaml
-  - webhookcainjection_patch.yaml
-
-vars:
-  - name: CERTIFICATE_NAMESPACE # namespace of the certificate CR
-    objref:
-      kind: Certificate
-      group: cert-manager.io
-      version: v1
-      name: serving-cert # this name should match the one in certificate.yaml
-    fieldref:
-      fieldpath: metadata.namespace
-  - name: CERTIFICATE_NAME
-    objref:
-      kind: Certificate
-      group: cert-manager.io
-      version: v1
-      name: serving-cert # this name should match the one in certificate.yaml
-  - name: SERVICE_NAMESPACE # namespace of the service
-    objref:
-      kind: Service
-      version: v1
-      name: webhook-service
-    fieldref:
-      fieldpath: metadata.namespace
-  - name: SERVICE_NAME
-    objref:
-      kind: Service
-      version: v1
-      name: webhook-service
-
 configurations:
   - kustomizeconfig.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - includeSelectors: true
+    pairs:
+      cluster.x-k8s.io/provider: infrastructure-tinkerbell
+patches:
+  - path: manager_image_patch.yaml
+  - path: manager_webhook_patch.yaml
+  - path: webhookcainjection_patch1.yaml
+  - path: webhookcainjection_patch2.yaml
+
+replacements:
+  - source:
+      kind: Certificate
+      name: serving-cert
+      fieldPath: metadata.name  # Use the certificate's name
+    targets:
+      - select:
+          kind: MutatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1
+  - source:
+      fieldPath: metadata.namespace
+      kind: Certificate
+      name: serving-cert
+    targets:
+      - fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 0
+        select:
+          kind: MutatingWebhookConfiguration
+          name: mutating-webhook-configuration
+      - fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 0
+        select:
+          kind: ValidatingWebhookConfiguration
+          name: validating-webhook-configuration
+  - source:
+      kind: Certificate
+      name: serving-cert
+    targets:
+      - fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1
+        select:
+          kind: ValidatingWebhookConfiguration
+          name: validating-webhook-configuration
+      - fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1
+        select:
+          kind: ValidatingWebhookConfiguration
+          name: validating-webhook-configuration
+  - source:
+      fieldPath: metadata.namespace
+      kind: Service
+      name: webhook-service
+    targets:
+      - fieldPaths:
+          - spec.dnsNames.0
+        options:
+          delimiter: .
+          index: 1
+        select:
+          group: cert-manager.io
+          kind: Certificate
+          name: serving-cert
+          namespace: system
+          version: v1
+      - fieldPaths:
+          - spec.dnsNames.1
+        options:
+          delimiter: .
+          index: 1
+        select:
+          group: cert-manager.io
+          kind: Certificate
+          name: serving-cert
+          namespace: system
+          version: v1
+  - source:
+      kind: Service
+      name: webhook-service
+    targets:
+      - fieldPaths:
+          - spec.dnsNames.0
+        options:
+          delimiter: .
+        select:
+          group: cert-manager.io
+          kind: Certificate
+          name: serving-cert
+          namespace: system
+          version: v1
+      - fieldPaths:
+          - spec.dnsNames.1
+        options:
+          delimiter: .
+        select:
+          group: cert-manager.io
+          kind: Certificate
+          name: serving-cert
+          namespace: system
+          version: v1
+      - fieldPaths:
+          - spec.secretName
+        options:
+          delimiter: "-"
+        select:
+          group: cert-manager.io
+          kind: Certificate
+          name: serving-cert
+          namespace: system
+          version: v1
+      - fieldPaths:
+          - spec.template.spec.volumes.0.secret.secretName
+        options:
+          delimiter: "-"
+        select:
+          kind: Deployment
+          name: controller-manager
+          namespace: system

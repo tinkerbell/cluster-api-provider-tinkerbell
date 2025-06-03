@@ -3,12 +3,16 @@ package machine
 import (
 	"fmt"
 
-	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
+	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+func toPtr[T any](v T) *T {
+	return &v
+}
 
 // createPowerOffJob creates a BMCJob object with the required tasks for hardware power off.
 func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error {
@@ -34,7 +38,7 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 			},
 			Tasks: []rufiov1.Action{
 				{
-					PowerAction: rufiov1.PowerHardOff.Ptr(),
+					PowerAction: toPtr(rufiov1.PowerHardOff),
 				},
 			},
 		},

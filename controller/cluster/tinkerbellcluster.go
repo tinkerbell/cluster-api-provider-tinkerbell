@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
@@ -256,11 +257,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (tcr *TinkerbellClusterReconciler) SetupWithManager(
-	ctx context.Context,
-	mgr ctrl.Manager,
-	options controller.Options,
-) error {
+func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sch *runtime.Scheme) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	mapper := util.ClusterToInfrastructureMapFunc(
@@ -273,12 +270,12 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrastructurev1.TinkerbellCluster{}).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, tcr.WatchFilterValue)).
-		WithEventFilter(predicates.ResourceIsNotExternallyManaged(log)).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sch, log, tcr.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceIsNotExternallyManaged(sch, log)).
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(mapper),
-			builder.WithPredicates(predicates.ClusterUnpaused(log)),
+			builder.WithPredicates(predicates.ClusterUnpaused(sch, log)),
 		)
 
 	if err := builder.Complete(tcr); err != nil {

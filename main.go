@@ -37,12 +37,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
-
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	captctrl "github.com/tinkerbell/cluster-api-provider-tinkerbell/controller"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	// +kubebuilder:scaffold:imports
@@ -61,8 +59,8 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
-	_ = tinkv1.AddToScheme(scheme)
-	_ = rufiov1.AddToScheme(scheme)
+	_ = captctrl.AddToSchemeTinkerbell(scheme)
+	_ = captctrl.AddToSchemeBMC(scheme)
 
 	// +kubebuilder:scaffold:scheme
 }
@@ -224,14 +222,14 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	if err := (&cluster.TinkerbellClusterReconciler{
 		Client:           mgr.GetClient(),
 		WatchFilterValue: watchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellClusterConcurrency}); err != nil {
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellClusterConcurrency}, scheme); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster controller:%w", err)
 	}
 
 	if err := (&machine.TinkerbellMachineReconciler{
 		Client:           mgr.GetClient(),
 		WatchFilterValue: watchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellMachineConcurrency}); err != nil {
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellMachineConcurrency}, scheme); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine controller:%w", err)
 	}
 
