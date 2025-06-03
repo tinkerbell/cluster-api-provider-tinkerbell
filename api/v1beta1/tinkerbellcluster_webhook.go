@@ -31,8 +31,10 @@ const (
 	defaultUbuntuVersion = "20.04"
 )
 
-var _ webhook.CustomValidator = &TinkerbellCluster{}
-var _ webhook.CustomDefaulter = &TinkerbellCluster{}
+var (
+	_ webhook.CustomValidator = &TinkerbellCluster{}
+	_ webhook.CustomDefaulter = &TinkerbellCluster{}
+)
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (c *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -48,7 +50,7 @@ func (c *TinkerbellCluster) ValidateCreate(context.Context, runtime.Object) (adm
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateUpdate(context.Context, runtime.Object, runtime.Object) (admission.Warnings, error) {
+func (c *TinkerbellCluster) ValidateUpdate(context.Context, runtime.Object, runtime.Object) (admission.Warnings, error) { //nolint:lll
 	return nil, nil
 }
 
@@ -66,18 +68,13 @@ func defaultVersionForOSDistro(distro string) string {
 }
 
 // Default implements webhookutil.defaulter so a webhook will be registered for the type.
-func (c *TinkerbellCluster) Default(ctx context.Context, obj runtime.Object) error {
-	tc, ok := obj.(*TinkerbellCluster)
-	if !ok {
-		return nil
-	}
-	
-	if tc.Spec.ImageLookupFormat == "" {
-		tc.Spec.ImageLookupFormat = "{{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz"
+func (c *TinkerbellCluster) Default(context.Context, runtime.Object) error {
+	if c.Spec.ImageLookupFormat == "" {
+		c.Spec.ImageLookupFormat = "{{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz"
 	}
 
-	if tc.Spec.ImageLookupOSVersion == "" {
-		tc.Spec.ImageLookupOSVersion = defaultVersionForOSDistro(tc.Spec.ImageLookupOSDistro)
+	if c.Spec.ImageLookupOSVersion == "" {
+		c.Spec.ImageLookupOSVersion = defaultVersionForOSDistro(c.Spec.ImageLookupOSDistro)
 	}
 
 	return nil

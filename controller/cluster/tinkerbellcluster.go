@@ -257,7 +257,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sch *runtime.Scheme) error {
+func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sch *runtime.Scheme) error { //nolint:lll
 	log := ctrl.LoggerFrom(ctx)
 
 	mapper := util.ClusterToInfrastructureMapFunc(

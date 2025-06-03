@@ -1,3 +1,4 @@
+// Package controller provides the controller-runtime scheme for Tinkerbell and BMC resources.
 package controller
 
 import (
@@ -6,20 +7,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
+//nolint:gochecknoglobals
 var (
-	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+	// SchemeBuilderTinkerbell is used to add go types to the GroupVersionKind scheme.
 	SchemeBuilderTinkerbell = &scheme.Builder{GroupVersion: tinkerbell.GroupVersion}
 
-	// AddToScheme adds the types in this group-version to the given scheme.
+	// AddToSchemeTinkerbell adds the types in this group-version to the given scheme.
 	AddToSchemeTinkerbell = SchemeBuilderTinkerbell.AddToScheme
 
-	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+	// SchemeBuilderBMC is used to add go types to the GroupVersionKind scheme.
 	SchemeBuilderBMC = &scheme.Builder{GroupVersion: bmc.GroupVersion}
 
-	// AddToScheme adds the types in this group-version to the given scheme.
+	// AddToSchemeBMC adds the types in this group-version to the given scheme.
 	AddToSchemeBMC = SchemeBuilderBMC.AddToScheme
 )
 
+//nolint:gochecknoinits
 func init() {
 	SchemeBuilderTinkerbell.Register(&tinkerbell.Hardware{}, &tinkerbell.HardwareList{})
 	SchemeBuilderTinkerbell.Register(&tinkerbell.Template{}, &tinkerbell.TemplateList{})

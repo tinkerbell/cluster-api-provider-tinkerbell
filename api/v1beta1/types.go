@@ -19,7 +19,7 @@ package v1beta1
 // TinkerbellResourceStatus describes the status of a Tinkerbell resource.
 type TinkerbellResourceStatus int
 
-//nolint:gomnd,gochecknoglobals
+//nolint:gomnd,gochecknoglobals,revive
 var (
 	TinkerbellResourceStatusPending = TinkerbellResourceStatus(0)
 	TinkerbellResourceStatusRunning = TinkerbellResourceStatus(1)

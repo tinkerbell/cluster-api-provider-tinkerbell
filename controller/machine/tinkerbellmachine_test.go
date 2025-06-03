@@ -140,7 +140,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 		},
 	}
 
-	tinkCluster.Default(nil, nil)
+	_ = tinkCluster.Default(context.TODO(), nil)
 
 	return tinkCluster
 }
@@ -266,7 +266,7 @@ func validWorkflow(name, namespace string) *tinkv1.Workflow {
 					Name: name,
 					Actions: []tinkv1.Action{
 						{
-							Name:   name,
+							Name:  name,
 							State: tinkv1.WorkflowStateSuccess,
 						},
 					},

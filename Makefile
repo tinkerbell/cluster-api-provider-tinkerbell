@@ -51,7 +51,7 @@ GO_INSTALL = ./scripts/go_install.sh
 # Binaries.
 CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.2
 
-GOLANGCI_LINT_VER := v1.63.4
+GOLANGCI_LINT_VER := v1.64.8
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
@@ -107,7 +107,7 @@ endif
 # Build time versioning details.
 LDFLAGS := $(shell hack/version.sh)
 
-GOLANG_VERSION := 1.23
+GOLANG_VERSION := 1.24
 
 ## --------------------------------------
 ## Help

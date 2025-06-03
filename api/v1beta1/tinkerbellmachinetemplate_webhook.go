@@ -38,7 +38,7 @@ func (m *TinkerbellMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) er
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachinetemplates,versions=v1beta1,name=validation.tinkerbellmachinetemplate.infrastructure.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	var allErrs field.ErrorList
 
 	tmt, _ := obj.(*TinkerbellMachineTemplate)
@@ -58,7 +58,7 @@ func (m *TinkerbellMachineTemplate) ValidateCreate(ctx context.Context, obj runt
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateUpdate(ctx context.Context, old runtime.Object, newObj runtime.Object) (admission.Warnings, error) {
+func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, old runtime.Object, newObj runtime.Object) (admission.Warnings, error) { //nolint:lll
 	oldTMT, _ := old.(*TinkerbellMachineTemplate)
 	newTMT, _ := newObj.(*TinkerbellMachineTemplate)
 

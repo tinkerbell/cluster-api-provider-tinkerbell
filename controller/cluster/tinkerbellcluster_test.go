@@ -330,7 +330,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 		},
 	}
 
-	tinkCluster.Default(nil, nil)
+	_ = tinkCluster.Default(context.TODO(), nil)
 
 	return tinkCluster
 }
