@@ -73,7 +73,7 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 		switch scope.tinkerbellMachine.Spec.BootOptions.BootMode {
 		case v1beta1.BootMode("netboot"):
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("netboot")
-		case v1beta1.BootMode("iso"):
+		case v1beta1.BootMode("isoboot"):
 			if scope.tinkerbellMachine.Spec.BootOptions.ISOURL == "" {
 				return errISOBootURLRequired
 			}
@@ -87,7 +87,7 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			u.Path = path.Join(urlPath, strings.Replace(hw.Spec.Metadata.Instance.ID, ":", "-", 5), file)
 
 			workflow.Spec.BootOptions.ISOURL = u.String()
-			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("isoboot")
 		}
 	}
 
