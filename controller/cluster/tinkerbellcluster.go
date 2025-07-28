@@ -257,7 +257,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sch *runtime.Scheme) error { //nolint:lll
+func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sm *runtime.Scheme) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	mapper := util.ClusterToInfrastructureMapFunc(
@@ -270,12 +270,12 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mg
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrastructurev1.TinkerbellCluster{}).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sch, log, tcr.WatchFilterValue)).
-		WithEventFilter(predicates.ResourceIsNotExternallyManaged(sch, log)).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, tcr.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceIsNotExternallyManaged(sm, log)).
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(mapper),
-			builder.WithPredicates(predicates.ClusterUnpaused(sch, log)),
+			builder.WithPredicates(predicates.ClusterUnpaused(sm, log)),
 		)
 
 	if err := builder.Complete(tcr); err != nil {

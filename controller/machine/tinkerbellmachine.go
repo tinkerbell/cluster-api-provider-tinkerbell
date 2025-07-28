@@ -159,7 +159,12 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sch *runtime.Scheme) error { //nolint:lll
+func (r *TinkerbellMachineReconciler) SetupWithManager(
+	ctx context.Context,
+	mgr ctrl.Manager,
+	options controller.Options,
+	sm *runtime.Scheme,
+) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	clusterToObjectFunc, err := util.ClusterToTypedObjectsMapper(
@@ -173,7 +178,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sch, log, r.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, r.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
 		Watches(
 			&clusterv1.Machine{},
@@ -188,7 +193,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
-			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureReady(sch, log)),
+			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(sm, log)),
 		).
 		Watches(
 			&tinkv1.Workflow{},
