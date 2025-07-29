@@ -47,3 +47,54 @@ The following repositories are required for the CAPT development setup.
     ```
 
 1. Enter `y` in the CAPT Playground prompt and follow the post creation instructions.
+
+## Pivot the CAPI and CAPT management components to the created Tinkerbell cluster
+
+To test and play with the CAPI pivot process, move the CAPI and CAPT management components from the KinD cluster to the new Tinkerbell cluster.
+
+```bash
+task pivot
+```
+
+### Understanding the pivot process
+
+The pivot process follows the CAPI process defined in the [CAPI documentation](https://cluster-api.sigs.k8s.io/clusterctl/commands/move#bootstrap--pivot). The following are example steps of what the command `task pivot` does. Inspect the playground file `Taskfile-capi-pivot.yaml`, run `task pivot --dry`, and see the output after running `task pivot` to see the actual commands that are executed.
+
+Example steps:
+
+1. Create the CAPT Playground cluster:
+
+   ```bash
+   task create-playground
+   ```
+
+1. Install the Tinkerbell stack in the new cluster:
+
+   ```bash
+   export KUBECONFIG=output/capt-playground.kubeconfig
+   TRUSTED_PROXIES=$(kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}' | tr ' ' ',')
+   LB_IP=172.18.10.84
+   ARTIFACTS_FILE_SERVER=http://172.18.10.85:7173
+   helm upgrade --install tinkerbell oci://ghcr.io/tinkerbell/charts/tinkerbell --version v0.19.2-5d22212c --create-namespace --namespace tinkerbell --wait --set "trustedProxies={${TRUSTED_PROXIES}}" --set "publicIP=$LB_IP" --set "artifactsFileServer=$ARTIFACTS_FILE_SERVER"
+   ```
+
+1. Initialize CAPI in the cluster:
+
+   ```bash
+   export KUBECONFIG=output/capt-playground.kubeconfig
+   export TINKERBELL_IP=172.18.10.84
+   clusterctl --config output/clusterctl.yaml init --infrastructure tinkerbell
+   ```
+
+1. Move the CAPI resources from the KinD cluster to the new cluster:
+
+   ```bash
+   export KUBECONFIG=output/kind.kubeconfig
+   clusterctl move --to-kubeconfig="output/capt-playground.kubeconfig" --config output/clusterctl.yaml --kubeconfig output/kind.kubeconfig -n tinkerbell
+   ```
+
+1. Delete the KinD cluster:
+
+   ```bash
+    kind delete cluster --name capt-playground
+    ```
