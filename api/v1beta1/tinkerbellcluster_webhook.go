@@ -50,7 +50,7 @@ func (c *TinkerbellCluster) ValidateCreate(context.Context, runtime.Object) (adm
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateUpdate(context.Context, runtime.Object, runtime.Object) (admission.Warnings, error) { //nolint:lll
+func (c *TinkerbellCluster) ValidateUpdate(context.Context, runtime.Object, runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 

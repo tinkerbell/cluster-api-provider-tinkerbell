@@ -87,8 +87,6 @@ func (tcr *TinkerbellClusterReconciler) validate() error {
 // If unexpected case occurs, error is returned.
 //
 // If some data is not yet available, nil is returned.
-//
-//nolint:lll
 func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (*clusterReconcileContext, error) {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -228,7 +226,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	if !crc.tinkerbellCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !crc.tinkerbellCluster.DeletionTimestamp.IsZero() {
 		if annotations.HasPaused(crc.tinkerbellCluster) {
 			crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile deletion")
 

@@ -99,27 +99,27 @@ func initFlags(fs *pflag.FlagSet) { //nolint:funlen
 		&enableLeaderElection,
 		"leader-elect",
 		false,
-		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.", //nolint:lll
+		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.",
 	)
 
 	fs.DurationVar(
 		&leaderElectionLeaseDuration,
 		"leader-elect-lease-duration",
-		15*time.Second, //nolint:gomnd
+		15*time.Second,
 		"Interval at which non-leader candidates will wait to force acquire leadership (duration string)",
 	)
 
 	fs.DurationVar(
 		&leaderElectionRenewDeadline,
 		"leader-elect-renew-deadline",
-		10*time.Second, //nolint:gomnd
+		10*time.Second,
 		"Duration that the leading controller manager will retry refreshing leadership before giving up (duration string)",
 	)
 
 	fs.DurationVar(
 		&leaderElectionRetryPeriod,
 		"leader-elect-retry-period",
-		2*time.Second, //nolint:gomnd
+		2*time.Second,
 		"Duration the LeaderElector clients should wait between tries of actions (duration string)",
 	)
 
@@ -134,7 +134,7 @@ func initFlags(fs *pflag.FlagSet) { //nolint:funlen
 		&leaderElectionNamespace,
 		"leader-election-namespace",
 		"",
-		"Namespace that the controller performs leader election in. If unspecified, the controller will discover which namespace it is running in.", //nolint:lll
+		"Namespace that the controller performs leader election in. If unspecified, the controller will discover which namespace it is running in.",
 	)
 
 	fs.StringVar(
@@ -153,43 +153,43 @@ func initFlags(fs *pflag.FlagSet) { //nolint:funlen
 
 	fs.IntVar(&tinkerbellClusterConcurrency,
 		"tinkerbellcluster-concurrency",
-		10, //nolint:gomnd
+		10,
 		"Number of TinkerbellClusters to process simultaneously",
 	)
 
 	fs.IntVar(&tinkerbellMachineConcurrency,
 		"tinkerbellmachine-concurrency",
-		10, //nolint:gomnd
+		10,
 		"Number of TinkerbellMachines to process simultaneously",
 	)
 
 	fs.IntVar(&tinkerbellHardwareConcurrency,
 		"tinkerbell-hardware-concurrency",
-		10, //nolint:gomnd
+		10,
 		"Number of Tinkerbell Hardware resources to process simultaneously",
 	)
 
 	fs.IntVar(&tinkerbellTemplateConcurrency,
 		"tinkerbell-template-concurrency",
-		10, //nolint:gomnd
+		10,
 		"Number of Tinkerbell Template resources to process simultaneously",
 	)
 
 	fs.IntVar(&tinkerbellWorkflowConcurrency,
 		"tinkerbell-workflow-concurrency",
-		10, //nolint:gomnd
+		10,
 		"Number of Tinkerbell Workflow resources to process simultaneously",
 	)
 
 	fs.DurationVar(&syncPeriod,
 		"sync-period",
-		10*time.Minute, //nolint:gomnd
+		10*time.Minute,
 		"The minimum interval at which watched resources are reconciled (e.g. 15m)",
 	)
 
 	fs.IntVar(&webhookPort,
 		"webhook-port",
-		9443, //nolint:gomnd
+		9443,
 		"Webhook Server port",
 	)
 
@@ -278,7 +278,7 @@ func main() { //nolint:funlen
 	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
 	// Setting the burst size higher ensures all events will be recorded and submitted to the API
 	broadcaster := cgrecord.NewBroadcasterWithCorrelatorOptions(cgrecord.CorrelatorOptions{
-		BurstSize: 100, //nolint:gomnd
+		BurstSize: 100,
 	})
 	opts := ctrl.Options{
 		Scheme: scheme,

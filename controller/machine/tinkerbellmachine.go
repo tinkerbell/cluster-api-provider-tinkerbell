@@ -79,7 +79,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		client:            r.Client,
 	}
 
-	if err := r.Client.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("TinkerbellMachine not found")
 
@@ -193,7 +193,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
-			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(sm, log)),
+			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureReady(sm, log)),
 		).
 		Watches(
 			&tinkv1.Workflow{},
@@ -230,7 +230,7 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 		c, ok := o.(*infrastructurev1.TinkerbellCluster)
 		if !ok {
 			log.Error(
-				fmt.Errorf("expected a TinkerbellCluster but got a %T", o), //nolint:goerr113
+				fmt.Errorf("expected a TinkerbellCluster but got a %T", o), //nolint:err113
 				"failed to get TinkerbellMachine for TinkerbellCluster",
 			)
 
@@ -240,8 +240,8 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 		log = log.WithValues("TinkerbellCluster", c.Name, "Namespace", c.Namespace)
 
 		// Don't handle deleted TinkerbellClusters
-		if !c.ObjectMeta.DeletionTimestamp.IsZero() {
-			log.V(4).Info("TinkerbellCluster has a deletion timestamp, skipping mapping.") //nolint:gomnd
+		if !c.DeletionTimestamp.IsZero() {
+			log.V(4).Info("TinkerbellCluster has a deletion timestamp, skipping mapping.")
 
 			return nil
 		}

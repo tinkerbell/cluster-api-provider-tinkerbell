@@ -196,7 +196,7 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
 					Kind:       "TinkerbellMachine",
 					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.ObjectMeta.UID,
+					UID:        scope.tinkerbellMachine.UID,
 				},
 			},
 		},

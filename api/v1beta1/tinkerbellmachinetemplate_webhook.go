@@ -58,7 +58,7 @@ func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, obj runtim
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, old runtime.Object, newObj runtime.Object) (admission.Warnings, error) { //nolint:lll
+func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, old runtime.Object, newObj runtime.Object) (admission.Warnings, error) {
 	oldTMT, _ := old.(*TinkerbellMachineTemplate)
 	newTMT, _ := newObj.(*TinkerbellMachineTemplate)
 

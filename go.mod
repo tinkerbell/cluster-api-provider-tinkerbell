@@ -11,7 +11,7 @@ require (
 	github.com/onsi/gomega v1.38.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/pflag v1.0.7
-	github.com/tinkerbell/tinkerbell/api v0.19.2-0.20250728204715-5d22212c76e8
+	github.com/tinkerbell/tinkerbell/api v0.19.2
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.3
