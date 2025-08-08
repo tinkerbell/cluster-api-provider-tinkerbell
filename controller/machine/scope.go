@@ -149,6 +149,8 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		return errWorkflowFailed
 	case tinkv1.WorkflowStateTimeout, tinkv1.WorkflowState("STATE_TIMEOUT"):
 		return errWorkflowTimeout
+	case tinkv1.WorkflowStatePreparing, tinkv1.WorkflowStatePending, tinkv1.WorkflowStateRunning, tinkv1.WorkflowStatePost:
+		return nil
 	case tinkv1.WorkflowStateSuccess, tinkv1.WorkflowState("STATE_SUCCESS"):
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
@@ -156,6 +158,7 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
 			return fmt.Errorf("failed to patch hardware: %w", err)
 		}
+
 		return nil
 	}
 
