@@ -18,6 +18,8 @@ import (
 // errWorkflowFailed is the error returned when the workflow fails.
 var errWorkflowFailed = errors.New("workflow failed")
 
+var errWorkflowTimeout = errors.New("workflow timed out")
+
 // errISOBootURLRequired is the error returned when the isoURL is required for iso boot mode.
 var errISOBootURLRequired = errors.New("iso boot mode requires an isoURL")
 

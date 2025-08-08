@@ -143,19 +143,20 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		return fmt.Errorf("ensure template and workflow returned: %w", err)
 	}
 
-	if wf.Status.State == tinkv1.WorkflowStateFailed || wf.Status.State == tinkv1.WorkflowStateTimeout {
+	// STATE_* is needed for Helm charts <= 0.6.2
+	switch wf.Status.State {
+	case tinkv1.WorkflowStateFailed, tinkv1.WorkflowState("STATE_FAILED"):
 		return errWorkflowFailed
-	}
+	case tinkv1.WorkflowStateTimeout, tinkv1.WorkflowState("STATE_TIMEOUT"):
+		return errWorkflowTimeout
+	case tinkv1.WorkflowStateSuccess, tinkv1.WorkflowState("STATE_SUCCESS"):
+		scope.log.Info("Marking TinkerbellMachine as Ready")
+		scope.tinkerbellMachine.Status.Ready = true
 
-	if wf.Status.State != tinkv1.WorkflowStateSuccess {
+		if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
+			return fmt.Errorf("failed to patch hardware: %w", err)
+		}
 		return nil
-	}
-
-	scope.log.Info("Marking TinkerbellMachine as Ready")
-	scope.tinkerbellMachine.Status.Ready = true
-
-	if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
-		return fmt.Errorf("failed to patch hardware: %w", err)
 	}
 
 	return nil
