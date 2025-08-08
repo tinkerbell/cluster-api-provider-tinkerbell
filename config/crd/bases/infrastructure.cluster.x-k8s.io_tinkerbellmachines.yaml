@@ -68,10 +68,11 @@ spec:
                   bootMode:
                     description: |-
                       BootMode is the type of booting that will be done.
-                      Must be one of "none", "netboot", or "isoboot".
+                      Must be one of "none", "netboot", "iso", or "isoboot".
                     enum:
                     - none
                     - netboot
+                    - iso
                     - isoboot
                     type: string
                   isoURL:
