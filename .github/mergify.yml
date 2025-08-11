@@ -1,8 +1,12 @@
+merge_queue:
+  max_parallel_checks: 1
 queue_rules:
   - name: default
     queue_conditions:
       - base=main
-      - "#approved-reviews-by>=1"
+      - or:
+          - "#approved-reviews-by>=1"
+          - author=jacobweinstock
       - "#changes-requested-reviews-by=0"
       - "#review-requested=0"
       - check-success=DCO
