@@ -125,7 +125,7 @@ func (scope *machineReconcileScope) Reconcile() error {
 	return scope.reconcile(hw)
 }
 
-func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error { //nolint: cyclop // this is broken up as best as possible, at the moment.
+func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error { //nolint:cyclop // this is broken up as best as possible, at the moment.
 	// If the workflow has completed the TinkerbellMachine is ready.
 	if v, found := hw.GetAnnotations()[HardwareProvisionedAnnotation]; found && v == "true" {
 		scope.log.Info("Marking TinkerbellMachine as Ready")
