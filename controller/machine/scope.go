@@ -160,9 +160,9 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		}
 
 		return nil
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 func (scope *machineReconcileScope) setStatus(hw *tinkv1.Hardware) error {

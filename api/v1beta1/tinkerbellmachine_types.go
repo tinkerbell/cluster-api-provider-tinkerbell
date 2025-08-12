@@ -25,6 +25,13 @@ const (
 	// MachineFinalizer allows ReconcileTinkerbellMachine to clean up Tinkerbell resources before
 	// removing it from the apiserver.
 	MachineFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
+
+	// BootModeNetboot is the mode for networking booting.
+	BootModeNetboot BootMode = "netboot"
+	// BootModeISO is the mode for ISO booting. This is deprecated, use BootModeIsoboot instead.
+	BootModeISO BootMode = "iso"
+	// BootModeIsoboot is the mode for ISO booting.
+	BootModeIsoboot BootMode = "isoboot"
 )
 
 // BootMode defines the type of booting that will be done. i.e. netboot, iso, etc.

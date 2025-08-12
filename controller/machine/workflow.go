@@ -73,9 +73,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 	// CAPT was creating the BMCJob.
 	if hw.Spec.BMCRef != nil {
 		switch scope.tinkerbellMachine.Spec.BootOptions.BootMode {
-		case v1beta1.BootMode("netboot"):
-			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("netboot")
-		case v1beta1.BootMode("iso"), v1beta1.BootMode("isoboot"):
+		case v1beta1.BootModeNetboot:
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeNetboot
+		case v1beta1.BootModeISO, v1beta1.BootModeIsoboot:
 			if scope.tinkerbellMachine.Spec.BootOptions.ISOURL == "" {
 				return errISOBootURLRequired
 			}
@@ -89,7 +89,11 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			u.Path = path.Join(urlPath, strings.Replace(hw.Spec.Metadata.Instance.ID, ":", "-", 5), file)
 
 			workflow.Spec.BootOptions.ISOURL = u.String()
-			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode(scope.tinkerbellMachine.Spec.BootOptions.BootMode)
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeIsoboot
+
+			if scope.tinkerbellMachine.Spec.BootOptions.BootMode == v1beta1.BootModeISO {
+				workflow.Spec.BootOptions.BootMode = tinkv1.BootModeISO
+			}
 		}
 	}
 
