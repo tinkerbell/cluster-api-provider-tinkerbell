@@ -19,13 +19,19 @@ package v1beta1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	capierrors "sigs.k8s.io/cluster-api/errors"
 )
 
 const (
 	// MachineFinalizer allows ReconcileTinkerbellMachine to clean up Tinkerbell resources before
 	// removing it from the apiserver.
 	MachineFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
+
+	// BootModeNetboot is the mode for networking booting.
+	BootModeNetboot BootMode = "netboot"
+	// BootModeISO is the mode for ISO booting. This is deprecated, use BootModeIsoboot instead.
+	BootModeISO BootMode = "iso"
+	// BootModeIsoboot is the mode for ISO booting.
+	BootModeIsoboot BootMode = "isoboot"
 )
 
 // BootMode defines the type of booting that will be done. i.e. netboot, iso, etc.
@@ -101,9 +107,9 @@ type BootOptions struct {
 	ISOURL string `json:"isoURL,omitempty"`
 
 	// BootMode is the type of booting that will be done.
-	// Must be one of "none", "netboot", or "iso".
+	// Must be one of "none", "netboot", "iso", or "isoboot".
 	// +optional
-	// +kubebuilder:validation:Enum=none;netboot;iso
+	// +kubebuilder:validation:Enum=none;netboot;iso;isoboot
 	BootMode BootMode `json:"bootMode,omitempty"`
 }
 
@@ -156,7 +162,7 @@ type TinkerbellMachineStatus struct {
 	// can be added as events to the Machine object and/or logged in the
 	// controller's output.
 	// +optional
-	ErrorReason *capierrors.MachineStatusError `json:"errorReason,omitempty"`
+	ErrorReason *string `json:"errorReason,omitempty"`
 
 	// ErrorMessage will be set in the event that there is a terminal problem
 	// reconciling the Machine and will contain a more verbose string suitable

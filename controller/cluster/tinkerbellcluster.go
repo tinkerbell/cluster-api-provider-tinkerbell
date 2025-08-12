@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
@@ -86,8 +87,6 @@ func (tcr *TinkerbellClusterReconciler) validate() error {
 // If unexpected case occurs, error is returned.
 //
 // If some data is not yet available, nil is returned.
-//
-//nolint:lll
 func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context, namespacedName types.NamespacedName) (*clusterReconcileContext, error) {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -227,7 +226,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	if !crc.tinkerbellCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !crc.tinkerbellCluster.DeletionTimestamp.IsZero() {
 		if annotations.HasPaused(crc.tinkerbellCluster) {
 			crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile deletion")
 
@@ -256,11 +255,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (tcr *TinkerbellClusterReconciler) SetupWithManager(
-	ctx context.Context,
-	mgr ctrl.Manager,
-	options controller.Options,
-) error {
+func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sm *runtime.Scheme) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	mapper := util.ClusterToInfrastructureMapFunc(
@@ -273,12 +268,12 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrastructurev1.TinkerbellCluster{}).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, tcr.WatchFilterValue)).
-		WithEventFilter(predicates.ResourceIsNotExternallyManaged(log)).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, tcr.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceIsNotExternallyManaged(sm, log)).
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(mapper),
-			builder.WithPredicates(predicates.ClusterUnpaused(log)),
+			builder.WithPredicates(predicates.ClusterUnpaused(sm, log)),
 		)
 
 	if err := builder.Complete(tcr); err != nil {

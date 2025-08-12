@@ -34,9 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 )
 
@@ -139,7 +140,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 		},
 	}
 
-	tinkCluster.Default()
+	_ = tinkCluster.Default(context.TODO(), nil)
 
 	return tinkCluster
 }
@@ -265,8 +266,8 @@ func validWorkflow(name, namespace string) *tinkv1.Workflow {
 					Name: name,
 					Actions: []tinkv1.Action{
 						{
-							Name:   name,
-							Status: tinkv1.WorkflowStateSuccess,
+							Name:  name,
+							State: tinkv1.WorkflowStateSuccess,
 						},
 					},
 				},
@@ -281,7 +282,7 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 
 	scheme := runtime.NewScheme()
 
-	g.Expect(tinkv1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell objects to scheme should succeed")
+	g.Expect(controller.AddToSchemeTinkerbell(scheme)).To(Succeed(), "Adding Tinkerbell objects to scheme should succeed")
 	g.Expect(infrastructurev1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell CAPI objects to scheme should succeed")
 	g.Expect(clusterv1.AddToScheme(scheme)).To(Succeed(), "Adding CAPI objects to scheme should succeed")
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed(), "Adding Core V1 objects to scheme should succeed")
@@ -332,7 +333,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 		// Owner reference is required to make use of Kubernetes GC for removing dependent objects, so if
 		// machine gets force-removed, template will be cleaned up.
-		t.Run("with_owner_reference_set", func(t *testing.T) {
+		t.Run("with_owner_reference_set", func(t *testing.T) { //nolint:paralleltest
 			g := NewWithT(t)
 
 			g.Expect(template.ObjectMeta.OwnerReferences).NotTo(BeEmpty(), "Expected at least one owner reference to be set")
@@ -352,7 +353,7 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 
 		// Owner reference is required to make use of Kubernetes GC for removing dependent objects, so if
 		// machine gets force-removed, workflow will be cleaned up.
-		t.Run("with_owner_reference_set", func(t *testing.T) {
+		t.Run("with_owner_reference_set", func(t *testing.T) { //nolint:paralleltest
 			g := NewWithT(t)
 
 			g.Expect(workflow.ObjectMeta.OwnerReferences).NotTo(BeEmpty(), "Expected at least one owner reference to be set")
@@ -589,49 +590,49 @@ func Test_Machine_reconciliation(t *testing.T) {
 		t.Parallel()
 
 		// Requeue will be handled when resource is created.
-		t.Run("is_requeued_when_machine_object_is_missing", //nolint:paralleltest
+		t.Run("is_requeued_when_machine_object_is_missing",
 			machineReconciliationIsRequeuedWhenTinkerbellMachineObjectIsMissing)
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when ownerRef is set
-		t.Run("machine_has_no_owner_set", machineReconciliationIsRequeuedWhenTinkerbellMachineHasNoOwnerSet) //nolint:paralleltest
+		t.Run("machine_has_no_owner_set", machineReconciliationIsRequeuedWhenTinkerbellMachineHasNoOwnerSet)
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when bootstrap secret is set through the Watch on Machines
-		t.Run("bootstrap_secret_is_not_ready", machineReconciliationIsRequeuedWhenBootstrapSecretIsNotReady) //nolint:paralleltest
+		t.Run("bootstrap_secret_is_not_ready", machineReconciliationIsRequeuedWhenBootstrapSecretIsNotReady)
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when bootstrap secret is set through the Watch on Clusters
-		t.Run("cluster_infrastructure_is_not_ready", machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady) //nolint:paralleltest
+		t.Run("cluster_infrastructure_is_not_ready", machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady)
 	})
 
 	t.Run("fails_when", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("reconciler_is_nil", machineReconciliationPanicsWhenReconcilerIsNil)                     //nolint:paralleltest
-		t.Run("reconciler_has_no_client_set", machineReconciliationPanicsWhenReconcilerHasNoClientSet) //nolint:paralleltest
+		t.Run("reconciler_is_nil", machineReconciliationPanicsWhenReconcilerIsNil)
+		t.Run("reconciler_has_no_client_set", machineReconciliationPanicsWhenReconcilerHasNoClientSet)
 
 		// CAPI spec says this is optional, but @detiber says it's effectively required, so treat it as so.
-		t.Run("machine_has_no_version_set", machineReconciliationFailsWhenMachineHasNoVersionSet) //nolint:paralleltest
+		t.Run("machine_has_no_version_set", machineReconciliationFailsWhenMachineHasNoVersionSet)
 
-		t.Run("associated_cluster_object_does_not_exist", //nolint:paralleltest
+		t.Run("associated_cluster_object_does_not_exist",
 			machineReconciliationFailsWhenAssociatedClusterObjectDoesNotExist)
 
-		t.Run("associated_tinkerbell_cluster_object_does_not_exist", //nolint:paralleltest
+		t.Run("associated_tinkerbell_cluster_object_does_not_exist",
 			machineReconciliationFailsWhenAssociatedTinkerbellClusterObjectDoesNotExist)
 
 		// If for example CAPI changes key used to store bootstrap date, we shouldn't try to create machines
 		// with empty bootstrap config, we should fail early instead.
-		t.Run("bootstrap_config_is_empty", machineReconciliationFailsWhenBootstrapConfigIsEmpty)               //nolint:paralleltest
-		t.Run("bootstrap_config_has_no_value_key", machineReconciliationFailsWhenBootstrapConfigHasNoValueKey) //nolint:paralleltest
+		t.Run("bootstrap_config_is_empty", machineReconciliationFailsWhenBootstrapConfigIsEmpty)
+		t.Run("bootstrap_config_has_no_value_key", machineReconciliationFailsWhenBootstrapConfigHasNoValueKey)
 
-		t.Run("there_is_no_hardware_available", machineReconciliationFailsWhenThereIsNoHardwareAvailable) //nolint:paralleltest
+		t.Run("there_is_no_hardware_available", machineReconciliationFailsWhenThereIsNoHardwareAvailable)
 
-		t.Run("selected_hardware_has_no_ip_address_set", machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet) //nolint:paralleltest
+		t.Run("selected_hardware_has_no_ip_address_set", machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet)
 	})
 
 	// Single hardware should only ever be used for a single machine.
-	t.Run("selects_unique_and_available_hardware_for_each_machine", //nolint:paralleltest
+	t.Run("selects_unique_and_available_hardware_for_each_machine",
 		machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachine)
 
 	t.Run("selects_unique_and_available_hardware_for_each_machine_filtering_by_required_hardware_affinity", //nolint:paralleltest
@@ -647,17 +648,17 @@ func Test_Machine_reconciliation(t *testing.T) {
 	// misspelling process is aborted in the middle.
 	//
 	// Without that, new Hardware will be selected each time.
-	t.Run("uses_already_selected_hardware_if_patching_tinkerbell_machine_failed", //nolint:paralleltest
+	t.Run("uses_already_selected_hardware_if_patching_tinkerbell_machine_failed",
 		machineReconciliationUsesAlreadySelectedHardwareIfPatchingTinkerbellMachineFailed)
 
 	t.Run("when_machine_is_scheduled_for_removal_it", func(t *testing.T) {
 		t.Parallel()
 
 		// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#behavior
-		t.Run("removes_tinkerbell_finalizer", notImplemented) //nolint:paralleltest
+		t.Run("removes_tinkerbell_finalizer", notImplemented)
 
 		// Removing machine should release used hardware.
-		t.Run("marks_hardware_as_available_for_other_machines", notImplemented) //nolint:paralleltest
+		t.Run("marks_hardware_as_available_for_other_machines", notImplemented)
 	})
 }
 
@@ -800,7 +801,7 @@ func machineReconciliationIsRequeuedWhenTinkerbellMachineHasNoOwnerSet(t *testin
 	g := NewWithT(t)
 	hardwareUUID := uuid.New().String()
 	tinkerbellMachine := validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID)
-	tinkerbellMachine.ObjectMeta.OwnerReferences = nil
+	tinkerbellMachine.OwnerReferences = nil
 
 	objects := []runtime.Object{
 		tinkerbellMachine,
@@ -1069,7 +1070,7 @@ func machineReconciliationUsesAlreadySelectedHardwareIfPatchingTinkerbellMachine
 
 	expectedHardwareName := "alreadyOwnedHardware"
 	alreadyOwnedHardware := validHardware(expectedHardwareName, uuid.New().String(), "2.2.2.2")
-	alreadyOwnedHardware.ObjectMeta.Labels = map[string]string{
+	alreadyOwnedHardware.Labels = map[string]string{
 		machine.HardwareOwnerNameLabel:      tinkerbellMachineName,
 		machine.HardwareOwnerNamespaceLabel: clusterNamespace,
 	}

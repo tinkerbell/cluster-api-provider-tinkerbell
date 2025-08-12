@@ -9,7 +9,7 @@ import (
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +17,8 @@ import (
 
 // errWorkflowFailed is the error returned when the workflow fails.
 var errWorkflowFailed = errors.New("workflow failed")
+
+var errWorkflowTimeout = errors.New("workflow timed out")
 
 // errISOBootURLRequired is the error returned when the isoURL is required for iso boot mode.
 var errISOBootURLRequired = errors.New("iso boot mode requires an isoURL")
@@ -52,7 +54,7 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
 					Kind:       "TinkerbellMachine",
 					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.ObjectMeta.UID,
+					UID:        scope.tinkerbellMachine.UID,
 					Controller: &c,
 				},
 			},
@@ -71,9 +73,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 	// CAPT was creating the BMCJob.
 	if hw.Spec.BMCRef != nil {
 		switch scope.tinkerbellMachine.Spec.BootOptions.BootMode {
-		case v1beta1.BootMode("netboot"):
-			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("netboot")
-		case v1beta1.BootMode("iso"):
+		case v1beta1.BootModeNetboot:
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeNetboot
+		case v1beta1.BootModeISO, v1beta1.BootModeIsoboot:
 			if scope.tinkerbellMachine.Spec.BootOptions.ISOURL == "" {
 				return errISOBootURLRequired
 			}
@@ -87,7 +89,11 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			u.Path = path.Join(urlPath, strings.Replace(hw.Spec.Metadata.Instance.ID, ":", "-", 5), file)
 
 			workflow.Spec.BootOptions.ISOURL = u.String()
-			workflow.Spec.BootOptions.BootMode = tinkv1.BootMode("iso")
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeIsoboot
+
+			if scope.tinkerbellMachine.Spec.BootOptions.BootMode == v1beta1.BootModeISO {
+				workflow.Spec.BootOptions.BootMode = tinkv1.BootModeISO
+			}
 		}
 	}
 

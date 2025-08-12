@@ -23,6 +23,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
@@ -35,8 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	rufiov1 "github.com/tinkerbell/rufio/api/v1alpha1"
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
+	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -78,7 +79,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		client:            r.Client,
 	}
 
-	if err := r.Client.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("TinkerbellMachine not found")
 
@@ -162,6 +163,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 	ctx context.Context,
 	mgr ctrl.Manager,
 	options controller.Options,
+	sm *runtime.Scheme,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -176,7 +178,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(log, r.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, r.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
 		Watches(
 			&clusterv1.Machine{},
@@ -191,7 +193,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
-			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(log)),
+			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureReady(sm, log)),
 		).
 		Watches(
 			&tinkv1.Workflow{},
@@ -228,7 +230,7 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 		c, ok := o.(*infrastructurev1.TinkerbellCluster)
 		if !ok {
 			log.Error(
-				fmt.Errorf("expected a TinkerbellCluster but got a %T", o), //nolint:goerr113
+				fmt.Errorf("expected a TinkerbellCluster but got a %T", o), //nolint:err113
 				"failed to get TinkerbellMachine for TinkerbellCluster",
 			)
 
@@ -238,8 +240,8 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 		log = log.WithValues("TinkerbellCluster", c.Name, "Namespace", c.Namespace)
 
 		// Don't handle deleted TinkerbellClusters
-		if !c.ObjectMeta.DeletionTimestamp.IsZero() {
-			log.V(4).Info("TinkerbellCluster has a deletion timestamp, skipping mapping.") //nolint:gomnd
+		if !c.DeletionTimestamp.IsZero() {
+			log.V(4).Info("TinkerbellCluster has a deletion timestamp, skipping mapping.")
 
 			return nil
 		}

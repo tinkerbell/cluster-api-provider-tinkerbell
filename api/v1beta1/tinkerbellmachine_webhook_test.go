@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1_test
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
@@ -81,9 +82,9 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 			},
 		},
 	} {
-		_, err := machine.ValidateCreate()
+		_, err := machine.ValidateCreate(context.Background(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
-		_, err = machine.ValidateUpdate(existingValidMachine)
+		_, err = machine.ValidateUpdate(context.Background(), existingValidMachine, &machine)
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 }
@@ -129,9 +130,9 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 			},
 		},
 	} {
-		_, err := machine.ValidateCreate()
+		_, err := machine.ValidateCreate(context.Background(), nil)
 		g.Expect(err).To(HaveOccurred())
-		_, err = machine.ValidateUpdate(existingValidMachine)
+		_, err = machine.ValidateUpdate(context.Background(), existingValidMachine, &machine)
 		g.Expect(err).To(HaveOccurred())
 	}
 }

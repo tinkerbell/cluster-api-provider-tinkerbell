@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/go-logr/logr"
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -125,9 +125,9 @@ func (scope *machineReconcileScope) Reconcile() error {
 	return scope.reconcile(hw)
 }
 
-func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
+func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error { //nolint:cyclop // this is broken up as best as possible, at the moment.
 	// If the workflow has completed the TinkerbellMachine is ready.
-	if v, found := hw.ObjectMeta.GetAnnotations()[HardwareProvisionedAnnotation]; found && v == "true" {
+	if v, found := hw.GetAnnotations()[HardwareProvisionedAnnotation]; found && v == "true" {
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
 
@@ -143,22 +143,26 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error {
 		return fmt.Errorf("ensure template and workflow returned: %w", err)
 	}
 
-	if wf.Status.State == tinkv1.WorkflowStateFailed || wf.Status.State == tinkv1.WorkflowStateTimeout {
+	// STATE_* is needed for Helm charts <= 0.6.2
+	switch wf.Status.State {
+	case tinkv1.WorkflowStateFailed, tinkv1.WorkflowState("STATE_FAILED"):
 		return errWorkflowFailed
-	}
+	case tinkv1.WorkflowStateTimeout, tinkv1.WorkflowState("STATE_TIMEOUT"):
+		return errWorkflowTimeout
+	case tinkv1.WorkflowStatePreparing, tinkv1.WorkflowStatePending, tinkv1.WorkflowStateRunning, tinkv1.WorkflowStatePost:
+		return nil
+	case tinkv1.WorkflowStateSuccess, tinkv1.WorkflowState("STATE_SUCCESS"):
+		scope.log.Info("Marking TinkerbellMachine as Ready")
+		scope.tinkerbellMachine.Status.Ready = true
 
-	if wf.Status.State != tinkv1.WorkflowStateSuccess {
+		if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
+			return fmt.Errorf("failed to patch hardware: %w", err)
+		}
+
+		return nil
+	default:
 		return nil
 	}
-
-	scope.log.Info("Marking TinkerbellMachine as Ready")
-	scope.tinkerbellMachine.Status.Ready = true
-
-	if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
-		return fmt.Errorf("failed to patch hardware: %w", err)
-	}
-
-	return nil
 }
 
 func (scope *machineReconcileScope) setStatus(hw *tinkv1.Hardware) error {
@@ -193,7 +197,7 @@ func (scope *machineReconcileScope) setStatus(hw *tinkv1.Hardware) error {
 // MachineScheduledForDeletion implements machineReconcileContext interface method
 // using TinkerbellMachine deletion timestamp.
 func (scope *machineReconcileScope) MachineScheduledForDeletion() bool {
-	return !scope.tinkerbellMachine.ObjectMeta.DeletionTimestamp.IsZero()
+	return !scope.tinkerbellMachine.DeletionTimestamp.IsZero()
 }
 
 // DeleteMachineWithDependencies removes template and workflow objects associated with given machine.
@@ -358,7 +362,7 @@ func (scope *machineReconcileScope) getReadyBootstrapCloudConfig(machine *cluste
 }
 
 // getTinkerbellCluster returns associated TinkerbellCluster object for a given machine.
-func (scope *machineReconcileScope) getReadyTinkerbellCluster(machine *clusterv1.Machine) (*infrastructurev1.TinkerbellCluster, error) { //nolint:lll
+func (scope *machineReconcileScope) getReadyTinkerbellCluster(machine *clusterv1.Machine) (*infrastructurev1.TinkerbellCluster, error) {
 	cluster, err := util.GetClusterFromMetadata(scope.ctx, scope.client, machine.ObjectMeta)
 	if err != nil {
 		return nil, fmt.Errorf("getting cluster from metadata: %w", err)

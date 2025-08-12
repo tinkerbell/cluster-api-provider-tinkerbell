@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	tinkv1 "github.com/tinkerbell/tink/api/v1alpha1"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -196,7 +196,7 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
 					Kind:       "TinkerbellMachine",
 					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.ObjectMeta.UID,
+					UID:        scope.tinkerbellMachine.UID,
 				},
 			},
 		},
