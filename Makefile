@@ -29,9 +29,6 @@ GOPROXY := https://proxy.golang.org
 endif
 export GOPROXY
 
-# Active module mode, as we use go modules to manage dependencies
-export GO111MODULE=on
-
 # Default timeout for starting/stopping the Kubebuilder test control plane
 export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT ?=60s
 export KUBEBUILDER_CONTROLPLANE_STOP_TIMEOUT ?=60s
@@ -42,11 +39,7 @@ export DOCKER_CLI_EXPERIMENTAL := enabled
 CURL_RETRIES=3
 
 # Directories.
-ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-TOOLS_DIR := hack/tools
-TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
-BIN_DIR := $(abspath $(ROOT_DIR)/bin)
-GO_INSTALL = ./scripts/go_install.sh
+TOOLS_BIN_DIR := $(abspath bin)
 
 # Binaries.
 CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.18.0
@@ -55,28 +48,12 @@ GOLANGCI_LINT_VER := v2.3.0
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
+KUSTOMIZE_VER := v5.7.1
 KUSTOMIZE_BIN := kustomize
-KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)
-
-KUBECTL_VER := v1.33.0
-KUBECTL_BIN := kubectl
-KUBECTL := $(TOOLS_BIN_DIR)/$(KUBECTL_BIN)-$(KUBECTL_VER)
-
-KIND_VER := v0.29.0
-KIND_BIN := kind
-KIND := $(TOOLS_BIN_DIR)/$(KIND_BIN)-$(KIND_VER)
-
-toolsBins := $(addprefix ${TOOLS_BIN_DIR}/,$(notdir $(shell awk -F'"' '/^\s*_/ {print $$2}' tools.go | sed 's|/v[[:digit:]]\+||')))
-
-# installs cli tools defined in tools.go
-$(toolsBins): go.mod go.sum tools.go
-$(toolsBins): CMD=$(shell grep -w '$(@F)' tools.go | awk -F'"' '{print $$2}')
-$(toolsBins):
-	echo "Installing $(CMD)"
-	GOBIN=$(TOOLS_BIN_DIR) go install $(CMD)
+KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
 .PHONY: tools
-tools: ${toolsBins} ## Build Go based build tools
+tools: $(KUSTOMIZE) $(GOLANGCI_LINT) ## Install build tools
 
 TIMEOUT := $(shell command -v timeout || command -v gtimeout)
 
@@ -105,7 +82,7 @@ ifeq ($(SELINUX_ENABLED),1)
 endif
 
 # Build time versioning details.
-LDFLAGS := $(shell hack/version.sh)
+LDFLAGS := "-s -w"
 
 GOLANG_VERSION := 1.24
 
@@ -122,7 +99,7 @@ help:  ## Display this help
 
 .PHONY: test
 test: ## Run tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; go test -v ./... -coverprofile cover.out
+	go test -v ./... -coverprofile cover.out
 
 ## --------------------------------------
 ## Tooling Binaries
@@ -141,6 +118,11 @@ $(KIND): ## Build kind
 	curl --retry $(CURL_RETRIES) -fsL https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VER}/kind-${GOOS}-${GOARCH} -o ${KIND}
 	ln -sf "$(KIND)" "$(TOOLS_BIN_DIR)/$(KIND_BIN)"
 	chmod +x "$(TOOLS_BIN_DIR)/$(KIND_BIN)" "$(KIND)"
+
+$(KUSTOMIZE): ## Install kustomize
+	mkdir -p $(TOOLS_BIN_DIR)
+	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VER}
+	@mv $(TOOLS_BIN_DIR)/kustomize $(KUSTOMIZE)
 
 ## --------------------------------------
 ## Linting
@@ -192,19 +174,12 @@ modules: ## Runs go mod to ensure proper vendoring.
 generate: ## Generate code
 	$(MAKE) generate-go
 	$(MAKE) generate-manifests
-#	$(MAKE) generate-templates
-
-# .PHONY: generate-templates
-# generate-templates: tools ## Generate cluster templates
-# 	$(KUSTOMIZE) build templates/no-cloud-provider --load_restrictor none > templates/cluster-template-no-cloud-provider.yaml
-# 	$(KUSTOMIZE) build templates/legacy --load_restrictor none > templates/cluster-template-legacy.yaml
-# 	$(KUSTOMIZE) build templates/crs-cni-cpem --load_restrictor none > templates/cluster-template.yaml
 
 .PHONY: generate-go
 generate-go: tools ## Runs Go related generate targets
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
-		object:headerFile=./hack/boilerplate.go.txt
+		object:headerFile=./config/boilerplate.go.txt
 	go generate ./...
 
 .PHONY: generate-manifests
@@ -227,7 +202,7 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 
 .PHONY: docker-build
 docker-build: ## Build the docker image for controller-manager
-	docker build --no-cache --pull --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS="$(LDFLAGS)" . -t $(CONTROLLER_IMG)-$(ARCH):$(TAG)
+	docker build --no-cache --pull --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS=$(LDFLAGS) . -t $(CONTROLLER_IMG)-$(ARCH):$(TAG)
 	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
 	$(MAKE) set-manifest-pull-policy
 
@@ -309,17 +284,11 @@ release-local: ## Builds the manifests for use in local development
 ## --------------------------------------
 
 .PHONY: clean
-clean: clean-bin clean-temporary clean-release ## Remove all generated files
+clean: clean-bin clean-release ## Remove all generated files
 
 .PHONY: clean-bin
 clean-bin: ## Remove all generated binaries
 	rm -rf bin
-	rm -rf hack/tools/bin
-
-.PHONY: clean-temporary
-clean-temporary: ## Remove all temporary files and folders
-	rm -f minikube.kubeconfig
-	rm -f kubeconfig
 
 .PHONY: clean-release
 clean-release: ## Remove the release folder
@@ -328,13 +297,9 @@ clean-release: ## Remove the release folder
 .PHONY: verify
 verify: verify-modules verify-gen
 
-.PHONY: verify-boilerplate
-verify-boilerplate:
-	./hack/verify-boilerplate.sh
-
 .PHONY: verify-modules
 verify-modules: modules
-	@if !(git diff --quiet HEAD -- go.sum go.mod hack/tools/go.mod hack/tools/go.sum); then \
+	@if !(git diff --quiet HEAD -- go.sum go.mod); then \
 		echo "go module files are out of date"; exit 1; \
 	fi
 

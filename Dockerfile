@@ -35,7 +35,7 @@ COPY ./ ./
 # Build
 ARG ARCH
 ARG LDFLAGS
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -a -ldflags "${LDFLAGS} -extldflags '-static'" -o manager .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -a -ldflags="${LDFLAGS}" -o manager .
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

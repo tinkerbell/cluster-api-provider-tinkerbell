@@ -34,7 +34,6 @@ linters:
     - nakedret
     - nestif
     - nilerr
-    - nlreturn
     - noctx
     - nolintlint
     - paralleltest
@@ -44,7 +43,6 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
-    - testpackage
     - thelper
     - tparallel
     - unconvert
@@ -52,7 +50,6 @@ linters:
     - wastedassign
     - whitespace
     - wrapcheck
-    - wsl_v5
   settings:
     exhaustive:
       default-signifies-exhaustive: true
