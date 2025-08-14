@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
-	"k8s.io/component-base/version"
 	"k8s.io/klog/v2"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/record"
@@ -43,6 +42,7 @@ import (
 	captctrl "github.com/tinkerbell/cluster-api-provider-tinkerbell/controller"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/build"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -329,7 +329,7 @@ func main() { //nolint:funlen
 	}
 
 	// +kubebuilder:scaffold:builder
-	setupLog.Info("starting manager", "version", version.Get().String())
+	setupLog.Info("starting manager", "version", build.GitRevision())
 
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
