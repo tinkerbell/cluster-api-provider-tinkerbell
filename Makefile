@@ -183,13 +183,6 @@ modules: ## Runs go mod to ensure proper vendoring.
 generate: ## Generate code
 	$(MAKE) generate-go
 	$(MAKE) generate-manifests
-#	$(MAKE) generate-templates
-
-# .PHONY: generate-templates
-# generate-templates: tools ## Generate cluster templates
-# 	$(KUSTOMIZE) build templates/no-cloud-provider --load_restrictor none > templates/cluster-template-no-cloud-provider.yaml
-# 	$(KUSTOMIZE) build templates/legacy --load_restrictor none > templates/cluster-template-legacy.yaml
-# 	$(KUSTOMIZE) build templates/crs-cni-cpem --load_restrictor none > templates/cluster-template.yaml
 
 .PHONY: generate-go
 generate-go: tools ## Runs Go related generate targets
@@ -300,16 +293,11 @@ release-local: ## Builds the manifests for use in local development
 ## --------------------------------------
 
 .PHONY: clean
-clean: clean-bin clean-temporary clean-release ## Remove all generated files
+clean: clean-bin clean-release ## Remove all generated files
 
 .PHONY: clean-bin
 clean-bin: ## Remove all generated binaries
 	rm -rf bin
-
-.PHONY: clean-temporary
-clean-temporary: ## Remove all temporary files and folders
-	rm -f minikube.kubeconfig
-	rm -f kubeconfig
 
 .PHONY: clean-release
 clean-release: ## Remove the release folder
