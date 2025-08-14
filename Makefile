@@ -52,8 +52,12 @@ KUSTOMIZE_VER := v5.7.1
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
+GORELEASER_VER := v2.11.2
+GORELEASER_BIN := goreleaser
+GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
+
 .PHONY: tools
-tools: $(KUSTOMIZE) $(GOLANGCI_LINT) ## Install build tools
+tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) ## Install build tools
 
 TIMEOUT := $(shell command -v timeout || command -v gtimeout)
 
@@ -123,6 +127,11 @@ $(KUSTOMIZE): ## Install kustomize
 	mkdir -p $(TOOLS_BIN_DIR)
 	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VER}
 	@mv $(TOOLS_BIN_DIR)/kustomize $(KUSTOMIZE)
+
+$(GORELEASER): ## Install goreleaser
+	mkdir -p $(TOOLS_BIN_DIR)
+	GOBIN=$(TOOLS_BIN_DIR) go install github.com/goreleaser/goreleaser/v2@${GORELEASER_VER}
+	@mv $(TOOLS_BIN_DIR)/goreleaser $(GORELEASER)
 
 ## --------------------------------------
 ## Linting
