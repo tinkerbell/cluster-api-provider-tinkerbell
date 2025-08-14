@@ -89,7 +89,7 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: hack/tools/bin
+          path: bin
           key: ${{ runner.os }}-tools-bin-release-${{ hashFiles('Makefile') }}
           restore-keys: |
             ${{ runner.os }}-tools-bin-release-

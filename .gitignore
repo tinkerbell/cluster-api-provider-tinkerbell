@@ -43,4 +43,3 @@ dist
 
 # development / test / lints
 bin/
-hack/tools

@@ -1,7 +1,6 @@
 .github
 .vscode
 config/
-hack/
 docs/
 templates/
 scripts/

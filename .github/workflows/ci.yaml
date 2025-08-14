@@ -31,20 +31,11 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: hack/tools/bin
+          path: bin
           key: ${{ runner.os }}-tools-bin-${{ matrix.target }}-${{ hashFiles('Makefile') }}
           restore-keys: |
             ${{ runner.os }}-tools-bin-${{ matrix.target }}-
             ${{ runner.os }}-tools-bin-
-
-      - uses: actions/cache@v4
-        if: ${{ matrix.target == 'test' }}
-        with:
-          path: /tmp/kubebuilder-tools-*.tar.gz
-          key: ${{ runner.os }}-tmp-${{ matrix.target }}-${{ hashFiles('scripts/fetch_ext_bins.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-tmp-${{ matrix.target }}-
-            ${{ runner.os }}-tmp-
 
       - name: ${{ matrix.target }}
         run: make ${{ matrix.target }}
