@@ -52,12 +52,8 @@ KUSTOMIZE_VER := v5.7.1
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
-GINKGO_VER := v2.23.4
-GINKGO_BIN := ginkgo
-GINKGO := $(TOOLS_BIN_DIR)/$(GINKGO_BIN)-$(GINKGO_VER)
-
 .PHONY: tools
-tools: $(GINKGO) $(KUSTOMIZE) $(GOLANGCI_LINT) ## Install build tools
+tools: $(KUSTOMIZE) $(GOLANGCI_LINT) ## Install build tools
 
 TIMEOUT := $(shell command -v timeout || command -v gtimeout)
 
@@ -122,11 +118,6 @@ $(KIND): ## Build kind
 	curl --retry $(CURL_RETRIES) -fsL https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VER}/kind-${GOOS}-${GOARCH} -o ${KIND}
 	ln -sf "$(KIND)" "$(TOOLS_BIN_DIR)/$(KIND_BIN)"
 	chmod +x "$(TOOLS_BIN_DIR)/$(KIND_BIN)" "$(KIND)"
-
-$(GINKGO): ## Build ginkgo
-	mkdir -p $(TOOLS_BIN_DIR)
-	GOBIN=$(TOOLS_BIN_DIR) go install github.com/onsi/ginkgo/v2/ginkgo@${GINKGO_VER}
-	@mv $(TOOLS_BIN_DIR)/ginkgo $(GINKGO)
 
 $(KUSTOMIZE): ## Install kustomize
 	mkdir -p $(TOOLS_BIN_DIR)
