@@ -22,7 +22,7 @@ jobs:
         target: ["verify", "lint", "test"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-go@v5
         with:
@@ -44,7 +44,7 @@ jobs:
     name: Codespell
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Codespell
         uses: codespell-project/actions-codespell@v2.1
@@ -63,7 +63,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     
     - name: Login to ghcr.io
       if: github.event_name != 'pull_request'
