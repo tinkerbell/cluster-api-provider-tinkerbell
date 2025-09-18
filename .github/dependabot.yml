@@ -4,34 +4,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "04:39"
-      timezone: "America/New_York"
-    reviewers:
-      - chrisdoherty4
-      - jacobweinstock
+      day: "wednesday"
+      time: "07:00"
+      timezone: "America/Denver"
     open-pull-requests-limit: 10
 
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "friday"
-      time: "03:52"
-      timezone: "America/New_York"
-    reviewers:
-      - chrisdoherty4
-      - jacobweinstock
+      day: "wednesday"
+      time: "07:10"
+      timezone: "America/Denver"
     open-pull-requests-limit: 10
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "04:22"
-      timezone: "America/New_York"
-    reviewers:
-      - chrisdoherty4
-      - jacobweinstock
+      day: "wednesday"
+      time: "07:30"
+      timezone: "America/Denver"
     open-pull-requests-limit: 10
