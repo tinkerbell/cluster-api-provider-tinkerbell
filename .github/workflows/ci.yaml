@@ -82,6 +82,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    needs: build-binaries, codespell, validate
+    # Only build and push container images on pushes to tags
+    if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/'))
 
     steps:
     - name: Checkout
