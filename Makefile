@@ -211,7 +211,7 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 
 .PHONY: build
 build: generate ## Build the CAPT binary
-	${GORELEASER} release --snapshot --clean --skip ko
+	GOARCH=${ARCH} ${GORELEASER} build --snapshot --clean --single-target
 
 ## --------------------------------------
 ## Container image build

@@ -57,6 +57,11 @@ jobs:
   build-binaries:
     name: Build the CAPT binary
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+          - arch: arm64
     steps:
       - uses: actions/checkout@v5
 
@@ -66,12 +71,12 @@ jobs:
           cache: true
 
       - name: Build
-        run: make build
+        run: ARCH=${{ matrix.arch }} make build
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: capt-binaries
+          name: capt-${{ matrix.arch }}-binary
           path: |
             dist/*
           if-no-files-found: error
