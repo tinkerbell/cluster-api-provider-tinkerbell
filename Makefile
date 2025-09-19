@@ -52,7 +52,7 @@ KUSTOMIZE_VER := v5.7.1
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
-GORELEASER_VER := v2.11.2
+GORELEASER_VER := v2.12.2
 GORELEASER_BIN := goreleaser
 GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
 
@@ -206,28 +206,32 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 		rbac:roleName=manager-role
 
 ## --------------------------------------
-## Docker
+## Build
 ## --------------------------------------
 
-.PHONY: docker-build
-docker-build: ## Build the docker image for controller-manager
-	docker build --no-cache --pull --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS=$(LDFLAGS) . -t $(CONTROLLER_IMG)-$(ARCH):$(TAG)
+.PHONY: build
+build: generate ## Build the CAPT binary
+	${GORELEASER} release --snapshot --clean --skip ko
+
+## --------------------------------------
+## Container image build
+## --------------------------------------
+
+.PHONY: image-build
+image-build: build ## Build the container image
+	${GORELEASER} release --snapshot --clean
 	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
 	$(MAKE) set-manifest-pull-policy
-
-.PHONY: docker-push
-docker-push: ## Push the docker image
-	docker push $(CONTROLLER_IMG)-$(ARCH):$(TAG)
 
 ## --------------------------------------
 ## Docker — All ARCH
 ## --------------------------------------
 
-.PHONY: docker-build-all ## Build all the architecture docker images
-docker-build-all: $(addprefix docker-build-,$(ALL_ARCH))
+.PHONY: image-build-all ## Build all the architecture docker images
+image-build-all: $(addprefix image-build-,$(ALL_ARCH))
 
-docker-build-%:
-	$(MAKE) ARCH=$* docker-build
+image-build-%:
+	$(MAKE) ARCH=$* image-build
 
 .PHONY: docker-push-all ## Push all the architecture docker images
 docker-push-all: $(addprefix docker-push-,$(ALL_ARCH))

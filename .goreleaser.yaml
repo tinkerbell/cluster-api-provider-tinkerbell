@@ -12,43 +12,37 @@ before:
   hooks:
     # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
-    - go generate ./...
 
 builds:
-  - env:
+  - id: capt
+    binary: capt
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
+    ldflags:
+      - -s -w
     goarch:
       - amd64
       - arm64
 
 archives:
-  - formats: [tar.gz]
-    # this name template makes the OS and Arch compatible with the results of `uname`.
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+  - formats:
+    - binary
 
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-
-release:
-  footer: >-
-
-    ---
-
-    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+kos:
+  - id: capt
+    platforms:
+    - linux/amd64
+    - linux/arm64
+    tags:
+    - latest
+    - '{{.Tag}}'
+    bare: true
+    env:
+    - CGO_ENABLED=0
+    ldflags:
+    - -s -w
+    repositories:
+    - ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
+    local_domain: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell

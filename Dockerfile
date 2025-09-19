@@ -13,34 +13,36 @@
 # limitations under the License.
 
 # Build the manager binary
-ARG GOVER=1.24
-FROM golang:${GOVER} AS builder
-
-WORKDIR /workspace
-
-# Run this with docker build --build_arg $(go env GOPROXY) to override the goproxy
-ARG goproxy=https://proxy.golang.org
-ENV GOPROXY=$goproxy
-
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
-RUN go mod download
-
-# Copy the sources
-COPY ./ ./
-
-# Build
-ARG ARCH
-ARG LDFLAGS
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -a -ldflags="${LDFLAGS}" -o manager .
+#ARG GOVER=1.24
+#FROM golang:${GOVER} AS builder
+#
+#WORKDIR /workspace
+#
+## Run this with docker build --build_arg $(go env GOPROXY) to override the goproxy
+#ARG goproxy=https://proxy.golang.org
+#ENV GOPROXY=$goproxy
+#
+## Copy the Go Modules manifests
+#COPY go.mod go.mod
+#COPY go.sum go.sum
+## cache deps before building and copying source so that we don't need to re-download as much
+## and so that source changes don't invalidate our downloaded layer
+#RUN go mod download
+#
+## Copy the sources
+#COPY ./ ./
+#
+## Build
+#ARG ARCH
+#ARG LDFLAGS
+#RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -a -ldflags="${LDFLAGS}" -o manager .
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
+ARG TARGETARCH
 WORKDIR /
-COPY --from=builder /workspace/manager .
+#COPY --from=builder /workspace/manager .
+COPY dist/cluster-api-provider-tinkerbell_linux_${TARGETARCH}_v1/capt /capt
 USER nonroot:nonroot
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/capt"]
