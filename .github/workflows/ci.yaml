@@ -55,7 +55,7 @@ jobs:
           ignore_words_list: ro,NotIn
   
   build-binaries:
-    name: Build the CAPT binary
+    name: Build binary
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -73,7 +73,7 @@ jobs:
       - name: Build
         run: ARCH=${{ matrix.arch }} make build
 
-      - name: Upload binaries
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: capt-${{ matrix.arch }}-binary
