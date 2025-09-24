@@ -106,8 +106,6 @@ jobs:
 
       - name: manifest
         run: make release
-        env:
-          TAG: ${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
 
       - name: Generate Release Notes
         run: |

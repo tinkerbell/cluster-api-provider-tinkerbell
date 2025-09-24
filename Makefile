@@ -52,7 +52,6 @@ tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) $(CONTROLLER_GEN) ## Install 
 # Define Docker related variables. Releases should modify and double check these vars.
 REGISTRY ?= ghcr.io
 IMAGE_NAME ?= tinkerbell/cluster-api-provider-tinkerbell
-export TAG ?= dev
 
 # Allow overriding manifest generation destination directory
 MANIFEST_ROOT ?= config
@@ -60,13 +59,8 @@ CRD_ROOT ?= $(MANIFEST_ROOT)/crd/bases
 WEBHOOK_ROOT ?= $(MANIFEST_ROOT)/webhook
 RBAC_ROOT ?= $(MANIFEST_ROOT)/rbac
 
-# Allow overriding the imagePullPolicy
-PULL_POLICY ?= Always
-
 # Build time versioning details.
 LDFLAGS := "-s -w"
-
-GOLANG_VERSION := 1.24
 
 ## --------------------------------------
 ## Help
@@ -161,11 +155,6 @@ set-manifest-image:
 	$(info Updating kustomize image patch file for default resource)
 	sed -i'' -e 's@image: .*@image: '"${MANIFEST_IMG}:$(MANIFEST_TAG)"'@' ./config/default/manager_image_patch.yaml
 
-.PHONY: set-manifest-pull-policy
-set-manifest-pull-policy:
-	$(info Updating kustomize pull policy file for default resource)
-	sed -i'' -e 's@imagePullPolicy: .*@imagePullPolicy: '"$(PULL_POLICY)"'@' ./config/default/manager_pull_policy.yaml
-
 ## --------------------------------------
 ## Release
 ## --------------------------------------
@@ -178,8 +167,7 @@ $(RELEASE_DIR):
 
 .PHONY: release
 release: clean-release
-	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(IMAGE_NAME) MANIFEST_TAG=$(TAG)
-	$(MAKE) set-manifest-pull-policy PULL_POLICY=IfNotPresent
+	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(IMAGE_NAME) MANIFEST_TAG=$(RELEASE_TAG)
 	$(MAKE) release-manifests
 	$(MAKE) release-metadata
 	$(MAKE) release-templates
