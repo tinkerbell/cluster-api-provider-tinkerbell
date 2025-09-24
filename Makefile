@@ -138,17 +138,17 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 build: generate $(GORELEASER) ## Build the CAPT binary
 	${GORELEASER} build --snapshot --clean
 
-## --------------------------------------
-## Container image build
-## --------------------------------------
-
 .PHONY: build-image
 build-image: $(GORELEASER) ## Build the container image
 	${GORELEASER} release --snapshot --clean --verbose
 
 .PHONY: image-build-push
 image-build-push: $(GORELEASER) ## Build and push the container image
-	${GORELEASER} release --clean --verbose --skip=validate
+	${GORELEASER} release --clean --verbose
+
+## --------------------------------------
+## Manifest Image Update
+## --------------------------------------
 
 .PHONY: set-manifest-image
 set-manifest-image:
