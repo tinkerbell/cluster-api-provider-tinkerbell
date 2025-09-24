@@ -142,8 +142,8 @@ build: generate $(GORELEASER) ## Build the CAPT binary
 build-image: $(GORELEASER) ## Build the container image
 	${GORELEASER} release --snapshot --clean --verbose
 
-.PHONY: image-build-push
-image-build-push: $(GORELEASER) ## Build and push the container image
+.PHONY: build-image-push
+build-image-push: $(GORELEASER) ## Build and push the container image
 	${GORELEASER} release --clean --verbose
 
 ## --------------------------------------

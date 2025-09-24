@@ -4,6 +4,7 @@ env:
   - REGISTRY={{ if index .Env "REGISTRY"  }}{{ .Env.REGISTRY }}{{ else }}ghcr.io{{ end }}
   - IMAGE_NAME={{ if index .Env "IMAGE_NAME"  }}{{ .Env.IMAGE_NAME }}{{ else }}tinkerbell/cluster-api-provider-tinkerbell{{ end }}
   - BINARY=capt
+  - IS_RELEASE={{ if index .Env "IS_RELEASE" }}{{ .Env.IS_RELEASE }}{{ else }}true{{ end }}
 
 before:
   hooks:
@@ -36,8 +37,9 @@ dockers_v2:
   - images:
       - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
     tags:
-      - "v{{ .Version }}"
-      - "{{ if not .IsNightly }}latest{{ end }}"
+      - '{{ if eq .Env.IS_RELEASE "true" }}v{{ .Version }}{{ end }}'
+      - '{{ if not .IsNightly }}latest{{ end }}'
+      - '{{ if eq .Branch "main" }}sha-{{ .ShortCommit }}{{ end }}'
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
       "org.opencontainers.image.name": "{{.ProjectName}}"
