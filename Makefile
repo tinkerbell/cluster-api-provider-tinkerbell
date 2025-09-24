@@ -159,7 +159,17 @@ set-manifest-image:
 ## Release
 ## --------------------------------------
 
-RELEASE_TAG := $(shell git describe --abbrev=0 2>/dev/null)
+# When running in GitHub Actions for a tag, use the tag name from GITHUB_REF
+# Otherwise, fall back to git describe to find the latest tag
+ifdef GITHUB_REF
+    ifeq ($(findstring refs/tags/,$(GITHUB_REF)),refs/tags/)
+        RELEASE_TAG := $(shell echo $(GITHUB_REF) | sed -e 's/refs\/tags\///')
+    else
+        RELEASE_TAG := $(shell git describe --abbrev=0 2>/dev/null)
+    endif
+else
+    RELEASE_TAG := $(shell git describe --abbrev=0 2>/dev/null)
+endif
 RELEASE_DIR ?= out/release
 
 $(RELEASE_DIR):
@@ -167,6 +177,7 @@ $(RELEASE_DIR):
 
 .PHONY: release
 release: clean-release
+	@echo "Using RELEASE_TAG: $(RELEASE_TAG)"
 	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(IMAGE_NAME) MANIFEST_TAG=$(RELEASE_TAG)
 	$(MAKE) release-manifests
 	$(MAKE) release-metadata
