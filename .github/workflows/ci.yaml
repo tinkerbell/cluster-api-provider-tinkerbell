@@ -90,6 +90,7 @@ jobs:
       packages: write
     needs:
     - build-binaries
+    - build-container-images
     - codespell
     - validate
     # Only build and push container images on pushes to tags

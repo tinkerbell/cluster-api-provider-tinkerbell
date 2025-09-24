@@ -56,12 +56,8 @@ GORELEASER_VER := v2.12.2
 GORELEASER_BIN := goreleaser
 GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
 
-KO_VER := v0.18.0
-KO_BIN := ko
-KO := $(TOOLS_BIN_DIR)/$(KO_BIN)-$(KO_VER)
-
 .PHONY: tools
-tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) $(KO) ## Install build tools
+tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) ## Install build tools
 
 TIMEOUT := $(shell command -v timeout || command -v gtimeout)
 
@@ -136,11 +132,6 @@ $(GORELEASER): ## Install goreleaser
 	mkdir -p $(TOOLS_BIN_DIR)
 	GOBIN=$(TOOLS_BIN_DIR) go install github.com/goreleaser/goreleaser/v2@${GORELEASER_VER}
 	@mv $(TOOLS_BIN_DIR)/goreleaser $(GORELEASER)
-
-$(KO): ## Install ko
-	mkdir -p $(TOOLS_BIN_DIR)
-	GOBIN=$(TOOLS_BIN_DIR) go install github.com/google/ko@${KO_VER}
-	@mv $(TOOLS_BIN_DIR)/ko $(KO)
 
 ## --------------------------------------
 ## Linting
@@ -219,7 +210,7 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 ## --------------------------------------
 
 .PHONY: build
-build: generate ## Build the CAPT binary
+build: generate $(GORELEASER) ## Build the CAPT binary
 	GOARCH=${ARCH} ${GORELEASER} build --snapshot --clean
 
 ## --------------------------------------
@@ -227,13 +218,13 @@ build: generate ## Build the CAPT binary
 ## --------------------------------------
 
 .PHONY: build-image
-build-image: ## Build the container image
+build-image: $(GORELEASER) ## Build the container image
 	${GORELEASER} release --snapshot --clean --verbose
 #	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
 #	$(MAKE) set-manifest-pull-policy
 
 .PHONY: image-build-push
-image-build-push: ## Build and push the container image
+image-build-push: $(GORELEASER) ## Build and push the container image
 	${GORELEASER} release --clean --verbose --skip=validate
 
 ## --------------------------------------
