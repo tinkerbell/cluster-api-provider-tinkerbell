@@ -103,3 +103,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IS_RELEASE: false
+          GORELEASER_EXTRA_FLAGS: "--skip=validate"
