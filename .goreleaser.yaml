@@ -1,48 +1,46 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
-
-# The lines below are called `modelines`. See `:help modeline`
-# Feel free to remove those if you don't want/need to use them.
-# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
-# vim: set ts=2 sw=2 tw=0 fo=cnqoj
-
 version: 2
+
+env:
+  - REGISTRY={{ if index .Env "REGISTRY"  }}{{ .Env.REGISTRY }}{{ else }}ghcr.io{{ end }}
+  - IMAGE_NAME={{ if index .Env "IMAGE_NAME"  }}{{ .Env.IMAGE_NAME }}{{ else }}tinkerbell/cluster-api-provider-tinkerbell{{ end }}
+  - BINARY=capt
 
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
 
 builds:
-  - id: capt
-    binary: capt
+  - id: build
+    binary: "{{ .Env.BINARY }}"
     env:
-      - CGO_ENABLED=0
+    - CGO_ENABLED=0
     goos:
-      - linux
+    - linux
     ldflags:
-      - -s -w
+    - -s -w
     goarch:
-      - amd64
-      - arm64
+    - amd64
+    - arm64
+
+checksum:
+  name_template: 'checksums.txt'
 
 archives:
   - formats:
     - binary
 
-kos:
-  - id: capt
-    platforms:
-    - linux/amd64
-    - linux/arm64
+release:
+  disable: true
+
+dockers_v2:
+  - images:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
     tags:
-    - latest
-    - '{{.Tag}}'
-    bare: true
-    env:
-    - CGO_ENABLED=0
-    ldflags:
-    - -s -w
-    repositories:
-    - ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-    local_domain: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
+      - "v{{ .Version }}"
+      - "latest"
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "v{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
