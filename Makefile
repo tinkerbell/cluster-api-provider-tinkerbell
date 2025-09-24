@@ -20,29 +20,19 @@ SHELL:=/usr/bin/env bash
 
 .DEFAULT_GOAL:=help
 
-GOPATH  := $(shell go env GOPATH)
-GOARCH  := $(shell go env GOARCH)
-GOOS    := $(shell go env GOOS)
 GOPROXY := $(shell go env GOPROXY)
 ifeq ($(GOPROXY),)
 GOPROXY := https://proxy.golang.org
 endif
 export GOPROXY
 
-# Default timeout for starting/stopping the Kubebuilder test control plane
-export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT ?=60s
-export KUBEBUILDER_CONTROLPLANE_STOP_TIMEOUT ?=60s
-
-# This option is for running docker manifest command
-export DOCKER_CLI_EXPERIMENTAL := enabled
-# curl retries
-CURL_RETRIES=3
-
 # Directories.
 TOOLS_BIN_DIR := $(abspath bin)
 
 # Binaries.
-CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.18.0
+CONTROLLER_GEN_VER := v0.19.0
+CONTROLLER_GEN_BIN := controller-gen
+CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
 
 GOLANGCI_LINT_VER := v2.3.0
 GOLANGCI_LINT_BIN := golangci-lint
@@ -52,18 +42,16 @@ KUSTOMIZE_VER := v5.7.1
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
-.PHONY: tools
-tools: $(KUSTOMIZE) $(GOLANGCI_LINT) ## Install build tools
+GORELEASER_VER := v2.12.2
+GORELEASER_BIN := goreleaser
+GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
 
-TIMEOUT := $(shell command -v timeout || command -v gtimeout)
+.PHONY: tools
+tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) $(CONTROLLER_GEN) ## Install build tools
 
 # Define Docker related variables. Releases should modify and double check these vars.
 REGISTRY ?= ghcr.io
 IMAGE_NAME ?= tinkerbell/cluster-api-provider-tinkerbell
-export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
-export TAG ?= dev
-export ARCH ?= amd64
-ALL_ARCH = amd64 arm64
 
 # Allow overriding manifest generation destination directory
 MANIFEST_ROOT ?= config
@@ -71,20 +59,8 @@ CRD_ROOT ?= $(MANIFEST_ROOT)/crd/bases
 WEBHOOK_ROOT ?= $(MANIFEST_ROOT)/webhook
 RBAC_ROOT ?= $(MANIFEST_ROOT)/rbac
 
-# Allow overriding the imagePullPolicy
-PULL_POLICY ?= Always
-
-# Hosts running SELinux need :z added to volume mounts
-SELINUX_ENABLED := $(shell cat /sys/fs/selinux/enforce 2> /dev/null || echo 0)
-
-ifeq ($(SELINUX_ENABLED),1)
-  DOCKER_VOL_OPTS?=:z
-endif
-
 # Build time versioning details.
 LDFLAGS := "-s -w"
-
-GOLANG_VERSION := 1.24
 
 ## --------------------------------------
 ## Help
@@ -105,62 +81,20 @@ test: ## Run tests
 ## Tooling Binaries
 ## --------------------------------------
 
-$(KUBECTL): ## Build kubectl
-	mkdir -p $(TOOLS_BIN_DIR)
-	rm -f "$(KUBECTL)*"
-	curl --retry $(CURL_RETRIES) -fsL https://dl.k8s.io/release/$(KUBECTL_VER)/bin/$(GOOS)/$(GOARCH)/kubectl -o $(KUBECTL)
-	ln -sf "$(KUBECTL)" "$(TOOLS_BIN_DIR)/$(KUBECTL_BIN)"
-	chmod +x "$(TOOLS_BIN_DIR)/$(KUBECTL_BIN)" "$(KUBECTL)"
-
-$(KIND): ## Build kind
-	mkdir -p $(TOOLS_BIN_DIR)
-	rm -f "$(KIND)*"
-	curl --retry $(CURL_RETRIES) -fsL https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VER}/kind-${GOOS}-${GOARCH} -o ${KIND}
-	ln -sf "$(KIND)" "$(TOOLS_BIN_DIR)/$(KIND_BIN)"
-	chmod +x "$(TOOLS_BIN_DIR)/$(KIND_BIN)" "$(KIND)"
-
 $(KUSTOMIZE): ## Install kustomize
 	mkdir -p $(TOOLS_BIN_DIR)
 	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VER}
 	@mv $(TOOLS_BIN_DIR)/kustomize $(KUSTOMIZE)
 
-## --------------------------------------
-## Linting
-## --------------------------------------
-
-# BEGIN: lint-install
-# http://github.com/tinkerbell/lint-install
-
-.PHONY: lint
-lint: _lint ## Lint codebase
-
-LINT_ROOT := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-
-LINTERS :=
-FIXERS :=
-
-GOLANGCI_LINT_CONFIG := $(LINT_ROOT)/.golangci.yml
-$(GOLANGCI_LINT):
+$(GORELEASER): ## Install goreleaser
 	mkdir -p $(TOOLS_BIN_DIR)
-	rm -rf $(TOOLS_BIN_DIR)/golangci-lint-*
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
-	mv $(TOOLS_BIN_DIR)/golangci-lint $@
+	GOBIN=$(TOOLS_BIN_DIR) go install github.com/goreleaser/goreleaser/v2@${GORELEASER_VER}
+	@mv $(TOOLS_BIN_DIR)/goreleaser $(GORELEASER)
 
-LINTERS += golangci-lint-lint
-golangci-lint-lint: $(GOLANGCI_LINT)
-	find . -name go.mod -execdir sh -c '"$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)"' '{}' '+'
-
-FIXERS += golangci-lint-fix
-golangci-lint-fix: $(GOLANGCI_LINT)
-	find . -name go.mod -execdir "$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)" --fix \;
-
-.PHONY: _lint $(LINTERS)
-_lint: $(LINTERS)
-
-.PHONY: fix $(FIXERS)
-fix: $(FIXERS)
-
-# END: lint-install
+$(CONTROLLER_GEN): ## Install controller-gen
+	mkdir -p $(TOOLS_BIN_DIR)
+	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_GEN_VER}
+	@mv $(TOOLS_BIN_DIR)/controller-gen $(CONTROLLER_GEN)
 
 ## --------------------------------------
 ## Generate
@@ -197,54 +131,29 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 		rbac:roleName=manager-role
 
 ## --------------------------------------
-## Docker
+## Build
 ## --------------------------------------
 
-.PHONY: docker-build
-docker-build: ## Build the docker image for controller-manager
-	docker build --no-cache --pull --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS=$(LDFLAGS) . -t $(CONTROLLER_IMG)-$(ARCH):$(TAG)
-	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
-	$(MAKE) set-manifest-pull-policy
+.PHONY: build
+build: generate $(GORELEASER) ## Build the CAPT binary
+	${GORELEASER} build --snapshot --clean
 
-.PHONY: docker-push
-docker-push: ## Push the docker image
-	docker push $(CONTROLLER_IMG)-$(ARCH):$(TAG)
+.PHONY: build-image
+build-image: $(GORELEASER) ## Build the container image
+	${GORELEASER} release --snapshot --clean --verbose
+
+.PHONY: image-build-push
+image-build-push: $(GORELEASER) ## Build and push the container image
+	${GORELEASER} release --clean --verbose
 
 ## --------------------------------------
-## Docker — All ARCH
+## Manifest Image Update
 ## --------------------------------------
-
-.PHONY: docker-build-all ## Build all the architecture docker images
-docker-build-all: $(addprefix docker-build-,$(ALL_ARCH))
-
-docker-build-%:
-	$(MAKE) ARCH=$* docker-build
-
-.PHONY: docker-push-all ## Push all the architecture docker images
-docker-push-all: $(addprefix docker-push-,$(ALL_ARCH))
-	$(MAKE) docker-push-manifest
-
-docker-push-%:
-	$(MAKE) ARCH=$* docker-push
-
-.PHONY: docker-push-manifest
-docker-push-manifest: ## Push the fat manifest docker image.
-	## Minimum docker version 18.06.0 is required for creating and pushing manifest images.
-	docker manifest create --amend $(CONTROLLER_IMG):$(TAG) $(shell echo $(ALL_ARCH) | sed -e "s~[^ ]*~$(CONTROLLER_IMG)\-&:$(TAG)~g")
-	@for arch in $(ALL_ARCH); do docker manifest annotate --arch $${arch} ${CONTROLLER_IMG}:${TAG} ${CONTROLLER_IMG}-$${arch}:${TAG}; done
-	docker manifest push --purge ${CONTROLLER_IMG}:${TAG}
-	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
-	$(MAKE) set-manifest-pull-policy
 
 .PHONY: set-manifest-image
 set-manifest-image:
 	$(info Updating kustomize image patch file for default resource)
 	sed -i'' -e 's@image: .*@image: '"${MANIFEST_IMG}:$(MANIFEST_TAG)"'@' ./config/default/manager_image_patch.yaml
-
-.PHONY: set-manifest-pull-policy
-set-manifest-pull-policy:
-	$(info Updating kustomize pull policy file for default resource)
-	sed -i'' -e 's@imagePullPolicy: .*@imagePullPolicy: '"$(PULL_POLICY)"'@' ./config/default/manager_pull_policy.yaml
 
 ## --------------------------------------
 ## Release
@@ -258,8 +167,7 @@ $(RELEASE_DIR):
 
 .PHONY: release
 release: clean-release
-	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(IMAGE_NAME) MANIFEST_TAG=$(TAG)
-	$(MAKE) set-manifest-pull-policy PULL_POLICY=IfNotPresent
+	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(IMAGE_NAME) MANIFEST_TAG=$(RELEASE_TAG)
 	$(MAKE) release-manifests
 	$(MAKE) release-metadata
 	$(MAKE) release-templates
@@ -308,3 +216,41 @@ verify-gen: generate
 	@if !(git diff --quiet HEAD); then \
 		echo "generated files are out of date, run make generate"; exit 1; \
 	fi
+
+## --------------------------------------
+## Linting
+## --------------------------------------
+
+# BEGIN: lint-install
+# http://github.com/tinkerbell/lint-install
+
+.PHONY: lint
+lint: _lint ## Lint codebase
+
+LINT_ROOT := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+LINTERS :=
+FIXERS :=
+
+GOLANGCI_LINT_CONFIG := $(LINT_ROOT)/.golangci.yml
+$(GOLANGCI_LINT):
+	mkdir -p $(TOOLS_BIN_DIR)
+	rm -rf $(TOOLS_BIN_DIR)/golangci-lint-*
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
+	mv $(TOOLS_BIN_DIR)/golangci-lint $@
+
+LINTERS += golangci-lint-lint
+golangci-lint-lint: $(GOLANGCI_LINT)
+	find . -name go.mod -execdir sh -c '"$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)"' '{}' '+'
+
+FIXERS += golangci-lint-fix
+golangci-lint-fix: $(GOLANGCI_LINT)
+	find . -name go.mod -execdir "$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)" --fix \;
+
+.PHONY: _lint $(LINTERS)
+_lint: $(LINTERS)
+
+.PHONY: fix $(FIXERS)
+fix: $(FIXERS)
+
+# END: lint-install

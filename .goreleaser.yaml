@@ -1,0 +1,46 @@
+version: 2
+
+env:
+  - REGISTRY={{ if index .Env "REGISTRY"  }}{{ .Env.REGISTRY }}{{ else }}ghcr.io{{ end }}
+  - IMAGE_NAME={{ if index .Env "IMAGE_NAME"  }}{{ .Env.IMAGE_NAME }}{{ else }}tinkerbell/cluster-api-provider-tinkerbell{{ end }}
+  - BINARY=capt
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: build
+    binary: "{{ .Env.BINARY }}"
+    env:
+    - CGO_ENABLED=0
+    goos:
+    - linux
+    ldflags:
+    - -s -w
+    goarch:
+    - amd64
+    - arm64
+
+checksum:
+  name_template: 'checksums.txt'
+
+archives:
+  - formats:
+    - binary
+
+release:
+  disable: true
+
+dockers_v2:
+  - images:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
+    tags:
+      - "v{{ .Version }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "v{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"

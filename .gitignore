@@ -43,3 +43,5 @@ dist
 
 # development / test / lints
 bin/
+# Added by goreleaser init:
+dist/
