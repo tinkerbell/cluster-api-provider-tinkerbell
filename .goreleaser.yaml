@@ -37,7 +37,7 @@ dockers_v2:
       - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
     tags:
       - "v{{ .Version }}"
-      - "latest"
+      - "{{ if not .IsNightly }}latest{{ end }}"
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
       "org.opencontainers.image.name": "{{.ProjectName}}"
