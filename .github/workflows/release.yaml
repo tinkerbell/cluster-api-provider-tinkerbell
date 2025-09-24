@@ -31,6 +31,8 @@ jobs:
 
       - name: Build and push image
         run: make image-build-push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     name: Release
@@ -47,8 +49,6 @@ jobs:
 
       - name: manifest
         run: make release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Release Notes
         run: |
