@@ -20,23 +20,11 @@ SHELL:=/usr/bin/env bash
 
 .DEFAULT_GOAL:=help
 
-GOPATH  := $(shell go env GOPATH)
-GOARCH  := $(shell go env GOARCH)
-GOOS    := $(shell go env GOOS)
 GOPROXY := $(shell go env GOPROXY)
 ifeq ($(GOPROXY),)
 GOPROXY := https://proxy.golang.org
 endif
 export GOPROXY
-
-# Default timeout for starting/stopping the Kubebuilder test control plane
-export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT ?=60s
-export KUBEBUILDER_CONTROLPLANE_STOP_TIMEOUT ?=60s
-
-# This option is for running docker manifest command
-export DOCKER_CLI_EXPERIMENTAL := enabled
-# curl retries
-CURL_RETRIES=3
 
 # Directories.
 TOOLS_BIN_DIR := $(abspath bin)
@@ -59,15 +47,10 @@ GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
 .PHONY: tools
 tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) ## Install build tools
 
-TIMEOUT := $(shell command -v timeout || command -v gtimeout)
-
 # Define Docker related variables. Releases should modify and double check these vars.
 REGISTRY ?= ghcr.io
 IMAGE_NAME ?= tinkerbell/cluster-api-provider-tinkerbell
-export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
 export TAG ?= dev
-export ARCH ?= amd64
-ALL_ARCH = amd64 arm64
 
 # Allow overriding manifest generation destination directory
 MANIFEST_ROOT ?= config
@@ -77,13 +60,6 @@ RBAC_ROOT ?= $(MANIFEST_ROOT)/rbac
 
 # Allow overriding the imagePullPolicy
 PULL_POLICY ?= Always
-
-# Hosts running SELinux need :z added to volume mounts
-SELINUX_ENABLED := $(shell cat /sys/fs/selinux/enforce 2> /dev/null || echo 0)
-
-ifeq ($(SELINUX_ENABLED),1)
-  DOCKER_VOL_OPTS?=:z
-endif
 
 # Build time versioning details.
 LDFLAGS := "-s -w"
@@ -109,20 +85,6 @@ test: ## Run tests
 ## Tooling Binaries
 ## --------------------------------------
 
-$(KUBECTL): ## Build kubectl
-	mkdir -p $(TOOLS_BIN_DIR)
-	rm -f "$(KUBECTL)*"
-	curl --retry $(CURL_RETRIES) -fsL https://dl.k8s.io/release/$(KUBECTL_VER)/bin/$(GOOS)/$(GOARCH)/kubectl -o $(KUBECTL)
-	ln -sf "$(KUBECTL)" "$(TOOLS_BIN_DIR)/$(KUBECTL_BIN)"
-	chmod +x "$(TOOLS_BIN_DIR)/$(KUBECTL_BIN)" "$(KUBECTL)"
-
-$(KIND): ## Build kind
-	mkdir -p $(TOOLS_BIN_DIR)
-	rm -f "$(KIND)*"
-	curl --retry $(CURL_RETRIES) -fsL https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VER}/kind-${GOOS}-${GOARCH} -o ${KIND}
-	ln -sf "$(KIND)" "$(TOOLS_BIN_DIR)/$(KIND_BIN)"
-	chmod +x "$(TOOLS_BIN_DIR)/$(KIND_BIN)" "$(KIND)"
-
 $(KUSTOMIZE): ## Install kustomize
 	mkdir -p $(TOOLS_BIN_DIR)
 	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VER}
@@ -132,44 +94,6 @@ $(GORELEASER): ## Install goreleaser
 	mkdir -p $(TOOLS_BIN_DIR)
 	GOBIN=$(TOOLS_BIN_DIR) go install github.com/goreleaser/goreleaser/v2@${GORELEASER_VER}
 	@mv $(TOOLS_BIN_DIR)/goreleaser $(GORELEASER)
-
-## --------------------------------------
-## Linting
-## --------------------------------------
-
-# BEGIN: lint-install
-# http://github.com/tinkerbell/lint-install
-
-.PHONY: lint
-lint: _lint ## Lint codebase
-
-LINT_ROOT := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-
-LINTERS :=
-FIXERS :=
-
-GOLANGCI_LINT_CONFIG := $(LINT_ROOT)/.golangci.yml
-$(GOLANGCI_LINT):
-	mkdir -p $(TOOLS_BIN_DIR)
-	rm -rf $(TOOLS_BIN_DIR)/golangci-lint-*
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
-	mv $(TOOLS_BIN_DIR)/golangci-lint $@
-
-LINTERS += golangci-lint-lint
-golangci-lint-lint: $(GOLANGCI_LINT)
-	find . -name go.mod -execdir sh -c '"$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)"' '{}' '+'
-
-FIXERS += golangci-lint-fix
-golangci-lint-fix: $(GOLANGCI_LINT)
-	find . -name go.mod -execdir "$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)" --fix \;
-
-.PHONY: _lint $(LINTERS)
-_lint: $(LINTERS)
-
-.PHONY: fix $(FIXERS)
-fix: $(FIXERS)
-
-# END: lint-install
 
 ## --------------------------------------
 ## Generate
@@ -211,7 +135,7 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 
 .PHONY: build
 build: generate $(GORELEASER) ## Build the CAPT binary
-	GOARCH=${ARCH} ${GORELEASER} build --snapshot --clean
+	${GORELEASER} build --snapshot --clean
 
 ## --------------------------------------
 ## Container image build
@@ -220,38 +144,10 @@ build: generate $(GORELEASER) ## Build the CAPT binary
 .PHONY: build-image
 build-image: $(GORELEASER) ## Build the container image
 	${GORELEASER} release --snapshot --clean --verbose
-#	MANIFEST_IMG=$(CONTROLLER_IMG)-$(ARCH) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
-#	$(MAKE) set-manifest-pull-policy
 
 .PHONY: image-build-push
 image-build-push: $(GORELEASER) ## Build and push the container image
 	${GORELEASER} release --clean --verbose --skip=validate
-
-## --------------------------------------
-## Docker — All ARCH
-## --------------------------------------
-
-.PHONY: image-build-all ## Build all the architecture docker images
-image-build-all: $(addprefix image-build-,$(ALL_ARCH))
-
-image-build-%:
-	$(MAKE) ARCH=$* image-build
-
-.PHONY: docker-push-all ## Push all the architecture docker images
-docker-push-all: $(addprefix docker-push-,$(ALL_ARCH))
-	$(MAKE) docker-push-manifest
-
-docker-push-%:
-	$(MAKE) ARCH=$* docker-push
-
-.PHONY: docker-push-manifest
-docker-push-manifest: ## Push the fat manifest docker image.
-	## Minimum docker version 18.06.0 is required for creating and pushing manifest images.
-	docker manifest create --amend $(CONTROLLER_IMG):$(TAG) $(shell echo $(ALL_ARCH) | sed -e "s~[^ ]*~$(CONTROLLER_IMG)\-&:$(TAG)~g")
-	@for arch in $(ALL_ARCH); do docker manifest annotate --arch $${arch} ${CONTROLLER_IMG}:${TAG} ${CONTROLLER_IMG}-$${arch}:${TAG}; done
-	docker manifest push --purge ${CONTROLLER_IMG}:${TAG}
-	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
-	$(MAKE) set-manifest-pull-policy
 
 .PHONY: set-manifest-image
 set-manifest-image:
@@ -325,3 +221,41 @@ verify-gen: generate
 	@if !(git diff --quiet HEAD); then \
 		echo "generated files are out of date, run make generate"; exit 1; \
 	fi
+
+## --------------------------------------
+## Linting
+## --------------------------------------
+
+# BEGIN: lint-install
+# http://github.com/tinkerbell/lint-install
+
+.PHONY: lint
+lint: _lint ## Lint codebase
+
+LINT_ROOT := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+LINTERS :=
+FIXERS :=
+
+GOLANGCI_LINT_CONFIG := $(LINT_ROOT)/.golangci.yml
+$(GOLANGCI_LINT):
+	mkdir -p $(TOOLS_BIN_DIR)
+	rm -rf $(TOOLS_BIN_DIR)/golangci-lint-*
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
+	mv $(TOOLS_BIN_DIR)/golangci-lint $@
+
+LINTERS += golangci-lint-lint
+golangci-lint-lint: $(GOLANGCI_LINT)
+	find . -name go.mod -execdir sh -c '"$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)"' '{}' '+'
+
+FIXERS += golangci-lint-fix
+golangci-lint-fix: $(GOLANGCI_LINT)
+	find . -name go.mod -execdir "$(GOLANGCI_LINT)" run -c "$(GOLANGCI_LINT_CONFIG)" --fix \;
+
+.PHONY: _lint $(LINTERS)
+_lint: $(LINTERS)
+
+.PHONY: fix $(FIXERS)
+fix: $(FIXERS)
+
+# END: lint-install
