@@ -53,23 +53,9 @@ jobs:
           check_hidden: true
           skip: "./.git,./go.mod,./go.sum,.goreleaser.yaml"
           ignore_words_list: ro,NotIn
-  
-  build-binaries:
-    name: Build binary
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "${{ env.GO_VERSION }}"
-          cache: true
-
-      - name: Build
-        run: make build
-
-  build-container-images:
-    name: Build container images
+  build:
+    name: Build binaries and container images
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

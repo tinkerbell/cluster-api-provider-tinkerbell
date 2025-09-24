@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Use make 
 FROM gcr.io/distroless/static:nonroot
 ARG TARGETPLATFORM
 COPY ${TARGETPLATFORM}/capt /capt
