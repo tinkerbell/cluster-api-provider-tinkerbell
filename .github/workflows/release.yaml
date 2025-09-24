@@ -47,6 +47,8 @@ jobs:
 
       - name: manifest
         run: make release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Release Notes
         run: |
