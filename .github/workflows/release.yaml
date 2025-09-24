@@ -5,9 +5,14 @@ on:
     tags:
       - "v*"
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  CGO_ENABLED: 0
   GO_VERSION: '1.25'
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write
 
 jobs:
   build-image:
