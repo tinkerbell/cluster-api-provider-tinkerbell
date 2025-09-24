@@ -16,9 +16,7 @@ spec:
         control-plane: controller-manager
     spec:
       containers:
-      - command:
-        - /manager
-        env:
+      - env:
           - name: TINKERBELL_IP
             value: ${TINKERBELL_IP}
         args:
