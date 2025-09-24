@@ -30,7 +30,9 @@ export GOPROXY
 TOOLS_BIN_DIR := $(abspath bin)
 
 # Binaries.
-CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.18.0
+CONTROLLER_GEN_VER := v0.19.0
+CONTROLLER_GEN_BIN := controller-gen
+CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
 
 GOLANGCI_LINT_VER := v2.3.0
 GOLANGCI_LINT_BIN := golangci-lint
@@ -45,7 +47,7 @@ GORELEASER_BIN := goreleaser
 GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
 
 .PHONY: tools
-tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) ## Install build tools
+tools: $(KUSTOMIZE) $(GOLANGCI_LINT) $(GORELEASER) $(CONTROLLER_GEN) ## Install build tools
 
 # Define Docker related variables. Releases should modify and double check these vars.
 REGISTRY ?= ghcr.io
@@ -94,6 +96,11 @@ $(GORELEASER): ## Install goreleaser
 	mkdir -p $(TOOLS_BIN_DIR)
 	GOBIN=$(TOOLS_BIN_DIR) go install github.com/goreleaser/goreleaser/v2@${GORELEASER_VER}
 	@mv $(TOOLS_BIN_DIR)/goreleaser $(GORELEASER)
+
+$(CONTROLLER_GEN): ## Install controller-gen
+	mkdir -p $(TOOLS_BIN_DIR)
+	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_GEN_VER}
+	@mv $(TOOLS_BIN_DIR)/controller-gen $(CONTROLLER_GEN)
 
 ## --------------------------------------
 ## Generate
