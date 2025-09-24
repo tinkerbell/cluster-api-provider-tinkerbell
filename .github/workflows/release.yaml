@@ -1,5 +1,4 @@
-# workflow to release assets as part of the release
-name: Upload Release Asset
+name: Release Workflow
 on:
   push:
     tags:
@@ -27,13 +26,6 @@ jobs:
           go-version: "${{ env.GO_VERSION }}"
           cache: true
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build and push image
         run: make image-build-push
         env:
@@ -45,14 +37,15 @@ jobs:
     needs:
       - build-image
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v5
 
       - uses: actions/setup-go@v6
         with:
           go-version: "${{ env.GO_VERSION }}"
           cache: true
 
-      - name: manifest
+      - name: Create manifests
         run: make release
 
       - name: Generate Release Notes
@@ -66,7 +59,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
 
-      - name: Create Release
+      - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         env:
