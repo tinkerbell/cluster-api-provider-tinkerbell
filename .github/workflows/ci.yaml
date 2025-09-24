@@ -79,6 +79,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-tags: true
 
       - uses: actions/setup-go@v6
         with:
