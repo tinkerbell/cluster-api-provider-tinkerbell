@@ -144,7 +144,7 @@ build-image: $(GORELEASER) ## Build the container image
 
 .PHONY: build-image-push
 build-image-push: $(GORELEASER) ## Build and push the container image
-	${GORELEASER} release --clean --verbose
+	${GORELEASER} release --clean --verbose ${GORELEASER_EXTRA_FLAGS}
 
 ## --------------------------------------
 ## Manifest Image Update
