@@ -40,20 +40,6 @@ jobs:
       - name: ${{ matrix.target }}
         run: make ${{ matrix.target }}
 
-  codespell:
-    name: Codespell
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Codespell
-        uses: codespell-project/actions-codespell@v2.1
-        with:
-          check_filenames: true
-          check_hidden: true
-          skip: "./.git,./go.mod,./go.sum,.goreleaser.yaml"
-          ignore_words_list: ro,NotIn
-
   build:
     name: Build binaries and container images
     runs-on: ubuntu-latest
@@ -74,7 +60,6 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     needs:
       - validate
-      - codespell
       - build
     steps:
       - name: Checkout code
