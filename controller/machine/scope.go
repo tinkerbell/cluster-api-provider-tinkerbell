@@ -122,6 +122,14 @@ func (scope *machineReconcileScope) Reconcile() error {
 		return fmt.Errorf("failed to ensure hardware: %w", err)
 	}
 
+	// Check if IPAM pool is configured and handle IP allocation
+	poolRef := scope.getIPAMPoolRef()
+	if poolRef != nil {
+		if err := scope.reconcileIPAM(hw, poolRef); err != nil {
+			return fmt.Errorf("failed to reconcile IPAM: %w", err)
+		}
+	}
+
 	return scope.reconcile(hw)
 }
 
@@ -257,7 +265,7 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //no
 	return nil
 }
 
-// removeDependencies removes the Template and Workflow linked to the Machine/Hardware.
+// removeDependencies removes the Template, Workflow, and IPAddressClaim linked to the Machine/Hardware.
 func (scope *machineReconcileScope) removeDependencies() error {
 	if err := scope.removeTemplate(); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("removing Template: %w", err)
@@ -265,6 +273,13 @@ func (scope *machineReconcileScope) removeDependencies() error {
 
 	if err := scope.removeWorkflow(); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("removing Workflow: %w", err)
+	}
+
+	// Remove IPAddressClaim if IPAM was configured
+	if scope.getIPAMPoolRef() != nil {
+		if err := scope.deleteIPAddressClaim(); err != nil {
+			return fmt.Errorf("removing IPAddressClaim: %w", err)
+		}
 	}
 
 	return nil

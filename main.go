@@ -31,6 +31,7 @@ import (
 	cgrecord "k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	ipamv1 "sigs.k8s.io/cluster-api/exp/ipam/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -59,6 +60,7 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
+	_ = ipamv1.AddToScheme(scheme)
 	_ = captctrl.AddToSchemeTinkerbell(scheme)
 	_ = captctrl.AddToSchemeBMC(scheme)
 

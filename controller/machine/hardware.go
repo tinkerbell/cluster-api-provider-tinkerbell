@@ -2,6 +2,7 @@ package machine
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -84,9 +85,7 @@ func (scope *machineReconcileScope) patchHardwareAnnotations(hw *tinkv1.Hardware
 		hw.Annotations = map[string]string{}
 	}
 
-	for k, v := range annotations {
-		hw.Annotations[k] = v
-	}
+	maps.Copy(hw.Annotations, annotations)
 
 	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
@@ -150,6 +149,14 @@ func (scope *machineReconcileScope) ensureHardware() (*tinkv1.Hardware, error) {
 
 	if err := scope.ensureHardwareUserData(hw, scope.tinkerbellMachine.Spec.ProviderID); err != nil {
 		return nil, fmt.Errorf("ensuring Hardware user data: %w", err)
+	}
+
+	// Check if IPAM pool is configured and handle IP allocation
+	poolRef := scope.getIPAMPoolRef()
+	if poolRef != nil {
+		if err := scope.reconcileIPAM(hw, poolRef); err != nil {
+			return hw, fmt.Errorf("failed to reconcile IPAM: %w", err)
+		}
 	}
 
 	return hw, scope.setStatus(hw)

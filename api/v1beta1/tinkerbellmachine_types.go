@@ -82,6 +82,13 @@ type TinkerbellMachineSpec struct {
 	// +optional
 	BootOptions BootOptions `json:"bootOptions,omitempty"`
 
+	// IPAMPoolRef is a reference to an IPAM pool resource to allocate an IP address from.
+	// When specified, an IPAddressClaim will be created to request an IP address allocation.
+	// The allocated IP will be set on the Hardware's first interface DHCP configuration.
+	// This enables integration with Cluster API IPAM providers for dynamic IP allocation.
+	// +optional
+	IPAMPoolRef *corev1.TypedLocalObjectReference `json:"ipamPoolRef,omitempty"`
+
 	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
 	// we put them in spec instead of status.
 	HardwareName string `json:"hardwareName,omitempty"`
