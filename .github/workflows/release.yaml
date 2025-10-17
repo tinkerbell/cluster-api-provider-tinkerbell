@@ -27,18 +27,12 @@ jobs:
           go-version: "${{ env.GO_VERSION }}"
           cache: true
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ko-build/setup-ko@v0.9
+        env:
+          KO_DEFAULTBASEIMAGE: docker.io/chainguard/static
+          KO_DOCKER_REPO:  "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+      
+      - run: ko login ${{ env.REGISTRY }} -u ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
         run: make build-image-push
