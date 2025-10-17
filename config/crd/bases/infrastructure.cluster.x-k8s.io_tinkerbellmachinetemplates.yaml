@@ -258,6 +258,30 @@ spec:
                           ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
                           images. If not set it will default based on ImageLookupOSDistro.
                         type: string
+                      ipamPoolRef:
+                        description: |-
+                          IPAMPoolRef is a reference to an IPAM pool resource to allocate an IP address from.
+                          When specified, an IPAddressClaim will be created to request an IP address allocation.
+                          The allocated IP will be set on the Hardware's first interface DHCP configuration.
+                          This enables integration with Cluster API IPAM providers for dynamic IP allocation.
+                        properties:
+                          apiGroup:
+                            description: |-
+                              APIGroup is the group for the resource being referenced.
+                              If APIGroup is not specified, the specified Kind must be in the core API group.
+                              For any other third-party types, APIGroup is required.
+                            type: string
+                          kind:
+                            description: Kind is the type of resource being referenced
+                            type: string
+                          name:
+                            description: Name is the name of resource being referenced
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        type: object
+                        x-kubernetes-map-type: atomic
                       providerID:
                         type: string
                       templateOverride:
