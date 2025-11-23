@@ -27,6 +27,9 @@ const (
 
 	// HardwareProvisionedAnnotation signifies that the Hardware with this annotation has be provisioned by CAPT.
 	HardwareProvisionedAnnotation = "v1alpha1.tinkerbell.org/provisioned"
+
+	// HardwareTemplateOverrideAnnotation can be used to override the default Template used for provisioning.
+	HardwareTemplateOverrideAnnotation = "hardware.tinkerbell.org/capt-template-override"
 )
 
 var (
