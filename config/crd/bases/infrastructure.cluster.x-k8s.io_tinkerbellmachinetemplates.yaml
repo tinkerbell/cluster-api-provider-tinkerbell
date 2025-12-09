@@ -56,15 +56,179 @@ spec:
                           of Hardware.
                         properties:
                           bootMode:
-                            description: |-
-                              BootMode is the type of booting that will be done.
-                              Must be one of "none", "netboot", "iso", or "isoboot".
+                            description: BootMode is the type of booting that will
+                              be done. One of "netboot", "isoboot", or "customboot".
                             enum:
-                            - none
                             - netboot
-                            - iso
                             - isoboot
+                            - iso
+                            - customboot
                             type: string
+                          custombootConfig:
+                            description: |-
+                              CustombootConfig is the configuration for the "customboot" boot mode.
+                              This allows users to define custom BMC Actions.
+                            properties:
+                              postActions:
+                                description: |-
+                                  PostActions are the BMC Actions that will be run after all Workflow Actions have completed.
+                                  In most cases these Actions should get a Machine into a state where it can be powered off or rebooted and remove any mounted virtual media.
+                                  These Actions will be run only if the main Workflow Actions complete successfully.
+                                items:
+                                  description: |-
+                                    Action represents the action to be performed.
+                                    A single task can only perform one type of action.
+                                    For example either PowerAction or OneTimeBootDeviceAction.
+                                  maxProperties: 1
+                                  properties:
+                                    bootDevice:
+                                      description: BootDevice is the device to set
+                                        as the first boot device on the Machine.
+                                      properties:
+                                        device:
+                                          description: Device is the name of the device
+                                            to set as the first boot device.
+                                          type: string
+                                        efiBoot:
+                                          description: EFIBoot indicates whether the
+                                            boot device should be set to efiboot mode.
+                                          type: boolean
+                                        persistent:
+                                          description: Persistent indicates whether
+                                            the boot device should be set persistently
+                                            as the first boot device.
+                                          type: boolean
+                                      type: object
+                                    oneTimeBootDeviceAction:
+                                      description: OneTimeBootDeviceAction represents
+                                        a baseboard management one time set boot device
+                                        operation.
+                                      properties:
+                                        device:
+                                          description: |-
+                                            Devices represents the boot devices, in order for setting one time boot.
+                                            Currently only the first device in the slice is used to set one time boot.
+                                          items:
+                                            description: BootDevice represents boot
+                                              device of the Machine.
+                                            type: string
+                                          type: array
+                                        efiBoot:
+                                          description: EFIBoot instructs the machine
+                                            to use EFI boot.
+                                          type: boolean
+                                      required:
+                                      - device
+                                      type: object
+                                    powerAction:
+                                      description: PowerAction represents a baseboard
+                                        management power operation.
+                                      enum:
+                                      - "on"
+                                      - "off"
+                                      - soft
+                                      - status
+                                      - cycle
+                                      - reset
+                                      type: string
+                                    virtualMediaAction:
+                                      description: VirtualMediaAction represents a
+                                        baseboard management virtual media insert/eject.
+                                      properties:
+                                        kind:
+                                          description: Kind represents the kind of
+                                            virtual media.
+                                          type: string
+                                        mediaURL:
+                                          description: mediaURL represents the URL
+                                            of the image to be inserted into the virtual
+                                            media, or empty to eject media.
+                                          type: string
+                                      required:
+                                      - kind
+                                      type: object
+                                  type: object
+                                type: array
+                              preparingActions:
+                                description: |-
+                                  PreparingActions are the BMC Actions that will be run before any Workflow Actions.
+                                  In most cases these Actions should get a Machine into a state where a Tink Agent is running.
+                                items:
+                                  description: |-
+                                    Action represents the action to be performed.
+                                    A single task can only perform one type of action.
+                                    For example either PowerAction or OneTimeBootDeviceAction.
+                                  maxProperties: 1
+                                  properties:
+                                    bootDevice:
+                                      description: BootDevice is the device to set
+                                        as the first boot device on the Machine.
+                                      properties:
+                                        device:
+                                          description: Device is the name of the device
+                                            to set as the first boot device.
+                                          type: string
+                                        efiBoot:
+                                          description: EFIBoot indicates whether the
+                                            boot device should be set to efiboot mode.
+                                          type: boolean
+                                        persistent:
+                                          description: Persistent indicates whether
+                                            the boot device should be set persistently
+                                            as the first boot device.
+                                          type: boolean
+                                      type: object
+                                    oneTimeBootDeviceAction:
+                                      description: OneTimeBootDeviceAction represents
+                                        a baseboard management one time set boot device
+                                        operation.
+                                      properties:
+                                        device:
+                                          description: |-
+                                            Devices represents the boot devices, in order for setting one time boot.
+                                            Currently only the first device in the slice is used to set one time boot.
+                                          items:
+                                            description: BootDevice represents boot
+                                              device of the Machine.
+                                            type: string
+                                          type: array
+                                        efiBoot:
+                                          description: EFIBoot instructs the machine
+                                            to use EFI boot.
+                                          type: boolean
+                                      required:
+                                      - device
+                                      type: object
+                                    powerAction:
+                                      description: PowerAction represents a baseboard
+                                        management power operation.
+                                      enum:
+                                      - "on"
+                                      - "off"
+                                      - soft
+                                      - status
+                                      - cycle
+                                      - reset
+                                      type: string
+                                    virtualMediaAction:
+                                      description: VirtualMediaAction represents a
+                                        baseboard management virtual media insert/eject.
+                                      properties:
+                                        kind:
+                                          description: Kind represents the kind of
+                                            virtual media.
+                                          type: string
+                                        mediaURL:
+                                          description: mediaURL represents the URL
+                                            of the image to be inserted into the virtual
+                                            media, or empty to eject media.
+                                          type: string
+                                      required:
+                                      - kind
+                                      type: object
+                                  type: object
+                                type: array
+                            type: object
                           isoURL:
                             description: |-
                               ISOURL is the URL of the ISO that will be one-time booted.
@@ -79,6 +243,8 @@ spec:
                               MAC address is then used to retrieve hardware specific information such as
                               IPAM info, custom kernel cmd line args and populate the worker ID for the tink worker/agent.
                               For ex. the above format would be replaced to http://$IP:$Port/iso/<macAddress>/hook.iso
+
+                              BootMode must be set to "isoboot".
                             format: url
                             type: string
                         type: object
