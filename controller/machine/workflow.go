@@ -7,8 +7,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,9 +71,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 	// CAPT was creating the BMCJob.
 	if hw.Spec.BMCRef != nil {
 		switch scope.tinkerbellMachine.Spec.BootOptions.BootMode {
-		case v1beta1.BootModeNetboot:
+		case tinkv1.BootModeNetboot:
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeNetboot
-		case v1beta1.BootModeISO, v1beta1.BootModeIsoboot:
+		case tinkv1.BootModeISO, tinkv1.BootModeIsoboot:
 			if scope.tinkerbellMachine.Spec.BootOptions.ISOURL == "" {
 				return errISOBootURLRequired
 			}
@@ -91,9 +89,13 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			workflow.Spec.BootOptions.ISOURL = u.String()
 			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeIsoboot
 
-			if scope.tinkerbellMachine.Spec.BootOptions.BootMode == v1beta1.BootModeISO {
+			// This is required for backward compatibility of Tinkerbell.
+			if scope.tinkerbellMachine.Spec.BootOptions.BootMode == tinkv1.BootModeISO {
 				workflow.Spec.BootOptions.BootMode = tinkv1.BootModeISO
 			}
+		case tinkv1.BootModeCustomboot:
+			workflow.Spec.BootOptions.CustombootConfig = scope.tinkerbellMachine.Spec.BootOptions.CustombootConfig
+			workflow.Spec.BootOptions.BootMode = tinkv1.BootModeCustomboot
 		}
 	}
 

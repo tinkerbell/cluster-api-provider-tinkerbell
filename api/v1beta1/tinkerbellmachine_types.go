@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,17 +26,7 @@ const (
 	// MachineFinalizer allows ReconcileTinkerbellMachine to clean up Tinkerbell resources before
 	// removing it from the apiserver.
 	MachineFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
-
-	// BootModeNetboot is the mode for networking booting.
-	BootModeNetboot BootMode = "netboot"
-	// BootModeISO is the mode for ISO booting. This is deprecated, use BootModeIsoboot instead.
-	BootModeISO BootMode = "iso"
-	// BootModeIsoboot is the mode for ISO booting.
-	BootModeIsoboot BootMode = "isoboot"
 )
-
-// BootMode defines the type of booting that will be done. i.e. netboot, iso, etc.
-type BootMode string
 
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
 type TinkerbellMachineSpec struct {
@@ -102,15 +93,20 @@ type BootOptions struct {
 	// MAC address is then used to retrieve hardware specific information such as
 	// IPAM info, custom kernel cmd line args and populate the worker ID for the tink worker/agent.
 	// For ex. the above format would be replaced to http://$IP:$Port/iso/<macAddress>/hook.iso
+	//
+	// BootMode must be set to "isoboot".
 	// +optional
 	// +kubebuilder:validation:Format=url
 	ISOURL string `json:"isoURL,omitempty"`
 
-	// BootMode is the type of booting that will be done.
-	// Must be one of "none", "netboot", "iso", or "isoboot".
+	// BootMode is the type of booting that will be done. One of "netboot", "isoboot", or "customboot".
 	// +optional
-	// +kubebuilder:validation:Enum=none;netboot;iso;isoboot
-	BootMode BootMode `json:"bootMode,omitempty"`
+	// +kubebuilder:validation:Enum=netboot;isoboot;iso;customboot
+	BootMode tinkv1.BootMode `json:"bootMode,omitempty"`
+
+	// CustombootConfig is the configuration for the "customboot" boot mode.
+	// This allows users to define custom BMC Actions.
+	CustombootConfig tinkv1.CustombootConfig `json:"custombootConfig,omitempty,omitzero"`
 }
 
 // HardwareAffinity defines the required and preferred hardware affinities.
