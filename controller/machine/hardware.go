@@ -96,7 +96,12 @@ func (scope *machineReconcileScope) patchHardwareAnnotations(hw *tinkv1.Hardware
 }
 
 func (scope *machineReconcileScope) takeHardwareOwnership(hw *tinkv1.Hardware) error {
-	if len(hw.Labels) == 0 {
+	patchHelper, err := patch.NewHelper(hw, scope.client)
+	if err != nil {
+		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
+	}
+
+	if hw.Labels == nil {
 		hw.Labels = map[string]string{}
 	}
 
@@ -106,8 +111,8 @@ func (scope *machineReconcileScope) takeHardwareOwnership(hw *tinkv1.Hardware) e
 	// Add finalizer to hardware as well to make sure we release it before Machine object is removed.
 	controllerutil.AddFinalizer(hw, infrastructurev1.MachineFinalizer)
 
-	if err := scope.client.Update(scope.ctx, hw); err != nil {
-		return fmt.Errorf("updating Hardware object: %w", err)
+	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
+		return fmt.Errorf("patching Hardware object: %w", err)
 	}
 
 	return nil
