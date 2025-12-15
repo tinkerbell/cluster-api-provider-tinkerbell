@@ -2,7 +2,7 @@ version: 2
 
 env:
   - REGISTRY={{ if index .Env "REGISTRY"  }}{{ .Env.REGISTRY }}{{ else }}ghcr.io{{ end }}
-  - IMAGE_NAME={{ if index .Env "IMAGE_NAME"  }}{{ .Env.IMAGE_NAME }}{{ else }}tinkerbell/cluster-api-provider-tinkerbell{{ end }}
+  - IMAGE_NAME={{ if index .Env "IMAGE_NAME"  }}{{ .Env.IMAGE_NAME }}{{ else }}{{.GitURL | trimprefix "https://" | trimprefix "git@" | trimprefix "github.com" | trimprefix ":" | trimprefix "/" | trimsuffix ".git"}}{{ end }}
   - BINARY=capt
   - IS_RELEASE={{ if index .Env "IS_RELEASE" }}{{ .Env.IS_RELEASE }}{{ else }}true{{ end }}
 
@@ -14,31 +14,36 @@ builds:
   - id: build
     binary: "{{ .Env.BINARY }}"
     env:
-    - CGO_ENABLED=0
+      - CGO_ENABLED=0
     goos:
-    - linux
+      - linux
     ldflags:
-    - -s -w
+      - -s -w
     goarch:
-    - amd64
-    - arm64
+      - amd64
+      - arm64
+    skip: false
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
 archives:
   - formats:
-    - binary
+      - binary
 
 release:
   disable: true
 
-dockers_v2:
-  - images:
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+kos:
+  - build: build
+    repositories:
       - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
     tags:
       - '{{ if eq .Env.IS_RELEASE "true" }}v{{ .Version }}{{ end }}'
-      - '{{ if not .IsNightly }}latest{{ end }}'
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
       - '{{ if eq .Branch "main" }}sha-{{ .ShortCommit }}{{ end }}'
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
@@ -46,3 +51,13 @@ dockers_v2:
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "v{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
+    bare: true
+    preserve_import_paths: false
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    base_image: docker.io/chainguard/static
+    creation_time: "{{.CommitTimestamp}}"
+    ko_data_creation_time: "{{.CommitTimestamp}}"
+    sbom: none
+    disable: "{{ .IsSnapshot }}"
