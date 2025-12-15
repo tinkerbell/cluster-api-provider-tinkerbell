@@ -7,10 +7,10 @@ require (
 	github.com/go-logr/zerologr v1.2.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/gomega v1.38.3
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/pflag v1.0.10
-	github.com/tinkerbell/tinkerbell/api v0.21.0
+	github.com/tinkerbell/tinkerbell/api v0.22.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.3
