@@ -158,33 +158,22 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 
 	templateData := scope.tinkerbellMachine.Spec.TemplateOverride
 	if templateData == "" {
-		targetDisk := hw.Spec.Disks[0].Device
-		targetDevice := firstPartitionFromDevice(targetDisk)
-
-		imageURL, err := scope.imageURL()
+		scope.log.Info("tinkerbellMachine.Spec.TemplateOverride is empty, trying from hardware annotation")
+		tmplFromAnnotation, err := scope.templateFromAnnotation(hw)
 		if err != nil {
-			return fmt.Errorf("failed to generate imageURL: %w", err)
+			return fmt.Errorf("failed to get template from hardware annotation: %w", err)
 		}
+		templateData = tmplFromAnnotation
+	}
 
-		metadataIP := os.Getenv("TINKERBELL_IP")
-		if metadataIP == "" {
-			metadataIP = "192.168.1.1"
-		}
-
-		metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
-
-		workflowTemplate := WorkflowTemplate{
-			Name:          scope.tinkerbellMachine.Name,
-			MetadataURL:   metadataURL,
-			ImageURL:      imageURL,
-			DestDisk:      targetDisk,
-			DestPartition: targetDevice,
-		}
-
-		templateData, err = workflowTemplate.Render()
+	// If still no template, generate the default one.
+	if templateData == "" {
+		scope.log.Info("no template found in hardware annotation, generating default template")
+		defaultTemplate, err := scope.generateDefaultTemplate(hw)
 		if err != nil {
-			return fmt.Errorf("rendering template: %w", err)
+			return err
 		}
+		templateData = defaultTemplate
 	}
 
 	templateObject := &tinkv1.Template{
@@ -210,6 +199,59 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 	}
 
 	return nil
+}
+
+func (scope *machineReconcileScope) generateDefaultTemplate(hw *tinkv1.Hardware) (string, error) {
+	targetDisk := hw.Spec.Disks[0].Device
+	targetDevice := firstPartitionFromDevice(targetDisk)
+
+	imageURL, err := scope.imageURL()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate imageURL: %w", err)
+	}
+
+	metadataIP := os.Getenv("TINKERBELL_IP")
+	if metadataIP == "" {
+		metadataIP = "192.168.1.1"
+	}
+
+	metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
+
+	workflowTemplate := WorkflowTemplate{
+		Name:          scope.tinkerbellMachine.Name,
+		MetadataURL:   metadataURL,
+		ImageURL:      imageURL,
+		DestDisk:      targetDisk,
+		DestPartition: targetDevice,
+	}
+
+	templateData, err := workflowTemplate.Render()
+	if err != nil {
+		return "", fmt.Errorf("rendering template: %w", err)
+	}
+	return templateData, nil
+}
+
+func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) (string, error) {
+	templateData := ""
+	// Check if hardware has an annotation 'hardware.tinkerbell.org/capt-template-override', if so,
+	// use it as the name of a Template resource in the same namespace as the Hardware, load it,
+	// and use it's spec.data as the template.
+	scope.log.Info("hardware annotations", "annotations", hw.Annotations)
+	if templateName, ok := hw.Annotations[HardwareTemplateOverrideAnnotation]; ok {
+		scope.log.Info("found template override in Hardware annotation", "templateName", templateName, "namespace", hw.Namespace)
+		overrideTemplate := &tinkv1.Template{}
+		namespacedName := types.NamespacedName{
+			Name:      templateName,
+			Namespace: hw.Namespace,
+		}
+		if err := scope.client.Get(scope.ctx, namespacedName, overrideTemplate); err != nil {
+			return "", fmt.Errorf("failed to get Template %q specified in hardware annotation: %w", templateName, err)
+		}
+		scope.log.V(4).Info("found template override in Hardware annotations, using it as template", "templateName", templateName)
+		templateData = *overrideTemplate.Spec.Data
+	}
+	return templateData, nil
 }
 
 func firstPartitionFromDevice(device string) string {
