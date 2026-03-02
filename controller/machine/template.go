@@ -166,9 +166,14 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		templateData = tmplFromAnnotation
 	}
 
+	// If still no template, try the cluster-level override.
+	if templateData == "" && scope.tinkerbellCluster.Spec.TemplateOverride != "" {
+		templateData = scope.tinkerbellCluster.Spec.TemplateOverride
+	}
+
 	// If still no template, generate the default one.
 	if templateData == "" {
-		scope.log.Info("no template found in hardware annotation, generating default template")
+		scope.log.Info("no template override found, generating default template")
 		defaultTemplate, err := scope.generateDefaultTemplate(hw)
 		if err != nil {
 			return err

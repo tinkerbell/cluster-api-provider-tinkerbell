@@ -68,6 +68,12 @@ type TinkerbellClusterSpec struct {
 	// images. If not set it will default based on ImageLookupOSDistro.
 	// +optional
 	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
+
+	// TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
+	// in this cluster. This is used when no machine-level or hardware annotation override is set.
+	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+	// +optional
+	TemplateOverride string `json:"templateOverride,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
