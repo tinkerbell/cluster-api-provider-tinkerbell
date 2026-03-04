@@ -166,9 +166,25 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		templateData = tmplFromAnnotation
 	}
 
-	// If still no template, try the cluster-level override.
-	if templateData == "" && scope.tinkerbellCluster.Spec.TemplateOverride != "" {
-		templateData = scope.tinkerbellCluster.Spec.TemplateOverride
+	// If still no template, try the cluster-level overrides.
+	if templateData == "" {
+		switch {
+		case scope.tinkerbellCluster.Spec.TemplateOverride != "":
+			templateData = scope.tinkerbellCluster.Spec.TemplateOverride
+		case scope.tinkerbellCluster.Spec.TemplateOverrideRef != nil:
+			ref := scope.tinkerbellCluster.Spec.TemplateOverrideRef
+			refTemplate := &tinkv1.Template{}
+			namespacedName := types.NamespacedName{
+				Name:      ref.Name,
+				Namespace: ref.Namespace,
+			}
+			if err := scope.client.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+				return fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName, err)
+			}
+			if refTemplate.Spec.Data != nil {
+				templateData = *refTemplate.Spec.Data
+			}
+		}
 	}
 
 	// If still no template, generate the default one.

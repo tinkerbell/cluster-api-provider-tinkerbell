@@ -18,9 +18,11 @@ package v1beta1
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -46,12 +48,17 @@ func (c *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (c *TinkerbellCluster) ValidateCreate(context.Context, runtime.Object) (admission.Warnings, error) {
-	return nil, nil
+	return nil, aggregateObjErrors(c.GroupVersionKind().GroupKind(), c.Name, c.validateSpec())
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateUpdate(context.Context, runtime.Object, runtime.Object) (admission.Warnings, error) {
-	return nil, nil
+func (c *TinkerbellCluster) ValidateUpdate(_ context.Context, _ runtime.Object, newRaw runtime.Object) (admission.Warnings, error) {
+	newCluster, ok := newRaw.(*TinkerbellCluster)
+	if !ok {
+		return nil, fmt.Errorf("expected TinkerbellCluster, got %T", newRaw)
+	}
+
+	return nil, aggregateObjErrors(newCluster.GroupVersionKind().GroupKind(), newCluster.Name, newCluster.validateSpec())
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
@@ -65,6 +72,18 @@ func defaultVersionForOSDistro(distro string) string {
 	}
 
 	return ""
+}
+
+func (c *TinkerbellCluster) validateSpec() field.ErrorList {
+	var allErrs field.ErrorList
+
+	if c.Spec.TemplateOverride != "" && c.Spec.TemplateOverrideRef != nil {
+		allErrs = append(allErrs,
+			field.Invalid(field.NewPath("spec", "templateOverrideRef"), c.Spec.TemplateOverrideRef,
+				"templateOverrideRef and templateOverride are mutually exclusive"))
+	}
+
+	return allErrs
 }
 
 // Default implements webhookutil.defaulter so a webhook will be registered for the type.

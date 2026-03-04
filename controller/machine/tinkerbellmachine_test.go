@@ -1528,3 +1528,67 @@ tasks:
 		"Expected template data to match cluster-level override, diff: %s",
 		cmp.Diff(clusterTemplateData, *template.Spec.Data))
 }
+
+func Test_Machine_reconciliation_uses_cluster_level_template_override_ref(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	refTemplateData := `version: "0.1"
+name: ref_override
+global_timeout: 6000
+tasks:
+  - name: "ref-task"
+    worker: "{{.device_1}}"
+    actions:
+      - name: "ref-action"
+        image: ref-image
+        timeout: 90`
+
+	refTemplateName := "my-shared-template"
+
+	refTemplate := &tinkv1.Template{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      refTemplateName,
+			Namespace: clusterNamespace,
+		},
+		Spec: tinkv1.TemplateSpec{
+			Data: &refTemplateData,
+		},
+	}
+
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.TemplateOverrideRef = &infrastructurev1.ObjectRef{
+		Name:      refTemplateName,
+		Namespace: clusterNamespace,
+	}
+
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster,
+		refTemplate,
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+	ctx := context.Background()
+
+	template := &tinkv1.Template{}
+	g.Expect(client.Get(ctx, types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, template)).To(Succeed(), "Expected template to be created")
+
+	g.Expect(template.Spec.Data).NotTo(BeNil(), "Expected template data to be set")
+	g.Expect(*template.Spec.Data).To(Equal(refTemplateData),
+		"Expected template data to match referenced template, diff: %s",
+		cmp.Diff(refTemplateData, *template.Spec.Data))
+}
