@@ -21,6 +21,15 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
+// ObjectRef is a reference to a Kubernetes object by name and namespace.
+type ObjectRef struct {
+	// Name is the name of the object.
+	Name string `json:"name"`
+	// Namespace is the namespace of the object.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 const (
 	// ClusterFinalizer allows ReconcileTinkerbellCluster to clean up Tinkerbell resources before
 	// removing it from the apiserver.
@@ -68,6 +77,20 @@ type TinkerbellClusterSpec struct {
 	// images. If not set it will default based on ImageLookupOSDistro.
 	// +optional
 	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
+
+	// TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
+	// in this cluster. This is used when no machine-level or hardware annotation override is set.
+	// Mutually exclusive with TemplateOverrideRef.
+	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+	// +optional
+	TemplateOverride string `json:"templateOverride,omitempty"`
+
+	// TemplateOverrideRef references an existing Tinkerbell Template object whose spec.data
+	// will be used as the default template for all machines in this cluster.
+	// This is used when no machine-level or hardware annotation override is set.
+	// Mutually exclusive with TemplateOverride.
+	// +optional
+	TemplateOverrideRef *ObjectRef `json:"templateOverrideRef,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
