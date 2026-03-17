@@ -151,6 +151,28 @@ func (scope *machineReconcileScope) templateExists() (bool, error) {
 	return false, nil
 }
 
+func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
+	switch {
+	case scope.tinkerbellCluster.Spec.TemplateOverride != "":
+		return scope.tinkerbellCluster.Spec.TemplateOverride, nil
+	case scope.tinkerbellCluster.Spec.TemplateOverrideRef != nil:
+		ref := scope.tinkerbellCluster.Spec.TemplateOverrideRef
+		refTemplate := &tinkv1.Template{}
+		namespacedName := types.NamespacedName{
+			Name:      ref.Name,
+			Namespace: ref.Namespace,
+		}
+		if err := scope.client.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName, err)
+		}
+		if refTemplate.Spec.Data != nil {
+			return *refTemplate.Spec.Data, nil
+		}
+	}
+
+	return "", nil
+}
+
 func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 	if len(hw.Spec.Disks) < 1 {
 		return ErrHardwareMissingDiskConfiguration
@@ -166,9 +188,13 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		templateData = tmplFromAnnotation
 	}
 
-	// If still no template, try the cluster-level override.
-	if templateData == "" && scope.tinkerbellCluster.Spec.TemplateOverride != "" {
-		templateData = scope.tinkerbellCluster.Spec.TemplateOverride
+	// If still no template, try the cluster-level overrides.
+	if templateData == "" {
+		clusterData, err := scope.clusterTemplateOverride()
+		if err != nil {
+			return err
+		}
+		templateData = clusterData
 	}
 
 	// If still no template, generate the default one.
