@@ -24,6 +24,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
@@ -32,9 +33,12 @@ import (
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
@@ -45,6 +49,12 @@ import (
 // TinkerbellMachineReconciler implements Reconciler interface by managing Tinkerbell machines.
 type TinkerbellMachineReconciler struct {
 	client.Client
+	// TinkerbellClient is the client used for Tinkerbell CRD operations (Hardware, Template,
+	// Workflow, BMC Job). When targeting a remote Tinkerbell cluster this differs from Client.
+	TinkerbellClient client.Client
+	// RemoteTinkCache is the informer cache for the remote Tinkerbell cluster.
+	// It is nil when operating in local (same-cluster) mode.
+	RemoteTinkCache  cache.Cache
 	WatchFilterValue string
 }
 
@@ -77,6 +87,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		ctx:               ctx,
 		tinkerbellMachine: &infrastructurev1.TinkerbellMachine{},
 		client:            r.Client,
+		tinkerbellClient:  r.TinkerbellClient,
 	}
 
 	if err := r.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
@@ -159,12 +170,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *TinkerbellMachineReconciler) SetupWithManager(
-	ctx context.Context,
-	mgr ctrl.Manager,
-	options controller.Options,
-	sm *runtime.Scheme,
-) error {
+func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sm *runtime.Scheme) error { //nolint:funlen,lll
 	log := ctrl.LoggerFrom(ctx)
 
 	clusterToObjectFunc, err := util.ClusterToTypedObjectsMapper(
@@ -194,25 +200,43 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
 			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureReady(sm, log)),
-		).
-		Watches(
-			&tinkv1.Workflow{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&infrastructurev1.TinkerbellMachine{},
-				handler.OnlyControllerOwner(),
-			),
-		).
-		Watches(
-			&rufiov1.Job{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&infrastructurev1.TinkerbellMachine{},
-				handler.OnlyControllerOwner(),
-			),
 		)
+
+	// When the TinkerbellClient targets the same cluster as the management client we can
+	// watch Workflow and Job objects for owner-based event triggers. In remote mode we use
+	// the remote cache with label-based mappers instead of owner references.
+	if r.RemoteTinkCache != nil {
+		builder = builder.
+			WatchesRawSource(
+				source.Kind(r.RemoteTinkCache, &tinkv1.Workflow{},
+					handler.TypedEnqueueRequestsFromMapFunc(remoteLabelMapper[*tinkv1.Workflow])),
+			).
+			WatchesRawSource(
+				source.Kind(r.RemoteTinkCache, &rufiov1.Job{},
+					handler.TypedEnqueueRequestsFromMapFunc(remoteLabelMapper[*rufiov1.Job])),
+			)
+		log.Info("Remote Tinkerbell client configured; watching Workflow and Job via remote cache")
+	} else {
+		builder = builder.
+			Watches(
+				&tinkv1.Workflow{},
+				handler.EnqueueRequestForOwner(
+					mgr.GetScheme(),
+					mgr.GetRESTMapper(),
+					&infrastructurev1.TinkerbellMachine{},
+					handler.OnlyControllerOwner(),
+				),
+			).
+			Watches(
+				&rufiov1.Job{},
+				handler.EnqueueRequestForOwner(
+					mgr.GetScheme(),
+					mgr.GetRESTMapper(),
+					&infrastructurev1.TinkerbellMachine{},
+					handler.OnlyControllerOwner(),
+				),
+			)
+	}
 
 	if err := builder.Complete(r); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
@@ -282,6 +306,33 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 	}
 }
 
+const (
+	// LabelMachineName is the label key used on remote Tinkerbell resources to identify
+	// the owning TinkerbellMachine by name.
+	LabelMachineName = "capt.tinkerbell.org/machine-name"
+	// LabelMachineNamespace is the label key used on remote Tinkerbell resources to identify
+	// the owning TinkerbellMachine by namespace.
+	LabelMachineNamespace = "capt.tinkerbell.org/machine-namespace"
+)
+
+// remoteLabelMapper maps a remote Tinkerbell resource (Workflow, Job) back to the
+// TinkerbellMachine in the management cluster using label-based ownership. This is
+// used instead of owner references because Kubernetes does not support cross-cluster
+// owner references.
+func remoteLabelMapper[T client.Object](_ context.Context, o T) []reconcile.Request {
+	labels := o.GetLabels()
+	name := labels[LabelMachineName]
+	namespace := labels[LabelMachineNamespace]
+
+	if name == "" || namespace == "" {
+		return nil
+	}
+
+	return []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}},
+	}
+}
+
 // validate validates if context configuration has all required fields properly populated.
 func (r *TinkerbellMachineReconciler) validate() error {
 	if r == nil {
@@ -290,6 +341,10 @@ func (r *TinkerbellMachineReconciler) validate() error {
 
 	if r.Client == nil {
 		return ErrMissingClient
+	}
+
+	if r.TinkerbellClient == nil {
+		return ErrMissingTinkerbellClient
 	}
 
 	return nil

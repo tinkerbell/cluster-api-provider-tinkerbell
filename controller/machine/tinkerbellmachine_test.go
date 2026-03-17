@@ -769,7 +769,8 @@ func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 //nolint:unparam
 func reconcileMachineWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
 	machineController := &machine.TinkerbellMachineReconciler{
-		Client: client,
+		Client:           client,
+		TinkerbellClient: client,
 	}
 
 	request := ctrl.Request{
