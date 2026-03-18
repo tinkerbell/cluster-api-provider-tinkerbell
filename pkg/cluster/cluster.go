@@ -44,10 +44,9 @@ func DefaultOption(rs *runtime.Scheme, namespace string) cluster.Option {
 }
 
 // RestConfig returns a Kubernetes REST client configuration for connecting to the Tinkerbell cluster.
-// It first attempts to read kubeconfig data from the specified file location.
-// If that fails, it falls back to using the provided API URL and token.
-// If neither source of configuration is available, it returns a NoConfigError.
-func RestConfig(kubeconfigLocation string, apiURL, apiToken string, insecure bool) (*rest.Config, error) {
+// It attempts to read kubeconfig data from the specified file location.
+// If the file is absent or empty, it returns a NoConfigError.
+func RestConfig(kubeconfigLocation string) (*rest.Config, error) {
 	if data, err := os.ReadFile(filepath.Clean(kubeconfigLocation)); err == nil && len(data) > 0 {
 		cfg, err := clientcmd.RESTConfigFromKubeConfig(data)
 		if err != nil {
@@ -57,22 +56,12 @@ func RestConfig(kubeconfigLocation string, apiURL, apiToken string, insecure boo
 		return cfg, nil
 	}
 
-	if apiURL != "" && apiToken != "" {
-		return &rest.Config{
-			Host:        apiURL,
-			BearerToken: apiToken,
-			TLSClientConfig: rest.TLSClientConfig{
-				Insecure: insecure,
-			},
-		}, nil
-	}
-
 	return nil, NoConfigError{}
 }
 
-// NoConfigError is a custom error for no kubeconfig data or API URL/token provided for Tinkerbell cluster.
+// NoConfigError is a custom error for no kubeconfig data provided for Tinkerbell cluster.
 type NoConfigError struct{}
 
 func (e NoConfigError) Error() string {
-	return "no kubeconfig data or API URL/token provided for Tinkerbell cluster"
+	return "no kubeconfig data provided for Tinkerbell cluster"
 }

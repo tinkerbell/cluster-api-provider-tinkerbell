@@ -87,9 +87,6 @@ type config struct {
 	LeaderElectionRenewDeadline    time.Duration
 	LeaderElectionRetryPeriod      time.Duration
 	RemoteTinkerbellKubeconfig     string
-	RemoteTinkerbellAPIURL         string
-	RemoteTinkerbellAPIToken       string
-	RemoteTinkerbellAPIInsecure    bool
 	RemoteTinkerbellWatchNamespace string
 }
 
@@ -184,7 +181,7 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	tinkClient := mgr.GetClient()
 	remoteTinkCache := cache.Cache(nil)
 
-	restConfig, err := cluster1.RestConfig(c.RemoteTinkerbellKubeconfig, c.RemoteTinkerbellAPIURL, c.RemoteTinkerbellAPIToken, c.RemoteTinkerbellAPIInsecure)
+	restConfig, err := cluster1.RestConfig(c.RemoteTinkerbellKubeconfig)
 	if err != nil && !errors.Is(err, cluster1.NoConfigError{}) {
 		return fmt.Errorf("failed to build remote Tinkerbell cluster client: %w", err)
 	}
@@ -374,24 +371,6 @@ func (c *config) initFlags(fs *pflag.FlagSet) { //nolint:funlen
 		"remote-tinkerbell-kubeconfig",
 		"/etc/remote-tinkerbell/value",
 		"Path to a kubeconfig file for the remote Tinkerbell cluster.",
-	)
-
-	fs.StringVar(&c.RemoteTinkerbellAPIURL,
-		"remote-tinkerbell-api-url",
-		"",
-		"API server URL of the remote Tinkerbell cluster.",
-	)
-
-	fs.StringVar(&c.RemoteTinkerbellAPIToken,
-		"remote-tinkerbell-api-token",
-		"",
-		"Bearer token for the remote Tinkerbell cluster API server.",
-	)
-
-	fs.BoolVar(&c.RemoteTinkerbellAPIInsecure,
-		"remote-tinkerbell-api-insecure",
-		false,
-		"Reports whether the API Server should be accessed without verifying the TLS certificate. For testing only.",
 	)
 
 	fs.StringVar(&c.RemoteTinkerbellWatchNamespace,

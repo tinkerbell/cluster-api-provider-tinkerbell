@@ -19,12 +19,6 @@ spec:
       - env:
           - name: TINKERBELL_IP
             value: ${TINKERBELL_IP:=''}
-          - name: REMOTE_TINKERBELL_API_URL
-            value: ${REMOTE_TINKERBELL_API_URL:=''}
-          - name: REMOTE_TINKERBELL_API_TOKEN
-            value: ${REMOTE_TINKERBELL_API_TOKEN:=''}
-          - name: REMOTE_TINKERBELL_API_INSECURE
-            value: ${REMOTE_TINKERBELL_API_INSECURE:='false'}
           - name: REMOTE_TINKERBELL_WATCH_NAMESPACE
             value: ${REMOTE_TINKERBELL_WATCH_NAMESPACE:=''}
         args:
