@@ -186,9 +186,9 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to build remote Tinkerbell cluster client: %w", err)
 	}
 	if errors.Is(err, cluster1.NoConfigError{}) {
-		setupLog.Info("No remote Tinkerbell configuration provided; using manager client for Tinkerbell CRD operations")
+		setupLog.Info("using local cluster for Tinkerbell CRD operations", "tinkerbellClientMode", "local")
 	} else {
-		setupLog.Info("Using remote Tinkerbell cluster for Tinkerbell CRD operations")
+		setupLog.Info("using remote Tinkerbell cluster for Tinkerbell CRD operations", "tinkerbellClientMode", "remote", "remoteTinkerbellWatchNamespace", c.RemoteTinkerbellWatchNamespace)
 		cclient, err := cluster1.NewClient(restConfig, cluster1.DefaultOption(scheme, c.RemoteTinkerbellWatchNamespace))
 		if err != nil {
 			return fmt.Errorf("failed to create remote Tinkerbell cluster client: %w", err)
