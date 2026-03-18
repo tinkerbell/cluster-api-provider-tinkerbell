@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
@@ -30,14 +31,33 @@ const (
 	defaultUbuntuVersion = "20.04"
 )
 
-var _ webhook.CustomDefaulter = &TinkerbellCluster{}
+var (
+	_ webhook.CustomValidator = &TinkerbellCluster{}
+	_ webhook.CustomDefaulter = &TinkerbellCluster{}
+)
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (c *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).WithDefaulter(c).For(c).Complete() //nolint:wrapcheck
+	return ctrl.NewWebhookManagedBy(mgr).WithDefaulter(c).WithValidator(c).For(c).Complete() //nolint:wrapcheck
 }
 
+// +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 // +kubebuilder:webhook:verbs=create;update,path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=true,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=default.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
+
+// ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
+func (c *TinkerbellCluster) ValidateCreate(context.Context, runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
+
+// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
+func (c *TinkerbellCluster) ValidateUpdate(context.Context, runtime.Object, runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
+
+// ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
+func (c *TinkerbellCluster) ValidateDelete(context.Context, runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
 
 func defaultVersionForOSDistro(distro string) string {
 	if strings.ToLower(distro) == osUbuntu {
