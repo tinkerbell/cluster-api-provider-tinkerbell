@@ -101,7 +101,33 @@ spec:
                   ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
                   images. If not set it will default based on ImageLookupOSDistro.
                 type: string
+              templateOverride:
+                description: |-
+                  TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
+                  in this cluster. This is used when no machine-level or hardware annotation override is set.
+                  Mutually exclusive with TemplateOverrideRef.
+                  You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+                type: string
+              templateOverrideRef:
+                description: |-
+                  TemplateOverrideRef references an existing Tinkerbell Template object whose spec.data
+                  will be used as the default template for all machines in this cluster.
+                  This is used when no machine-level or hardware annotation override is set.
+                  Mutually exclusive with TemplateOverride.
+                properties:
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
+                required:
+                - name
+                type: object
             type: object
+            x-kubernetes-validations:
+            - message: templateOverride and templateOverrideRef are mutually exclusive
+              rule: '!has(self.templateOverride) || !has(self.templateOverrideRef)'
           status:
             description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
             properties:
