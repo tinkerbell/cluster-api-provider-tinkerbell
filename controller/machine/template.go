@@ -2,6 +2,7 @@ package machine
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"os"
 	"regexp"
@@ -20,6 +21,9 @@ var (
 
 	// ErrMissingImageURL is the error returned when the WorfklowTemplate ImageURL is not specified.
 	ErrMissingImageURL = fmt.Errorf("imageURL can't be empty")
+
+	// ErrTemplateOverrideRefNoData is returned when a Template referenced by TemplateOverrideRef has no spec.data.
+	ErrTemplateOverrideRefNoData = fmt.Errorf("template referenced by cluster TemplateOverrideRef has no spec.data")
 )
 
 const (
@@ -160,14 +164,16 @@ func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
 		refTemplate := &tinkv1.Template{}
 		namespacedName := types.NamespacedName{
 			Name:      ref.Name,
-			Namespace: ref.Namespace,
+			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellCluster.Namespace),
 		}
 		if err := scope.client.Get(scope.ctx, namespacedName, refTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName, err)
+			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName.String(), err)
 		}
-		if refTemplate.Spec.Data != nil {
-			return *refTemplate.Spec.Data, nil
+		if refTemplate.Spec.Data == nil {
+			return "", fmt.Errorf("%w: %s", ErrTemplateOverrideRefNoData, namespacedName.String())
 		}
+
+		return *refTemplate.Spec.Data, nil
 	}
 
 	return "", nil
