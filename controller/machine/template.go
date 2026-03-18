@@ -166,7 +166,7 @@ func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
 			Name:      ref.Name,
 			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellCluster.Namespace),
 		}
-		if err := scope.client.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
 			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName.String(), err)
 		}
 		if refTemplate.Spec.Data == nil {
