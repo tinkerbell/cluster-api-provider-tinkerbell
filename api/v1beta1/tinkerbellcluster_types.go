@@ -37,6 +37,7 @@ const (
 )
 
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster.
+// +kubebuilder:validation:XValidation:rule=”!has(self.templateOverride) || !has(self.templateOverrideRef)”,message=”templateOverride and templateOverrideRef are mutually exclusive”
 type TinkerbellClusterSpec struct {
 	// ControlPlaneEndpoint is a required field by ClusterAPI v1beta1.
 	//

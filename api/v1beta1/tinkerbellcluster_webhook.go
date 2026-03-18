@@ -18,57 +18,26 @@ package v1beta1
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
-
-// ErrUnexpectedObjectType is returned when a webhook receives an object of an unexpected type.
-var ErrUnexpectedObjectType = errors.New("unexpected object type")
 
 const (
 	osUbuntu             = "ubuntu"
 	defaultUbuntuVersion = "20.04"
 )
 
-var (
-	_ webhook.CustomValidator = &TinkerbellCluster{}
-	_ webhook.CustomDefaulter = &TinkerbellCluster{}
-)
+var _ webhook.CustomDefaulter = &TinkerbellCluster{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (c *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).WithDefaulter(c).WithValidator(c).For(c).Complete() //nolint:wrapcheck
+	return ctrl.NewWebhookManagedBy(mgr).WithDefaulter(c).For(c).Complete() //nolint:wrapcheck
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 // +kubebuilder:webhook:verbs=create;update,path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=true,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=default.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
-
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateCreate(context.Context, runtime.Object) (admission.Warnings, error) {
-	return nil, aggregateObjErrors(c.GroupVersionKind().GroupKind(), c.Name, c.validateSpec())
-}
-
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateUpdate(_ context.Context, _ runtime.Object, newRaw runtime.Object) (admission.Warnings, error) {
-	newCluster, ok := newRaw.(*TinkerbellCluster)
-	if !ok {
-		return nil, fmt.Errorf("%w: expected TinkerbellCluster, got %T", ErrUnexpectedObjectType, newRaw)
-	}
-
-	return nil, aggregateObjErrors(newCluster.GroupVersionKind().GroupKind(), newCluster.Name, newCluster.validateSpec())
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (c *TinkerbellCluster) ValidateDelete(context.Context, runtime.Object) (admission.Warnings, error) {
-	return nil, nil
-}
 
 func defaultVersionForOSDistro(distro string) string {
 	if strings.ToLower(distro) == osUbuntu {
@@ -76,18 +45,6 @@ func defaultVersionForOSDistro(distro string) string {
 	}
 
 	return ""
-}
-
-func (c *TinkerbellCluster) validateSpec() field.ErrorList {
-	var allErrs field.ErrorList
-
-	if c.Spec.TemplateOverride != "" && c.Spec.TemplateOverrideRef != nil {
-		allErrs = append(allErrs,
-			field.Invalid(field.NewPath("spec", "templateOverrideRef"), c.Spec.TemplateOverrideRef,
-				"templateOverrideRef and templateOverride are mutually exclusive"))
-	}
-
-	return allErrs
 }
 
 // Default implements webhookutil.defaulter so a webhook will be registered for the type.
