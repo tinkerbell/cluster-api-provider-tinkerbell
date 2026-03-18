@@ -41,7 +41,7 @@ func (scope *machineReconcileScope) getWorkflow() (*tinkv1.Workflow, error) {
 	return t, nil
 }
 
-func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error { //nolint:funlen
+func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 	c := true
 	workflow := &tinkv1.Workflow{
 		ObjectMeta: metav1.ObjectMeta{

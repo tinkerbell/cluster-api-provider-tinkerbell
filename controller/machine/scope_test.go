@@ -37,7 +37,6 @@ func readyMachine() *clusterv1.Machine {
 	}
 }
 
-//nolint:funlen
 func Test_Machine(t *testing.T) {
 	t.Parallel()
 

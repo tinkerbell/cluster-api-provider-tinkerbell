@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParse(t *testing.T) { //nolint:funlen // this is normal.
+func TestParse(t *testing.T) {
 	t.Parallel()
 	tests := map[string]struct {
 		version     string

@@ -90,7 +90,7 @@ type config struct {
 	RemoteTinkerbellWatchNamespace string
 }
 
-func main() { //nolint:funlen
+func main() {
 	cfg := &config{}
 	cfg.initFlags(pflag.CommandLine)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -289,7 +289,7 @@ func (c *config) initFlags(fs *pflag.FlagSet) { //nolint:funlen
 		&c.WatchNamespace,
 		"namespace",
 		"",
-		"Namespace that the controller watches to reconcile cluster-api objects. If unspecified, the controller watches for cluster-api objects across all namespaces.", //nolint:lll
+		"Namespace that the controller watches to reconcile cluster-api objects. If unspecified, the controller watches for cluster-api objects across all namespaces.",
 	)
 
 	fs.StringVar(
@@ -376,6 +376,6 @@ func (c *config) initFlags(fs *pflag.FlagSet) { //nolint:funlen
 	fs.StringVar(&c.RemoteTinkerbellWatchNamespace,
 		"remote-tinkerbell-watch-namespace",
 		"",
-		"Namespace in the remote Tinkerbell cluster to watch for Workflow and Job objects. If unspecified, the controller watches for Workflow and Job objects across all namespaces.", //nolint:lll
+		"Namespace in the remote Tinkerbell cluster to watch for Workflow and Job objects. If unspecified, the controller watches for Workflow and Job objects across all namespaces.",
 	)
 }

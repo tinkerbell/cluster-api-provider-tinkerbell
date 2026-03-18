@@ -35,7 +35,6 @@ func validWorkflowTemplate() *machine.WorkflowTemplate {
 	}
 }
 
-//nolint:funlen
 func Test_Cloud_config_template(t *testing.T) {
 	t.Parallel()
 

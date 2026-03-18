@@ -1407,7 +1407,6 @@ func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteri
 		})
 }
 
-//nolint:funlen
 func machineReconciliationHardwareAffinityHelper(t *testing.T, fooOptions testOptions, barOptions testOptions, bazOptions testOptions) {
 	t.Helper()
 	t.Parallel()
