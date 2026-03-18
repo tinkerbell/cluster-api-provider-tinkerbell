@@ -2,6 +2,7 @@ package machine
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"os"
 	"regexp"
@@ -20,6 +21,9 @@ var (
 
 	// ErrMissingImageURL is the error returned when the WorfklowTemplate ImageURL is not specified.
 	ErrMissingImageURL = fmt.Errorf("imageURL can't be empty")
+
+	// ErrTemplateOverrideRefNoData is returned when a Template referenced by TemplateOverrideRef has no spec.data.
+	ErrTemplateOverrideRefNoData = fmt.Errorf("template referenced by cluster TemplateOverrideRef has no spec.data")
 )
 
 const (
@@ -151,6 +155,30 @@ func (scope *machineReconcileScope) templateExists() (bool, error) {
 	return false, nil
 }
 
+func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
+	switch {
+	case scope.tinkerbellCluster.Spec.TemplateOverride != "":
+		return scope.tinkerbellCluster.Spec.TemplateOverride, nil
+	case scope.tinkerbellCluster.Spec.TemplateOverrideRef != nil:
+		ref := scope.tinkerbellCluster.Spec.TemplateOverrideRef
+		refTemplate := &tinkv1.Template{}
+		namespacedName := types.NamespacedName{
+			Name:      ref.Name,
+			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellCluster.Namespace),
+		}
+		if err := scope.client.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName.String(), err)
+		}
+		if refTemplate.Spec.Data == nil {
+			return "", fmt.Errorf("%w: %s", ErrTemplateOverrideRefNoData, namespacedName.String())
+		}
+
+		return *refTemplate.Spec.Data, nil
+	}
+
+	return "", nil
+}
+
 func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 	if len(hw.Spec.Disks) < 1 {
 		return ErrHardwareMissingDiskConfiguration
@@ -166,9 +194,18 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		templateData = tmplFromAnnotation
 	}
 
+	// If still no template, try the cluster-level overrides.
+	if templateData == "" {
+		clusterData, err := scope.clusterTemplateOverride()
+		if err != nil {
+			return err
+		}
+		templateData = clusterData
+	}
+
 	// If still no template, generate the default one.
 	if templateData == "" {
-		scope.log.Info("no template found in hardware annotation, generating default template")
+		scope.log.Info("no template override found, generating default template")
 		defaultTemplate, err := scope.generateDefaultTemplate(hw)
 		if err != nil {
 			return err
