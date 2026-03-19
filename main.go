@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/go-logr/zerologr"
+	"github.com/peterbourgon/ff/v3"
 	"github.com/rs/zerolog"
-	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
@@ -92,9 +92,17 @@ type config struct {
 
 func main() {
 	cfg := &config{}
-	cfg.initFlags(pflag.CommandLine)
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	pflag.Parse()
+
+	fs := flag.NewFlagSet("capt", flag.ExitOnError)
+	cfg.initFlags(fs)
+
+	if err := ff.Parse(fs, os.Args[1:],
+		ff.WithEnvVarNoPrefix(),
+		ff.WithConfigFileParser(ff.PlainParser),
+	); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 
 	if cfg.WatchNamespace != "" {
 		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", cfg.WatchNamespace)
@@ -249,7 +257,7 @@ func addHealthChecks(mgr ctrl.Manager) error {
 	return nil
 }
 
-func (c *config) initFlags(fs *pflag.FlagSet) { //nolint:funlen
+func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
 	fs.StringVar(
 		&c.MetricsBindAddress,
 		"metrics-bind-addr",
