@@ -18,7 +18,9 @@ spec:
       containers:
       - env:
           - name: TINKERBELL_IP
-            value: ${TINKERBELL_IP}
+            value: ${TINKERBELL_IP:=''}
+          - name: REMOTE_TINKERBELL_WATCH_NAMESPACE
+            value: ${REMOTE_TINKERBELL_WATCH_NAMESPACE:=''}
         args:
         - --leader-elect
         image: tinkerbell-controller
@@ -43,10 +45,19 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
+        volumeMounts:
+        - name: remote-tinkerbell-kubeconfig
+          mountPath: /etc/remote-tinkerbell
+          readOnly: true
       terminationGracePeriodSeconds: 10
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/master
       - effect: NoSchedule
         key: node-role.kubernetes.io/control-plane
+      volumes:
+      - name: remote-tinkerbell-kubeconfig
+        secret:
+          secretName: ${REMOTE_TINKERBELL_KUBECONFIG:=remote-tinkerbell-kubeconfig}
+          optional: true
       serviceAccountName: controller-manager

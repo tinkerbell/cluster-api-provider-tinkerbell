@@ -769,7 +769,8 @@ func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 //nolint:unparam
 func reconcileMachineWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
 	machineController := &machine.TinkerbellMachineReconciler{
-		Client: client,
+		Client:           client,
+		TinkerbellClient: client,
 	}
 
 	request := ctrl.Request{
@@ -1406,7 +1407,6 @@ func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteri
 		})
 }
 
-//nolint:funlen
 func machineReconciliationHardwareAffinityHelper(t *testing.T, fooOptions testOptions, barOptions testOptions, bazOptions testOptions) {
 	t.Helper()
 	t.Parallel()

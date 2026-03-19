@@ -78,7 +78,7 @@ func hardwareIP(hardware *tinkv1.Hardware) (string, error) {
 
 // patchHardwareStates patches a hardware's metadata and instance states.
 func (scope *machineReconcileScope) patchHardwareAnnotations(hw *tinkv1.Hardware, annotations map[string]string) error {
-	patchHelper, err := patch.NewHelper(hw, scope.client)
+	patchHelper, err := patch.NewHelper(hw, scope.tinkerbellClient)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
@@ -99,7 +99,7 @@ func (scope *machineReconcileScope) patchHardwareAnnotations(hw *tinkv1.Hardware
 }
 
 func (scope *machineReconcileScope) takeHardwareOwnership(hw *tinkv1.Hardware) error {
-	patchHelper, err := patch.NewHelper(hw, scope.client)
+	patchHelper, err := patch.NewHelper(hw, scope.tinkerbellClient)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
@@ -125,7 +125,7 @@ func (scope *machineReconcileScope) ensureHardwareUserData(hw *tinkv1.Hardware, 
 	userData := strings.ReplaceAll(scope.bootstrapCloudConfig, providerIDPlaceholder, providerID)
 
 	if hw.Spec.UserData == nil || *hw.Spec.UserData != userData {
-		patchHelper, err := patch.NewHelper(hw, scope.client)
+		patchHelper, err := patch.NewHelper(hw, scope.tinkerbellClient)
 		if err != nil {
 			return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 		}
@@ -201,7 +201,7 @@ func (scope *machineReconcileScope) hardwareForMachine() (*tinkv1.Hardware, erro
 			return nil, fmt.Errorf("converting label selector: %w", err)
 		}
 
-		if err := scope.client.List(scope.ctx, &matched, &client.ListOptions{LabelSelector: selector}); err != nil {
+		if err := scope.tinkerbellClient.List(scope.ctx, &matched, &client.ListOptions{LabelSelector: selector}); err != nil {
 			return nil, fmt.Errorf("listing hardware without owner: %w", err)
 		}
 
@@ -227,7 +227,7 @@ func (scope *machineReconcileScope) hardwareForMachine() (*tinkv1.Hardware, erro
 // nil, nil.
 func (scope *machineReconcileScope) assignedHardware() (*tinkv1.Hardware, error) {
 	var selectedHardware tinkv1.HardwareList
-	if err := scope.client.List(scope.ctx, &selectedHardware, client.MatchingLabels{
+	if err := scope.tinkerbellClient.List(scope.ctx, &selectedHardware, client.MatchingLabels{
 		HardwareOwnerNameLabel:      scope.tinkerbellMachine.Name,
 		HardwareOwnerNamespaceLabel: scope.tinkerbellMachine.Namespace,
 	}); err != nil {
@@ -278,7 +278,7 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 }
 
 func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
-	patchHelper, err := patch.NewHelper(hw, scope.client)
+	patchHelper, err := patch.NewHelper(hw, scope.tinkerbellClient)
 	if err != nil {
 		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
 	}
@@ -302,7 +302,7 @@ func (scope *machineReconcileScope) getHardwareForMachine(hardware *tinkv1.Hardw
 		Namespace: scope.tinkerbellMachine.Namespace,
 	}
 
-	if err := scope.client.Get(scope.ctx, namespacedName, hardware); err != nil {
+	if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, hardware); err != nil {
 		return fmt.Errorf("getting hardware: %w", err)
 	}
 

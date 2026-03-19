@@ -8,5 +8,5 @@ spec:
     spec:
       containers:
       # Change the value of image field below to your controller image URL
-      - image: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell:v0.6.7
+      - image: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell:v0.6.8
         name: manager
