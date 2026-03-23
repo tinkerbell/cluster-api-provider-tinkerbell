@@ -54,9 +54,34 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
-//nolint:wsl,gochecknoinits
-func init() {
-	klog.InitFlags(nil)
+type config struct {
+	EnableLeaderElection          bool
+	MetricsBindAddress            string
+	LeaderElectionNamespace       string
+	WatchNamespace                string
+	ProfilerAddress               string
+	HealthAddr                    string
+	WatchFilterValue              string
+	WebhookCertDir                string
+	TinkerbellClusterConcurrency  int
+	TinkerbellMachineConcurrency  int
+	TinkerbellHardwareConcurrency int
+	TinkerbellTemplateConcurrency int
+	TinkerbellWorkflowConcurrency int
+	WebhookPort                   int
+	SyncPeriod                    time.Duration
+	LeaderElectionLeaseDuration   time.Duration
+	LeaderElectionRenewDeadline   time.Duration
+	LeaderElectionRetryPeriod     time.Duration
+	ExternalKubeconfig            string
+	ExternalWatchNamespace        string
+}
+
+func main() { //nolint:funlen
+	cfg := &config{}
+
+	fs := flag.NewFlagSet("capt", flag.ExitOnError)
+	klog.InitFlags(fs)
 
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrastructurev1.AddToScheme(scheme)
@@ -65,35 +90,6 @@ func init() {
 	_ = captctrl.AddToSchemeBMC(scheme)
 
 	// +kubebuilder:scaffold:scheme
-}
-
-type config struct {
-	EnableLeaderElection           bool
-	MetricsBindAddress             string
-	LeaderElectionNamespace        string
-	WatchNamespace                 string
-	ProfilerAddress                string
-	HealthAddr                     string
-	WatchFilterValue               string
-	WebhookCertDir                 string
-	TinkerbellClusterConcurrency   int
-	TinkerbellMachineConcurrency   int
-	TinkerbellHardwareConcurrency  int
-	TinkerbellTemplateConcurrency  int
-	TinkerbellWorkflowConcurrency  int
-	WebhookPort                    int
-	SyncPeriod                     time.Duration
-	LeaderElectionLeaseDuration    time.Duration
-	LeaderElectionRenewDeadline    time.Duration
-	LeaderElectionRetryPeriod      time.Duration
-	RemoteTinkerbellKubeconfig     string
-	RemoteTinkerbellWatchNamespace string
-}
-
-func main() {
-	cfg := &config{}
-
-	fs := flag.NewFlagSet("capt", flag.ExitOnError)
 	cfg.initFlags(fs)
 
 	if err := ff.Parse(fs, os.Args[1:],
@@ -187,26 +183,26 @@ func main() {
 func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	setupLog.Info("Setting up kubernetes clients for controllers")
 	tinkClient := mgr.GetClient()
-	remoteTinkCache := cache.Cache(nil)
+	externalCache := cache.Cache(nil)
 
-	restConfig, err := cluster1.RestConfig(c.RemoteTinkerbellKubeconfig)
+	restConfig, err := cluster1.RestConfig(c.ExternalKubeconfig)
 	if err != nil && !errors.Is(err, cluster1.NoConfigError{}) {
-		return fmt.Errorf("failed to build remote Tinkerbell cluster client: %w", err)
+		return fmt.Errorf("failed to build external Tinkerbell client: %w", err)
 	}
 	if errors.Is(err, cluster1.NoConfigError{}) {
-		setupLog.Info("using local cluster for Tinkerbell CRD operations", "tinkerbellClientMode", "local")
+		setupLog.Info("using local Tinkerbell for CRD operations", "tinkerbellClientMode", "local", "reason", err.Error())
 	} else {
-		setupLog.Info("using remote Tinkerbell cluster for Tinkerbell CRD operations", "tinkerbellClientMode", "remote", "remoteTinkerbellWatchNamespace", c.RemoteTinkerbellWatchNamespace)
-		cclient, err := cluster1.NewClient(restConfig, cluster1.DefaultOption(scheme, c.RemoteTinkerbellWatchNamespace))
+		setupLog.Info("using external Tinkerbell for CRD operations", "tinkerbellClientMode", "external", "externalWatchNamespace", c.ExternalWatchNamespace)
+		cclient, err := cluster1.NewClient(restConfig, cluster1.DefaultOption(scheme, c.ExternalWatchNamespace))
 		if err != nil {
-			return fmt.Errorf("failed to create remote Tinkerbell cluster client: %w", err)
+			return fmt.Errorf("failed to create external Tinkerbell client: %w", err)
 		}
 		tinkClient = cclient.GetClient()
-		remoteTinkCache = cclient.GetCache()
-		// Register the remote cluster as a Runnable so its informer cache
+		externalCache = cclient.GetCache()
+		// Register the external Tinkerbell cluster as a Runnable so its informer cache
 		// starts and stops with the manager.
 		if err := mgr.Add(cclient); err != nil {
-			return fmt.Errorf("failed to add remote Tinkerbell cluster to manager: %w", err)
+			return fmt.Errorf("failed to add external Tinkerbell to manager: %w", err)
 		}
 	}
 
@@ -218,10 +214,11 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	}
 
 	if err := (&machine.TinkerbellMachineReconciler{
-		Client:           mgr.GetClient(),
-		TinkerbellClient: tinkClient,
-		RemoteTinkCache:  remoteTinkCache,
-		WatchFilterValue: c.WatchFilterValue,
+		Client:             mgr.GetClient(),
+		TinkerbellClient:   tinkClient,
+		ExternalCache:      externalCache,
+		ExternalTinkerbell: externalCache != nil,
+		WatchFilterValue:   c.WatchFilterValue,
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellMachineConcurrency}, mgr.GetScheme()); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine controller:%w", err)
 	}
@@ -375,15 +372,15 @@ func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
 		"The address the health endpoint binds to.",
 	)
 
-	fs.StringVar(&c.RemoteTinkerbellKubeconfig,
-		"remote-tinkerbell-kubeconfig",
-		"/etc/remote-tinkerbell/value",
-		"Path to a kubeconfig file for the remote Tinkerbell cluster.",
+	fs.StringVar(&c.ExternalKubeconfig,
+		"external-kubeconfig",
+		"/etc/external-tinkerbell/value",
+		"Path to a kubeconfig file for an external Tinkerbell cluster.",
 	)
 
-	fs.StringVar(&c.RemoteTinkerbellWatchNamespace,
-		"remote-tinkerbell-watch-namespace",
+	fs.StringVar(&c.ExternalWatchNamespace,
+		"external-watch-namespace",
 		"",
-		"Namespace in the remote Tinkerbell cluster to watch for Workflow and Job objects. If unspecified, the controller watches for Workflow and Job objects across all namespaces.",
+		"Namespace in the external Tinkerbell cluster to watch for Workflow and Job objects. If unspecified, the controller watches for Workflow and Job objects across all namespaces.",
 	)
 }

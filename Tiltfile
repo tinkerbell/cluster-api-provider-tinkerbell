@@ -25,8 +25,8 @@ manifests = kustomize('./config/default')
 manifests = blob(
     str(manifests)
     .replace("${TINKERBELL_IP:=''}", os.getenv('TINKERBELL_IP', ''))
-    .replace("${REMOTE_TINKERBELL_KUBECONFIG:=remote-tinkerbell-kubeconfig}", os.getenv('REMOTE_TINKERBELL_KUBECONFIG', 'remote-tinkerbell-kubeconfig'))
-    .replace("${REMOTE_TINKERBELL_WATCH_NAMESPACE:=''}", os.getenv('REMOTE_TINKERBELL_WATCH_NAMESPACE', ''))
+    .replace("${EXTERNAL_TINKERBELL_KUBECONFIG:=external-tinkerbell-kubeconfig}", os.getenv('EXTERNAL_TINKERBELL_KUBECONFIG', 'external-tinkerbell-kubeconfig'))
+    .replace("${EXTERNAL_TINKERBELL_WATCH_NAMESPACE:=''}", os.getenv('EXTERNAL_TINKERBELL_WATCH_NAMESPACE', ''))
 )
 k8s_yaml(manifests)
 

@@ -1,5 +1,5 @@
 // Package cluster builds a controller-runtime cluster client for interacting with objects.
-// This client can be local in-cluster or remote, depending on the provided configuration.
+// This client can be local or external, depending on the provided configuration.
 package cluster
 
 import (
@@ -21,7 +21,7 @@ import (
 func NewClient(rc *rest.Config, clusterOpts ...cluster.Option) (cluster.Cluster, error) {
 	c, err := cluster.New(rc, clusterOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("creating cluster for remote Tinkerbell: %w", err)
+		return nil, fmt.Errorf("creating cluster for external Tinkerbell: %w", err)
 	}
 
 	return c, nil
@@ -47,16 +47,25 @@ func DefaultOption(rs *runtime.Scheme, namespace string) cluster.Option {
 // It attempts to read kubeconfig data from the specified file location.
 // If the file is absent or empty, it returns a NoConfigError.
 func RestConfig(kubeconfigLocation string) (*rest.Config, error) {
-	if data, err := os.ReadFile(filepath.Clean(kubeconfigLocation)); err == nil && len(data) > 0 {
-		cfg, err := clientcmd.RESTConfigFromKubeConfig(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	data, err := os.ReadFile(filepath.Clean(kubeconfigLocation))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, NoConfigError{}
 		}
 
-		return cfg, nil
+		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
 
-	return nil, NoConfigError{}
+	if len(data) == 0 {
+		return nil, NoConfigError{}
+	}
+
+	cfg, err := clientcmd.RESTConfigFromKubeConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	return cfg, nil
 }
 
 // NoConfigError is a custom error for no kubeconfig data provided for Tinkerbell cluster.

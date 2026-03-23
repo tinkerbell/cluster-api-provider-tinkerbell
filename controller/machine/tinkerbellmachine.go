@@ -50,12 +50,14 @@ import (
 type TinkerbellMachineReconciler struct {
 	client.Client
 	// TinkerbellClient is the client used for Tinkerbell CRD operations (Hardware, Template,
-	// Workflow, BMC Job). When targeting a remote Tinkerbell cluster this differs from Client.
+	// Workflow, BMC Job). When targeting an external Tinkerbell cluster this differs from Client.
 	TinkerbellClient client.Client
-	// RemoteTinkCache is the informer cache for the remote Tinkerbell cluster.
-	// It is nil when operating in local (same-cluster) mode.
-	RemoteTinkCache  cache.Cache
-	WatchFilterValue string
+	// ExternalCache is the informer cache for the external Tinkerbell cluster.
+	// It is nil when operating in local mode.
+	ExternalCache cache.Cache
+	// ExternalTinkerbell indicates whether TinkerbellClient targets an external Tinkerbell cluster.
+	ExternalTinkerbell bool
+	WatchFilterValue   string
 }
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines,verbs=get;list;watch;create;update;patch;delete
@@ -83,11 +85,12 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	log.Info("starting reconcile")
 
 	scope := &machineReconcileScope{
-		log:               log,
-		ctx:               ctx,
-		tinkerbellMachine: &infrastructurev1.TinkerbellMachine{},
-		client:            r.Client,
-		tinkerbellClient:  r.TinkerbellClient,
+		log:                log,
+		ctx:                ctx,
+		tinkerbellMachine:  &infrastructurev1.TinkerbellMachine{},
+		client:             r.Client,
+		tinkerbellClient:   r.TinkerbellClient,
+		externalTinkerbell: r.ExternalTinkerbell,
 	}
 
 	if err := r.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
@@ -203,19 +206,19 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 		)
 
 	// When the TinkerbellClient targets the same cluster as the management client we can
-	// watch Workflow and Job objects for owner-based event triggers. In remote mode we use
-	// the remote cache with label-based mappers instead of owner references.
-	if r.RemoteTinkCache != nil {
+	// watch Workflow and Job objects for owner-based event triggers. In external mode we use
+	// the external cache with label-based mappers instead of owner references.
+	if r.ExternalCache != nil {
 		builder = builder.
 			WatchesRawSource(
-				source.Kind(r.RemoteTinkCache, &tinkv1.Workflow{},
-					handler.TypedEnqueueRequestsFromMapFunc(remoteLabelMapper[*tinkv1.Workflow])),
+				source.Kind(r.ExternalCache, &tinkv1.Workflow{},
+					handler.TypedEnqueueRequestsFromMapFunc(externalLabelMapper[*tinkv1.Workflow])),
 			).
 			WatchesRawSource(
-				source.Kind(r.RemoteTinkCache, &rufiov1.Job{},
-					handler.TypedEnqueueRequestsFromMapFunc(remoteLabelMapper[*rufiov1.Job])),
+				source.Kind(r.ExternalCache, &rufiov1.Job{},
+					handler.TypedEnqueueRequestsFromMapFunc(externalLabelMapper[*rufiov1.Job])),
 			)
-		log.Info("Remote Tinkerbell client configured; watching Workflow and Job via remote cache")
+		log.Info("External Tinkerbell configured; watching Workflow and Job via external cache")
 	} else {
 		builder = builder.
 			Watches(
@@ -307,19 +310,19 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 }
 
 const (
-	// LabelMachineName is the label key used on remote Tinkerbell resources to identify
+	// LabelMachineName is the label key used on external Tinkerbell resources to identify
 	// the owning TinkerbellMachine by name.
 	LabelMachineName = "capt.tinkerbell.org/machine-name"
-	// LabelMachineNamespace is the label key used on remote Tinkerbell resources to identify
+	// LabelMachineNamespace is the label key used on external Tinkerbell resources to identify
 	// the owning TinkerbellMachine by namespace.
 	LabelMachineNamespace = "capt.tinkerbell.org/machine-namespace"
 )
 
-// remoteLabelMapper maps a remote Tinkerbell resource (Workflow, Job) back to the
+// externalLabelMapper maps an external Tinkerbell resource (Workflow, Job) back to the
 // TinkerbellMachine in the management cluster using label-based ownership. This is
 // used instead of owner references because Kubernetes does not support cross-cluster
 // owner references.
-func remoteLabelMapper[T client.Object](_ context.Context, o T) []reconcile.Request {
+func externalLabelMapper[T client.Object](_ context.Context, o T) []reconcile.Request {
 	labels := o.GetLabels()
 	name := labels[LabelMachineName]
 	namespace := labels[LabelMachineNamespace]

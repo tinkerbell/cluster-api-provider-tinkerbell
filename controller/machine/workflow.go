@@ -58,7 +58,7 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 		},
 	}
 
-	if scope.isTinkerbellClient() {
+	if scope.isExternal() {
 		workflow.Labels = map[string]string{
 			LabelMachineName:      scope.tinkerbellMachine.Name,
 			LabelMachineNamespace: scope.tinkerbellMachine.Namespace,

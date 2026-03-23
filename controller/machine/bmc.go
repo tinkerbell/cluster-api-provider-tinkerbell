@@ -35,7 +35,7 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		},
 	}
 
-	if scope.isTinkerbellClient() {
+	if scope.isExternal() {
 		bmcJob.Labels = map[string]string{
 			LabelMachineName:      scope.tinkerbellMachine.Name,
 			LabelMachineNamespace: scope.tinkerbellMachine.Namespace,

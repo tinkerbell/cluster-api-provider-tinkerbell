@@ -223,7 +223,7 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		},
 	}
 
-	if scope.isTinkerbellClient() {
+	if scope.isExternal() {
 		templateObject.Labels = map[string]string{
 			LabelMachineName:      scope.tinkerbellMachine.Name,
 			LabelMachineNamespace: scope.tinkerbellMachine.Namespace,

@@ -69,11 +69,14 @@ type machineReconcileScope struct {
 	ctx               context.Context
 	tinkerbellMachine *infrastructurev1.TinkerbellMachine
 	patchHelper       *patch.Helper
-	// client is the controller-runtime client for interacting with local (in cluster) CAPT objects and other local cluster objects.
+	// client is the controller-runtime client for interacting with in-cluster CAPT objects and other in-cluster resources.
 	client client.Client
 	// tinkerbellClient is the client for interacting with all core Tinkerbell objects.
-	// It's separate from "client" so that it can be a remote client, i.e. a different cluster than where CAPT is deployed.
-	tinkerbellClient     client.Client
+	// It's separate from "client" so that it can target an external Tinkerbell cluster, i.e. a different cluster than where CAPT is deployed.
+	tinkerbellClient client.Client
+	// externalTinkerbell indicates whether tinkerbellClient targets an external
+	// Tinkerbell cluster, i.e. a different cluster than the CAPT management client.
+	externalTinkerbell   bool
 	machine              *clusterv1.Machine
 	tinkerbellCluster    *infrastructurev1.TinkerbellCluster
 	bootstrapCloudConfig string
@@ -89,10 +92,10 @@ func (scope *machineReconcileScope) addFinalizer() error {
 	return nil
 }
 
-// isTinkerbellClient returns true when the Tinerbell client targets a different
-// cluster than the CAPT management client.
-func (scope *machineReconcileScope) isTinkerbellClient() bool {
-	return scope.tinkerbellClient != scope.client
+// isExternal returns true when the Tinkerbell client targets an external
+// Tinkerbell cluster, i.e. a different cluster than the CAPT management client.
+func (scope *machineReconcileScope) isExternal() bool {
+	return scope.externalTinkerbell
 }
 
 type errRequeueRequested struct{}
