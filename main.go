@@ -92,10 +92,7 @@ func main() { //nolint:funlen
 	// +kubebuilder:scaffold:scheme
 	cfg.initFlags(fs)
 
-	if err := ff.Parse(fs, os.Args[1:],
-		ff.WithEnvVarNoPrefix(),
-		ff.WithConfigFileParser(ff.PlainParser),
-	); err != nil {
+	if err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarNoPrefix(), ff.WithConfigFileParser(ff.PlainParser)); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
