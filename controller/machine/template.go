@@ -143,7 +143,7 @@ func (scope *machineReconcileScope) templateExists() (bool, error) {
 		Namespace: scope.tinkerbellMachine.Namespace,
 	}
 
-	err := scope.client.Get(scope.ctx, namespacedName, &tinkv1.Template{})
+	err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, &tinkv1.Template{})
 	if err == nil {
 		return true, nil
 	}
@@ -166,7 +166,7 @@ func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
 			Name:      ref.Name,
 			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellCluster.Namespace),
 		}
-		if err := scope.client.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
 			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName.String(), err)
 		}
 		if refTemplate.Spec.Data == nil {
@@ -217,21 +217,29 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scope.tinkerbellMachine.Name,
 			Namespace: scope.tinkerbellMachine.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
-					Kind:       "TinkerbellMachine",
-					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.UID,
-				},
-			},
 		},
 		Spec: tinkv1.TemplateSpec{
 			Data: &templateData,
 		},
 	}
 
-	if err := scope.client.Create(scope.ctx, templateObject); err != nil {
+	if scope.isExternal() {
+		templateObject.Labels = map[string]string{
+			LabelMachineName:      scope.tinkerbellMachine.Name,
+			LabelMachineNamespace: scope.tinkerbellMachine.Namespace,
+		}
+	} else {
+		templateObject.OwnerReferences = []metav1.OwnerReference{
+			{
+				APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+				Kind:       "TinkerbellMachine",
+				Name:       scope.tinkerbellMachine.Name,
+				UID:        scope.tinkerbellMachine.UID,
+			},
+		}
+	}
+
+	if err := scope.tinkerbellClient.Create(scope.ctx, templateObject); err != nil {
 		return fmt.Errorf("creating Tinkerbell template: %w", err)
 	}
 
@@ -282,7 +290,7 @@ func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) 
 			Name:      templateName,
 			Namespace: hw.Namespace,
 		}
-		if err := scope.client.Get(scope.ctx, namespacedName, overrideTemplate); err != nil {
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, overrideTemplate); err != nil {
 			return "", fmt.Errorf("failed to get Template %q specified in hardware annotation: %w", templateName, err)
 		}
 		scope.log.V(4).Info("found template override in Hardware annotations, using it as template", "templateName", templateName)
@@ -328,7 +336,7 @@ func (scope *machineReconcileScope) removeTemplate() error {
 
 	template := &tinkv1.Template{}
 
-	err := scope.client.Get(scope.ctx, namespacedName, template)
+	err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, template)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			scope.log.Info("Template already removed", "name", namespacedName)
@@ -341,7 +349,7 @@ func (scope *machineReconcileScope) removeTemplate() error {
 
 	scope.log.Info("Removing Template", "name", namespacedName)
 
-	if err := scope.client.Delete(scope.ctx, template); err != nil {
+	if err := scope.tinkerbellClient.Delete(scope.ctx, template); err != nil {
 		return fmt.Errorf("ensuring template has been removed: %w", err)
 	}
 

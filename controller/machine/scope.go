@@ -52,6 +52,10 @@ var (
 	// not have a Client configured.
 	ErrMissingClient = fmt.Errorf("client is nil")
 
+	// ErrMissingTinkerbellClient is the error returned when TinkerbellMachineReconciler does not have
+	// the required Tinkerbell client configured.
+	ErrMissingTinkerbellClient = fmt.Errorf("tinkerbell client is nil")
+
 	// ErrMissingBootstrapDataSecretValueKey is the error returned when the Secret referenced for bootstrap data
 	// is missing the value key.
 	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
@@ -61,11 +65,18 @@ var (
 )
 
 type machineReconcileScope struct {
-	log                  logr.Logger
-	ctx                  context.Context
-	tinkerbellMachine    *infrastructurev1.TinkerbellMachine
-	patchHelper          *patch.Helper
-	client               client.Client
+	log               logr.Logger
+	ctx               context.Context
+	tinkerbellMachine *infrastructurev1.TinkerbellMachine
+	patchHelper       *patch.Helper
+	// client is the controller-runtime client for interacting with in-cluster CAPT objects and other in-cluster resources.
+	client client.Client
+	// tinkerbellClient is the client for interacting with all core Tinkerbell objects.
+	// It's separate from "client" so that it can target an external Tinkerbell cluster, i.e. a different cluster than where CAPT is deployed.
+	tinkerbellClient client.Client
+	// externalTinkerbell indicates whether tinkerbellClient targets an external
+	// Tinkerbell cluster, i.e. a different cluster than the CAPT management client.
+	externalTinkerbell   bool
 	machine              *clusterv1.Machine
 	tinkerbellCluster    *infrastructurev1.TinkerbellCluster
 	bootstrapCloudConfig string
@@ -79,6 +90,12 @@ func (scope *machineReconcileScope) addFinalizer() error {
 	}
 
 	return nil
+}
+
+// isExternal returns true when the Tinkerbell client targets an external
+// Tinkerbell cluster, i.e. a different cluster than the CAPT management client.
+func (scope *machineReconcileScope) isExternal() bool {
+	return scope.externalTinkerbell
 }
 
 type errRequeueRequested struct{}
@@ -174,7 +191,7 @@ func (scope *machineReconcileScope) setStatus(hw *tinkv1.Hardware) error {
 			Namespace: scope.tinkerbellMachine.Namespace,
 		}
 
-		if err := scope.client.Get(scope.ctx, namespacedName, hw); err != nil {
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, hw); err != nil {
 			return fmt.Errorf("getting Hardware: %w", err)
 		}
 	}

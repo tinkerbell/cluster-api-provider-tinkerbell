@@ -24,6 +24,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
@@ -32,9 +33,12 @@ import (
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
@@ -45,7 +49,15 @@ import (
 // TinkerbellMachineReconciler implements Reconciler interface by managing Tinkerbell machines.
 type TinkerbellMachineReconciler struct {
 	client.Client
-	WatchFilterValue string
+	// TinkerbellClient is the client used for Tinkerbell CRD operations (Hardware, Template,
+	// Workflow, BMC Job). When targeting an external Tinkerbell cluster this differs from Client.
+	TinkerbellClient client.Client
+	// ExternalCache is the informer cache for the external Tinkerbell cluster.
+	// It is nil when operating in local mode.
+	ExternalCache cache.Cache
+	// ExternalTinkerbell indicates whether TinkerbellClient targets an external Tinkerbell cluster.
+	ExternalTinkerbell bool
+	WatchFilterValue   string
 }
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines,verbs=get;list;watch;create;update;patch;delete
@@ -73,10 +85,12 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	log.Info("starting reconcile")
 
 	scope := &machineReconcileScope{
-		log:               log,
-		ctx:               ctx,
-		tinkerbellMachine: &infrastructurev1.TinkerbellMachine{},
-		client:            r.Client,
+		log:                log,
+		ctx:                ctx,
+		tinkerbellMachine:  &infrastructurev1.TinkerbellMachine{},
+		client:             r.Client,
+		tinkerbellClient:   r.TinkerbellClient,
+		externalTinkerbell: r.ExternalTinkerbell,
 	}
 
 	if err := r.Get(ctx, req.NamespacedName, scope.tinkerbellMachine); err != nil {
@@ -159,12 +173,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // SetupWithManager configures reconciler with a given manager.
-func (r *TinkerbellMachineReconciler) SetupWithManager(
-	ctx context.Context,
-	mgr ctrl.Manager,
-	options controller.Options,
-	sm *runtime.Scheme,
-) error {
+func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options, sm *runtime.Scheme) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	clusterToObjectFunc, err := util.ClusterToTypedObjectsMapper(
@@ -173,10 +182,10 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 		mgr.GetScheme(),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create mapper for Cluster to TinkrebellMachines: %w", err)
+		return fmt.Errorf("failed to create mapper for Cluster to TinkerbellMachines: %w", err)
 	}
 
-	builder := ctrl.NewControllerManagedBy(mgr).
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, r.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
@@ -194,27 +203,45 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterToObjectFunc),
 			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureReady(sm, log)),
-		).
-		Watches(
-			&tinkv1.Workflow{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&infrastructurev1.TinkerbellMachine{},
-				handler.OnlyControllerOwner(),
-			),
-		).
-		Watches(
-			&rufiov1.Job{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&infrastructurev1.TinkerbellMachine{},
-				handler.OnlyControllerOwner(),
-			),
 		)
 
-	if err := builder.Complete(r); err != nil {
+	// When the TinkerbellClient targets the same cluster as the management client we can
+	// watch Workflow and Job objects for owner-based event triggers. In external mode we use
+	// the external cache with label-based mappers instead of owner references.
+	if r.ExternalCache != nil {
+		ctrlBuilder = ctrlBuilder.
+			WatchesRawSource(
+				source.Kind(r.ExternalCache, &tinkv1.Workflow{},
+					handler.TypedEnqueueRequestsFromMapFunc(externalLabelMapper[*tinkv1.Workflow])),
+			).
+			WatchesRawSource(
+				source.Kind(r.ExternalCache, &rufiov1.Job{},
+					handler.TypedEnqueueRequestsFromMapFunc(externalLabelMapper[*rufiov1.Job])),
+			)
+		log.Info("External Tinkerbell configured; watching Workflow and Job via external cache")
+	} else {
+		ctrlBuilder = ctrlBuilder.
+			Watches(
+				&tinkv1.Workflow{},
+				handler.EnqueueRequestForOwner(
+					mgr.GetScheme(),
+					mgr.GetRESTMapper(),
+					&infrastructurev1.TinkerbellMachine{},
+					handler.OnlyControllerOwner(),
+				),
+			).
+			Watches(
+				&rufiov1.Job{},
+				handler.EnqueueRequestForOwner(
+					mgr.GetScheme(),
+					mgr.GetRESTMapper(),
+					&infrastructurev1.TinkerbellMachine{},
+					handler.OnlyControllerOwner(),
+				),
+			)
+	}
+
+	if err := ctrlBuilder.Complete(r); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
 	}
 
@@ -282,6 +309,33 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 	}
 }
 
+const (
+	// LabelMachineName is the label key used on external Tinkerbell resources to identify
+	// the owning TinkerbellMachine by name.
+	LabelMachineName = "capt.tinkerbell.org/machine-name"
+	// LabelMachineNamespace is the label key used on external Tinkerbell resources to identify
+	// the owning TinkerbellMachine by namespace.
+	LabelMachineNamespace = "capt.tinkerbell.org/machine-namespace"
+)
+
+// externalLabelMapper maps an external Tinkerbell resource (Workflow, Job) back to the
+// TinkerbellMachine in the management cluster using label-based ownership. This is
+// used instead of owner references because Kubernetes does not support cross-cluster
+// owner references.
+func externalLabelMapper[T client.Object](_ context.Context, o T) []reconcile.Request {
+	labels := o.GetLabels()
+	name := labels[LabelMachineName]
+	namespace := labels[LabelMachineNamespace]
+
+	if name == "" || namespace == "" {
+		return nil
+	}
+
+	return []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}},
+	}
+}
+
 // validate validates if context configuration has all required fields properly populated.
 func (r *TinkerbellMachineReconciler) validate() error {
 	if r == nil {
@@ -290,6 +344,10 @@ func (r *TinkerbellMachineReconciler) validate() error {
 
 	if r.Client == nil {
 		return ErrMissingClient
+	}
+
+	if r.TinkerbellClient == nil {
+		return ErrMissingTinkerbellClient
 	}
 
 	return nil

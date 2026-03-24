@@ -21,15 +21,6 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-poweroff", scope.tinkerbellMachine.Name),
 			Namespace: scope.tinkerbellMachine.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
-					Kind:       "TinkerbellMachine",
-					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.UID,
-					Controller: &controller,
-				},
-			},
 		},
 		Spec: rufiov1.JobSpec{
 			MachineRef: rufiov1.MachineRef{
@@ -44,7 +35,24 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		},
 	}
 
-	if err := scope.client.Create(scope.ctx, bmcJob); err != nil {
+	if scope.isExternal() {
+		bmcJob.Labels = map[string]string{
+			LabelMachineName:      scope.tinkerbellMachine.Name,
+			LabelMachineNamespace: scope.tinkerbellMachine.Namespace,
+		}
+	} else {
+		bmcJob.OwnerReferences = []metav1.OwnerReference{
+			{
+				APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+				Kind:       "TinkerbellMachine",
+				Name:       scope.tinkerbellMachine.Name,
+				UID:        scope.tinkerbellMachine.UID,
+				Controller: &controller,
+			},
+		}
+	}
+
+	if err := scope.tinkerbellClient.Create(scope.ctx, bmcJob); err != nil {
 		return fmt.Errorf("creating BMCJob: %w", err)
 	}
 
@@ -62,7 +70,7 @@ func (scope *machineReconcileScope) getJob(name string, job *rufiov1.Job) error 
 		Namespace: scope.tinkerbellMachine.Namespace,
 	}
 
-	if err := scope.client.Get(scope.ctx, namespacedName, job); err != nil {
+	if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, job); err != nil {
 		return fmt.Errorf("GET BMCJob: %w", err)
 	}
 
