@@ -1,14 +1,14 @@
-# Remote Tinkerbell Kubeconfig
+# External Tinkerbell Kubeconfig
 
 This guide walks through creating a ServiceAccount, RBAC rules, and kubeconfig
-for the remote Tinkerbell cluster so that CAPT has the permissions it needs.
+for the external Tinkerbell cluster so that CAPT has the permissions it needs.
 
 See [REMOTE-TINKERBELL.md](REMOTE-TINKERBELL.md) for an overview of the feature
 and all available configuration flags.
 
 ## Required Permissions
 
-CAPT performs the following operations on Tinkerbell CRDs in the remote cluster:
+CAPT performs the following operations on Tinkerbell CRDs in the external cluster:
 
 | Resource | API Group | Verbs |
 |---|---|---|
@@ -22,11 +22,11 @@ reacts to status changes on these objects in real time.
 
 ## Step-by-Step Setup
 
-All commands below should be run against the **remote Tinkerbell cluster**.
+All commands below should be run against the **external Tinkerbell cluster**.
 
 ### 1. Create a Namespace (optional)
 
-If you plan to restrict CAPT to a single namespace in the remote cluster, make
+If you plan to restrict CAPT to a single namespace in the external cluster, make
 sure it exists:
 
 ```bash
@@ -81,7 +81,7 @@ roleRef:
 #### Cluster-Wide (ClusterRole + ClusterRoleBinding)
 
 Use this variant when CAPT needs to operate across all namespaces
-(`--remote-tinkerbell-watch-namespace` is not set):
+(`--external-watch-namespace` is not set):
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -149,11 +149,11 @@ TOKEN=$(kubectl get secret capt-remote-token -n tinkerbell -o jsonpath='{.data.t
 
 ### 5. Build the Kubeconfig
 
-Replace `<REMOTE_API_SERVER>` with the API server address of the remote
+Replace `<REMOTE_API_SERVER>` with the API server address of the external
 Tinkerbell cluster and `<CA_DATA>` with its CA certificate (base64-encoded).
 
 ```bash
-# Grab the CA from the remote cluster
+# Grab the CA from the external cluster
 CA_DATA=$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
 REMOTE_API_SERVER=$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.server}')
 
@@ -185,16 +185,16 @@ Switch your kubectl context to the **management cluster** and create the Secret
 that the CAPT deployment expects:
 
 ```bash
-kubectl create secret generic remote-tinkerbell-kubeconfig \
+kubectl create secret generic external-tinkerbell-kubeconfig \
   --from-file=value=remote-kubeconfig.yaml \
   -n capt-system
 ```
 
-The default CAPT deployment mounts this Secret at `/etc/remote-tinkerbell/value`.
+The default CAPT deployment mounts this Secret at `/etc/external-tinkerbell/value`.
 
 ## Verifying
 
-After deploying CAPT, check the controller logs for confirmation that the remote
+After deploying CAPT, check the controller logs for confirmation that the external
 client was configured:
 
 ```bash
@@ -204,11 +204,11 @@ kubectl logs -n capt-system deployment/capt-controller-manager | grep -i tinkerb
 You should see:
 
 ```json
-{"level":"info","v":0,"logger":"setup","tinkerbellClientMode":"remote","remoteTinkerbellWatchNamespace":"","caller":"/home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/main.go:191","time":"2026-03-18T18:59:19Z","message":"using remote Tinkerbell cluster for Tinkerbell CRD operations"}
+{"level":"info","v":0,"logger":"setup","tinkerbellClientMode":"external","externalWatchNamespace":"","message":"using external Tinkerbell for CRD operations"}
 ```
 
-If no remote configuration is found, the log will instead show:
+If no external configuration is found, the log will instead show:
 
 ```json
-{"level":"info","v":0,"logger":"setup","tinkerbellClientMode":"local","caller":"/home/tink/repos/tinkerbell/cluster-api-provider-tinkerbell/main.go:189","time":"2026-03-18T19:06:15Z","message":"using local cluster for Tinkerbell CRD operations"}
+{"level":"info","v":0,"logger":"setup","tinkerbellClientMode":"local","message":"using local Tinkerbell for CRD operations"}
 ```

@@ -1,8 +1,8 @@
-# Remote Tinkerbell Cluster
+# External Tinkerbell Cluster
 
 By default, CAPT expects Tinkerbell CRDs (Hardware, Template, Workflow, Job) to
 live in the same Kubernetes cluster as the CAPI management components. The
-**remote Tinkerbell cluster** feature lets you point CAPT at a separate cluster
+**external Tinkerbell cluster** feature lets you point CAPT at a separate cluster
 that hosts these objects while CAPI resources remain in the management cluster.
 
 This is useful when the Tinkerbell stack runs on dedicated infrastructure (for
@@ -30,25 +30,25 @@ CAPT uses two separate clients:
 - **Management client** — interacts with CAPI objects (`TinkerbellMachine`,
   `TinkerbellCluster`, `Cluster`, `Machine`, etc.) in the management cluster.
 - **Tinkerbell client** — interacts with Tinkerbell CRD objects (`Hardware`,
-  `Template`, `Workflow`, `Job`) in the remote Tinkerbell cluster.
+  `Template`, `Workflow`, `Job`) in the external Tinkerbell cluster.
 
-## Objects Watched in the Remote Cluster
+## Objects Watched in the External Cluster
 
-When the remote Tinkerbell cluster feature is enabled, CAPT sets up an informer
-cache on the remote cluster that watches the following object types. This allows CAPT to react to changes in these objects and reconcile the owning `TinkerbellMachine` accordingly.
+When the external Tinkerbell cluster feature is enabled, CAPT sets up an informer
+cache on the external cluster that watches the following object types. This allows CAPT to react to changes in these objects and reconcile the owning `TinkerbellMachine` accordingly.
 
 | Object | API Group | Description |
 |---|---|---|
 | **Workflow** | `tinkerbell.org/v1alpha1` | Provisioning workflows executed by Tink Worker |
 | **Job** | `bmc.tinkerbell.org/v1alpha1` | BMC power-management jobs (Rufio) |
 
-Hardware and Template objects are also read from and written to the remote
+Hardware and Template objects are also read from and written to the external
 cluster, but they are accessed on demand rather than through the watch cache.
 
 ### Cross-Cluster Ownership
 
 Kubernetes owner references do not work across cluster boundaries. When
-operating in remote mode, CAPT uses **labels** instead of owner references to
+operating in external mode, CAPT uses **labels** instead of owner references to
 associate Tinkerbell resources with their owning `TinkerbellMachine`:
 
 | Label | Description |
@@ -57,9 +57,9 @@ associate Tinkerbell resources with their owning `TinkerbellMachine`:
 | `capt.tinkerbell.org/machine-namespace` | Namespace of the owning `TinkerbellMachine` |
 
 These labels are set on `Template`, `Workflow`, and `Job` objects created in the
-remote cluster. The informer cache uses them to
+external cluster. The informer cache uses them to
 [map events back to the correct `TinkerbellMachine` reconcile request](../controller/machine/tinkerbellmachine.go#L322)
-via the [`remoteLabelMapper`](../controller/machine/tinkerbellmachine.go#L322) function,
+via the [`externalLabelMapper`](../controller/machine/tinkerbellmachine.go#L322) function,
 which is [wired into the controller watches](../controller/machine/tinkerbellmachine.go#L208-L217)
 in `SetupWithManager`.
 
@@ -68,9 +68,9 @@ references are used as before.
 
 ## Configuration
 
-Provide credentials for the remote Tinkerbell cluster via a **kubeconfig file**
+Provide credentials for the external Tinkerbell cluster via a **kubeconfig file**
 mounted as a Kubernetes Secret. If no kubeconfig is provided, CAPT operates in
-local mode (no remote cluster).
+local mode (no external cluster).
 
 Mount a kubeconfig as a Kubernetes Secret and provide the path to the controller.
 See [REMOTE-TINKERBELL-KUBECONFIG.md](REMOTE-TINKERBELL-KUBECONFIG.md) for a
@@ -79,44 +79,50 @@ the minimum required permissions.
 
 ```bash
 # Create the secret in the management cluster
-kubectl create secret generic remote-tinkerbell-kubeconfig \
-  --from-file=value=/path/to/remote-kubeconfig \
+kubectl create secret generic external-tinkerbell-kubeconfig \
+  --from-file=value=/path/to/external-kubeconfig \
   -n capt-system
 ```
 
-The default deployment mounts this secret at `/etc/remote-tinkerbell/value`.
+The default deployment mounts this secret at `/etc/external-tinkerbell/value`.
 
 ### Watch Namespace
 
-By default the remote informer cache watches all namespaces. To restrict it to a
+By default the external informer cache watches all namespaces. To restrict it to a
 single namespace:
 
 ```
---remote-tinkerbell-watch-namespace=tinkerbell
+--external-watch-namespace=tinkerbell
 ```
+
+> **Note:** CAPT creates `Template`, `Workflow`, and `Job` resources in the same
+> namespace as the owning `TinkerbellMachine`. If you set
+> `--external-watch-namespace` to a single namespace, ensure that your
+> `TinkerbellMachine` namespaces match; otherwise the external cache will not
+> observe the created resources and reconcile triggers may be missed.
 
 ## Controller Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--remote-tinkerbell-kubeconfig` | `/etc/remote-tinkerbell/value` | Path to a kubeconfig file for the remote Tinkerbell cluster |
-| `--remote-tinkerbell-watch-namespace` | (empty) | Namespace to watch in the remote cluster; empty means all namespaces |
+| `--external-kubeconfig` | `/etc/external-tinkerbell/value` | Path to a kubeconfig file for the external Tinkerbell cluster |
+| `--external-watch-namespace` | (empty) | Namespace to watch in the external cluster; empty means all namespaces |
 
 ## Deployment
 
 The default manager deployment in `config/manager/manager.yaml` already includes
 the volume mount for the kubeconfig secret and environment variable placeholders
-for`clusterctl`. The following variables are substituted at deploy time:
+for `clusterctl`. The following variables are substituted at deploy time:
 
 | Variable | Description |
 |---|---|
-| `REMOTE_TINKERBELL_WATCH_NAMESPACE` | Watch namespace |
-| `REMOTE_TINKERBELL_KUBECONFIG` | Name of the kubeconfig Secret (default: `remote-tinkerbell-kubeconfig`) |
+| `EXTERNAL_WATCH_NAMESPACE` | Watch namespace |
+| `EXTERNAL_TINKERBELL_KUBECONFIG` | Name of the kubeconfig Secret (default: `external-tinkerbell-kubeconfig`) |
 
 ### Example: clusterctl
 
 ```bash
-export REMOTE_TINKERBELL_WATCH_NAMESPACE=tinkerbell
+export EXTERNAL_WATCH_NAMESPACE=tinkerbell
 
 clusterctl init --infrastructure tinkerbell
 ```
@@ -126,7 +132,7 @@ clusterctl init --infrastructure tinkerbell
 Set the environment variables before running `tilt up`:
 
 ```bash
-export REMOTE_TINKERBELL_KUBECONFIG=remote-tinkerbell-kubeconfig
+export EXTERNAL_TINKERBELL_KUBECONFIG=external-tinkerbell-kubeconfig
 
 tilt up
 ```

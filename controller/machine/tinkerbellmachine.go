@@ -182,10 +182,10 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 		mgr.GetScheme(),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create mapper for Cluster to TinkrebellMachines: %w", err)
+		return fmt.Errorf("failed to create mapper for Cluster to TinkerbellMachines: %w", err)
 	}
 
-	builder := ctrl.NewControllerManagedBy(mgr).
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, r.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
@@ -209,7 +209,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 	// watch Workflow and Job objects for owner-based event triggers. In external mode we use
 	// the external cache with label-based mappers instead of owner references.
 	if r.ExternalCache != nil {
-		builder = builder.
+		ctrlBuilder = ctrlBuilder.
 			WatchesRawSource(
 				source.Kind(r.ExternalCache, &tinkv1.Workflow{},
 					handler.TypedEnqueueRequestsFromMapFunc(externalLabelMapper[*tinkv1.Workflow])),
@@ -220,7 +220,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 			)
 		log.Info("External Tinkerbell configured; watching Workflow and Job via external cache")
 	} else {
-		builder = builder.
+		ctrlBuilder = ctrlBuilder.
 			Watches(
 				&tinkv1.Workflow{},
 				handler.EnqueueRequestForOwner(
@@ -241,7 +241,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 			)
 	}
 
-	if err := builder.Complete(r); err != nil {
+	if err := ctrlBuilder.Complete(r); err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
 	}
 

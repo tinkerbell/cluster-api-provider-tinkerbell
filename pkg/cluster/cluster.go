@@ -47,6 +47,10 @@ func DefaultOption(rs *runtime.Scheme, namespace string) cluster.Option {
 // It attempts to read kubeconfig data from the specified file location.
 // If the file is absent or empty, it returns a NoConfigError.
 func RestConfig(kubeconfigLocation string) (*rest.Config, error) {
+	if kubeconfigLocation == "" {
+		return nil, NoConfigError{}
+	}
+
 	data, err := os.ReadFile(filepath.Clean(kubeconfigLocation))
 	if err != nil {
 		if os.IsNotExist(err) {

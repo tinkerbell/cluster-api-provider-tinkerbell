@@ -19,8 +19,8 @@ spec:
       - env:
           - name: TINKERBELL_IP
             value: ${TINKERBELL_IP:=''}
-          - name: EXTERNAL_TINKERBELL_WATCH_NAMESPACE
-            value: ${EXTERNAL_TINKERBELL_WATCH_NAMESPACE:=''}
+          - name: EXTERNAL_WATCH_NAMESPACE
+            value: ${EXTERNAL_WATCH_NAMESPACE:=''}
         args:
         - --leader-elect
         image: tinkerbell-controller

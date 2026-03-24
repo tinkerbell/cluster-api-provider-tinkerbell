@@ -31,7 +31,7 @@ func (scope *machineReconcileScope) getWorkflow() (*tinkv1.Workflow, error) {
 
 	err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, t)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return t, fmt.Errorf("no workflow exists: %w", err)
 		}
 
