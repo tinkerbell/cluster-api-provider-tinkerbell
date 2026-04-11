@@ -23,8 +23,10 @@ import (
 	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -222,6 +224,19 @@ func TestSetResourceOwnership(t *testing.T) {
 
 	trueVal := true
 
+	s := runtime.NewScheme()
+	if err := infrastructurev1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+
+	// Register Tinkerbell types so controllerutil.SetControllerReference
+	// can resolve the TinkerbellMachine GVK.
+	sb := &scheme.Builder{GroupVersion: tinkv1.GroupVersion}
+	sb.Register(&tinkv1.Template{}, &tinkv1.TemplateList{})
+	if err := sb.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := map[string]struct {
 		external      bool
 		wantLabels    map[string]string
@@ -230,11 +245,12 @@ func TestSetResourceOwnership(t *testing.T) {
 		"local mode sets owner reference": {
 			external: false,
 			wantOwnerRefs: []metav1.OwnerReference{{
-				APIVersion: infrastructurev1.GroupVersion.String(),
-				Kind:       "TinkerbellMachine",
-				Name:       "my-machine",
-				UID:        "abc-123",
-				Controller: &trueVal,
+				APIVersion:         infrastructurev1.GroupVersion.String(),
+				Kind:               "TinkerbellMachine",
+				Name:               "my-machine",
+				UID:                "abc-123",
+				Controller:         &trueVal,
+				BlockOwnerDeletion: &trueVal,
 			}},
 		},
 		"external mode sets labels": {
@@ -259,10 +275,18 @@ func TestSetResourceOwnership(t *testing.T) {
 					},
 				},
 				externalTinkerbell: tc.external,
+				scheme:             s,
 			}
 
-			obj := &metav1.ObjectMeta{}
-			scope.setResourceOwnership(obj)
+			obj := &tinkv1.Template{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-template",
+					Namespace: "mgmt-ns",
+				},
+			}
+			if err := scope.setResourceOwnership(obj); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			if diff := cmp.Diff(tc.wantLabels, obj.GetLabels()); diff != "" {
 				t.Errorf("labels mismatch (-want +got):\n%s", diff)

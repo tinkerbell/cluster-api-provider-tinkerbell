@@ -49,6 +49,12 @@ func (e NoConfigError) Error() string {
 	return "no kubeconfig data provided for Tinkerbell cluster"
 }
 
+// Is reports whether target is a NoConfigError.
+func (NoConfigError) Is(target error) bool {
+	_, ok := target.(NoConfigError)
+	return ok
+}
+
 // NewDirectClient creates a non-cached controller-runtime client for direct
 // API server calls. Used when cluster-wide informer watches are not available.
 func NewDirectClient(cfg *rest.Config, rs *runtime.Scheme) (client.Client, error) {

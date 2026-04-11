@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -134,5 +135,14 @@ func TestRestConfig_ValidKubeconfig(t *testing.T) {
 	wantHost := "https://127.0.0.1:6443"
 	if cfg.Host != wantHost {
 		t.Fatalf("expected host %q, got %q", wantHost, cfg.Host)
+	}
+}
+
+func TestNoConfigError_IsMatchesWrapped(t *testing.T) {
+	t.Parallel()
+
+	wrapped := fmt.Errorf("outer: %w", NoConfigError{})
+	if !errors.Is(wrapped, NoConfigError{}) {
+		t.Fatal("expected errors.Is to match wrapped NoConfigError")
 	}
 }

@@ -54,6 +54,7 @@ type TinkerbellMachineReconciler struct {
 	// WatchManager handles JIT per-namespace watches for Workflow and Job objects
 	// on the external Tinkerbell cluster. Nil in local mode.
 	WatchManager     *tinkcluster.NamespaceWatchManager
+	Scheme           *runtime.Scheme
 	WatchFilterValue string
 }
 
@@ -86,6 +87,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		ctx:                ctx,
 		tinkerbellMachine:  &infrastructurev1.TinkerbellMachine{},
 		client:             r.Client,
+		scheme:             r.Scheme,
 		tinkerbellClient:   r.TinkerbellClient,
 		externalTinkerbell: r.ExternalTinkerbell,
 		watchManager:       r.WatchManager,

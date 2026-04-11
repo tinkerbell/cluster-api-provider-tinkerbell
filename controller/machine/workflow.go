@@ -53,7 +53,9 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 		},
 	}
 
-	scope.setResourceOwnership(workflow)
+	if err := scope.setResourceOwnership(workflow); err != nil {
+		return fmt.Errorf("setting workflow ownership: %w", err)
+	}
 
 	// We check the BMCRef so that the implementation behaves similar to how it was when
 	// CAPT was creating the BMCJob.

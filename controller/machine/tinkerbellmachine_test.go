@@ -280,12 +280,7 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	t.Helper()
 	g := NewWithT(t)
 
-	scheme := runtime.NewScheme()
-
-	g.Expect(controller.AddToSchemeTinkerbell(scheme)).To(Succeed(), "Adding Tinkerbell objects to scheme should succeed")
-	g.Expect(infrastructurev1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell CAPI objects to scheme should succeed")
-	g.Expect(clusterv1.AddToScheme(scheme)).To(Succeed(), "Adding CAPI objects to scheme should succeed")
-	g.Expect(corev1.AddToScheme(scheme)).To(Succeed(), "Adding Core V1 objects to scheme should succeed")
+	scheme := testScheme(g)
 
 	objs := []client.Object{
 		&infrastructurev1.TinkerbellMachine{},
@@ -293,6 +288,17 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	}
 
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()
+}
+
+func testScheme(g Gomega) *runtime.Scheme {
+	scheme := runtime.NewScheme()
+
+	g.Expect(controller.AddToSchemeTinkerbell(scheme)).To(Succeed(), "Adding Tinkerbell objects to scheme should succeed")
+	g.Expect(infrastructurev1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell CAPI objects to scheme should succeed")
+	g.Expect(clusterv1.AddToScheme(scheme)).To(Succeed(), "Adding CAPI objects to scheme should succeed")
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed(), "Adding Core V1 objects to scheme should succeed")
+
+	return scheme
 }
 
 func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
@@ -766,9 +772,16 @@ func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 
 //nolint:unparam
 func reconcileMachineWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
+	scheme := runtime.NewScheme()
+	_ = controller.AddToSchemeTinkerbell(scheme)
+	_ = infrastructurev1.AddToScheme(scheme)
+	_ = clusterv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
 	machineController := &machine.TinkerbellMachineReconciler{
 		Client:           client,
 		TinkerbellClient: client,
+		Scheme:           scheme,
 	}
 
 	request := ctrl.Request{

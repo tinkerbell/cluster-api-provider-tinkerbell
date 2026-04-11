@@ -25,7 +25,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
@@ -72,6 +72,7 @@ type machineReconcileScope struct {
 	tinkerbellMachine    *infrastructurev1.TinkerbellMachine
 	patchHelper          *patch.Helper
 	client               client.Client // management cluster client for CAPI objects
+	scheme               *runtime.Scheme
 	machine              *clusterv1.Machine
 	tinkerbellCluster    *infrastructurev1.TinkerbellCluster
 	bootstrapCloudConfig string
@@ -138,9 +139,9 @@ func (scope *machineReconcileScope) resolveExternalNamespace(hw *tinkv1.Hardware
 
 // setResourceOwnership configures cross-cluster or in-cluster ownership on obj.
 // In external mode it sets label-based ownership (owner references don't work
-// across clusters). In local mode it sets a standard owner reference pointing
-// at the TinkerbellMachine.
-func (scope *machineReconcileScope) setResourceOwnership(obj metav1.Object) {
+// across clusters). In local mode it sets a standard controller owner reference
+// pointing at the TinkerbellMachine.
+func (scope *machineReconcileScope) setResourceOwnership(obj client.Object) error {
 	if scope.isExternal() {
 		labels := obj.GetLabels()
 		if labels == nil {
@@ -150,16 +151,15 @@ func (scope *machineReconcileScope) setResourceOwnership(obj metav1.Object) {
 		labels[LabelMachineName] = scope.tinkerbellMachine.Name
 		labels[LabelMachineNamespace] = scope.tinkerbellMachine.Namespace
 		obj.SetLabels(labels)
-	} else {
-		c := true
-		obj.SetOwnerReferences([]metav1.OwnerReference{{
-			APIVersion: infrastructurev1.GroupVersion.String(),
-			Kind:       "TinkerbellMachine",
-			Name:       scope.tinkerbellMachine.Name,
-			UID:        scope.tinkerbellMachine.UID,
-			Controller: &c,
-		}})
+
+		return nil
 	}
+
+	if err := controllerutil.SetControllerReference(scope.tinkerbellMachine, obj, scope.scheme); err != nil {
+		return fmt.Errorf("setting controller reference: %w", err)
+	}
+
+	return nil
 }
 
 type errRequeueRequested struct{}

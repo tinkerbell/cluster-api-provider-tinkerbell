@@ -152,3 +152,27 @@ kubectl get templates,workflows,jobs.bmc.tinkerbell.org \
   -l capt.tinkerbell.org/machine-name \
   --all-namespaces
 ```
+
+To clean up orphaned resources, delete them by label selector. Review the
+resources first, then delete:
+
+```bash
+# Dry-run: list all CAPT-managed resources
+kubectl get templates,workflows,jobs.bmc.tinkerbell.org \
+  -l capt.tinkerbell.org/machine-name \
+  --all-namespaces -o wide
+
+# Delete orphaned resources (after confirming they are no longer needed)
+kubectl delete templates,workflows,jobs.bmc.tinkerbell.org \
+  -l capt.tinkerbell.org/machine-name \
+  --all-namespaces
+```
+
+To clean up resources for a specific machine:
+
+```bash
+kubectl delete templates,workflows,jobs.bmc.tinkerbell.org \
+  -l capt.tinkerbell.org/machine-name=<machine-name> \
+  -l capt.tinkerbell.org/machine-namespace=<machine-namespace> \
+  --all-namespaces
+```

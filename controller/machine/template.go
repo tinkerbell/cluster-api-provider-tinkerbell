@@ -223,7 +223,9 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		},
 	}
 
-	scope.setResourceOwnership(templateObject)
+	if err := scope.setResourceOwnership(templateObject); err != nil {
+		return fmt.Errorf("setting template ownership: %w", err)
+	}
 
 	if err := scope.tinkerbellClient.Create(scope.ctx, templateObject); err != nil {
 		return fmt.Errorf("creating Tinkerbell template: %w", err)

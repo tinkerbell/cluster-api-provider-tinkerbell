@@ -180,7 +180,7 @@ func main() { //nolint:funlen
 func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	setupLog.Info("Setting up kubernetes clients for controllers")
 
-	tinkClient, externalTinkerbell, watchManager, err := c.buildTinkerbellClient(ctx, mgr)
+	result, err := c.buildTinkerbellClient(ctx, mgr)
 	if err != nil {
 		return err
 	}
@@ -194,9 +194,10 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 
 	if err := (&machine.TinkerbellMachineReconciler{
 		Client:             mgr.GetClient(),
-		TinkerbellClient:   tinkClient,
-		ExternalTinkerbell: externalTinkerbell,
-		WatchManager:       watchManager,
+		TinkerbellClient:   result.Client,
+		ExternalTinkerbell: result.External,
+		WatchManager:       result.WatchManager,
+		Scheme:             mgr.GetScheme(),
 		WatchFilterValue:   c.WatchFilterValue,
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellMachineConcurrency}, mgr.GetScheme()); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine controller:%w", err)
@@ -205,20 +206,23 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	return nil
 }
 
-//nolint:ireturn
-func (c *config) buildTinkerbellClient(ctx context.Context, mgr ctrl.Manager) (
-	tinkClient client.Client, externalTinkerbell bool, watchManager *tinkcluster.NamespaceWatchManager, err error,
-) {
-	tinkClient = mgr.GetClient()
+type tinkerbellClientResult struct {
+	Client       client.Client
+	External     bool
+	WatchManager *tinkcluster.NamespaceWatchManager
+}
+
+func (c *config) buildTinkerbellClient(ctx context.Context, mgr ctrl.Manager) (tinkerbellClientResult, error) {
+	tinkClient := mgr.GetClient()
 
 	restConfig, restErr := tinkcluster.RestConfig(c.ExternalKubeconfig)
 	if restErr != nil && !errors.Is(restErr, tinkcluster.NoConfigError{}) {
-		return nil, false, nil, fmt.Errorf("failed to build external Tinkerbell client: %w", restErr)
+		return tinkerbellClientResult{}, fmt.Errorf("failed to build external Tinkerbell client: %w", restErr)
 	}
 
 	if errors.Is(restErr, tinkcluster.NoConfigError{}) {
 		setupLog.Info("using local Tinkerbell for CRD operations", "tinkerbellClientMode", "local", "reason", restErr.Error())
-		return tinkClient, false, nil, nil
+		return tinkerbellClientResult{Client: tinkClient}, nil
 	}
 
 	setupLog.Info("using external Tinkerbell with JIT per-namespace watches",
@@ -226,14 +230,14 @@ func (c *config) buildTinkerbellClient(ctx context.Context, mgr ctrl.Manager) (
 	)
 	directClient, dErr := tinkcluster.NewDirectClient(restConfig, scheme)
 	if dErr != nil {
-		return nil, false, nil, fmt.Errorf("failed to create external Tinkerbell client: %w", dErr)
+		return tinkerbellClientResult{}, fmt.Errorf("failed to create external Tinkerbell client: %w", dErr)
 	}
 	wm := tinkcluster.NewNamespaceWatchManager(
 		restConfig, scheme,
 		machine.LabelMachineName, machine.LabelMachineNamespace,
 	)
 	wm.SetContext(ctx)
-	return directClient, true, wm, nil
+	return tinkerbellClientResult{Client: directClient, External: true, WatchManager: wm}, nil
 }
 
 func setupWebhooks(mgr ctrl.Manager) error {

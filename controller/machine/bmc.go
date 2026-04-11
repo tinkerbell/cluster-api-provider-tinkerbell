@@ -34,7 +34,9 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		},
 	}
 
-	scope.setResourceOwnership(bmcJob)
+	if err := scope.setResourceOwnership(bmcJob); err != nil {
+		return fmt.Errorf("setting BMCJob ownership: %w", err)
+	}
 
 	if err := scope.tinkerbellClient.Create(scope.ctx, bmcJob); err != nil {
 		return fmt.Errorf("creating BMCJob: %w", err)

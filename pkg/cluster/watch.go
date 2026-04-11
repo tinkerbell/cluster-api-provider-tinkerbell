@@ -4,7 +4,9 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
+	"time"
 
 	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
@@ -21,6 +23,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const (
+	// backoffBase is the initial backoff interval for failed EnsureWatch calls.
+	backoffBase = 5 * time.Second
+	// backoffMax is the maximum backoff interval.
+	backoffMax = 5 * time.Minute
+)
+
+// failureRecord tracks consecutive failures for a namespace.
+type failureRecord struct {
+	count       int
+	lastAttempt time.Time
+}
+
 // NamespaceWatchManager dynamically creates per-namespace informer caches and
 // registers watch sources on a controller. This is used when the external
 // kubeconfig does not have cluster-wide list/watch access for Workflows and Jobs.
@@ -31,6 +46,7 @@ type NamespaceWatchManager struct {
 	ctrl       controller.Controller
 	mgrCtx     context.Context
 	namespaces map[string]context.CancelFunc
+	failures   map[string]failureRecord
 	sf         singleflight.Group
 
 	// labelMachineName and labelMachineNamespace are the labels used to map
@@ -41,6 +57,9 @@ type NamespaceWatchManager struct {
 	// startAndRegisterFn overrides startAndRegister for testing. If nil, the
 	// real implementation is used.
 	startAndRegisterFn func(ctx, mgrCtx context.Context, ctrl controller.Controller, namespace string) (context.CancelFunc, error)
+
+	// nowFn returns the current time. Override in tests for determinism.
+	nowFn func() time.Time
 }
 
 // NewNamespaceWatchManager creates a new NamespaceWatchManager.
@@ -52,8 +71,10 @@ func NewNamespaceWatchManager(restConfig *rest.Config, scheme *runtime.Scheme, l
 		restConfig:            restConfig,
 		scheme:                scheme,
 		namespaces:            make(map[string]context.CancelFunc),
+		failures:              make(map[string]failureRecord),
 		labelMachineName:      labelName,
 		labelMachineNamespace: labelNamespace,
+		nowFn:                 time.Now,
 	}
 }
 
@@ -80,12 +101,23 @@ func (m *NamespaceWatchManager) SetContext(ctx context.Context) {
 // controller. Calls for already-watched namespaces are no-ops.
 // Concurrent callers for the same namespace block until the first caller
 // completes; all receive the same result.
+// If a previous attempt for the namespace failed recently, the call is rejected
+// with a backoff error to avoid flooding the external API server.
 func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace string) error {
 	// Fast path: namespace already fully established.
 	m.mu.Lock()
 	if _, ok := m.namespaces[namespace]; ok {
 		m.mu.Unlock()
 		return nil
+	}
+
+	// Backoff: if the namespace has a recent failure, reject the call early.
+	if fr, ok := m.failures[namespace]; ok {
+		wait := backoffDuration(fr.count)
+		if m.nowFn().Sub(fr.lastAttempt) < wait {
+			m.mu.Unlock()
+			return fmt.Errorf("namespace %q watch in backoff (%s remaining)", namespace, wait-m.nowFn().Sub(fr.lastAttempt))
+		}
 	}
 	m.mu.Unlock()
 
@@ -122,11 +154,17 @@ func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace strin
 
 		cacheCancel, err := startFn(ctx, mgrCtx, ctrl, namespace)
 		if err != nil {
+			m.mu.Lock()
+			prev := m.failures[namespace]
+			m.failures[namespace] = failureRecord{count: prev.count + 1, lastAttempt: m.nowFn()}
+			m.mu.Unlock()
+
 			return nil, err
 		}
 
 		m.mu.Lock()
 		m.namespaces[namespace] = cacheCancel
+		delete(m.failures, namespace)
 		m.mu.Unlock()
 
 		log.FromContext(ctx).Info("Started JIT namespace watch", "namespace", namespace)
@@ -139,6 +177,16 @@ func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace strin
 	}
 
 	return nil
+}
+
+// backoffDuration computes an exponential backoff capped at backoffMax.
+func backoffDuration(failureCount int) time.Duration {
+	d := time.Duration(math.Pow(2, float64(failureCount))) * backoffBase //nolint:mnd
+	if d > backoffMax {
+		return backoffMax
+	}
+
+	return d
 }
 
 // startAndRegister creates a namespace-scoped cache, starts it, waits for sync,
@@ -193,6 +241,35 @@ func (m *NamespaceWatchManager) startAndRegister(
 	}
 
 	return cacheCancel, nil
+}
+
+// StopWatch stops the namespace-scoped informer cache for the given namespace
+// and removes it from tracking. Subsequent calls to EnsureWatch for the same
+// namespace will create a new cache. No-op if the namespace is not watched.
+func (m *NamespaceWatchManager) StopWatch(namespace string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if cancel, ok := m.namespaces[namespace]; ok {
+		cancel()
+		delete(m.namespaces, namespace)
+	}
+
+	delete(m.failures, namespace)
+}
+
+// StopAll stops all namespace-scoped informer caches and clears all tracking
+// state. Intended for graceful shutdown.
+func (m *NamespaceWatchManager) StopAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for ns, cancel := range m.namespaces {
+		cancel()
+		delete(m.namespaces, ns)
+	}
+
+	clear(m.failures)
 }
 
 // labelMapper returns a typed mapper function that maps external Tinkerbell
