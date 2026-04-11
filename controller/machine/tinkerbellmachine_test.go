@@ -295,7 +295,6 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()
 }
 
-//nolint:funlen
 func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -465,7 +464,6 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 	})
 }
 
-//nolint:funlen
 func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -769,7 +767,8 @@ func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 //nolint:unparam
 func reconcileMachineWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
 	machineController := &machine.TinkerbellMachineReconciler{
-		Client: client,
+		Client:           client,
+		TinkerbellClient: client,
 	}
 
 	request := ctrl.Request{
@@ -1159,7 +1158,6 @@ func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteri
 		})
 }
 
-//nolint:funlen
 func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByPreferredHardwareAffinity(t *testing.T) {
 	machineReconciliationHardwareAffinityHelper(t, testOptions{
 		HardwareAffinity: &infrastructurev1.HardwareAffinity{
@@ -1262,7 +1260,6 @@ func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteri
 		})
 }
 
-//nolint:funlen
 func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteringByRequiredAndPreferredHardwareAffinity(t *testing.T) {
 	machineReconciliationHardwareAffinityHelper(t,
 		testOptions{
@@ -1406,7 +1403,6 @@ func machineReconciliationSelectsUniqueAndAvailablehardwareForEachMachineFilteri
 		})
 }
 
-//nolint:funlen
 func machineReconciliationHardwareAffinityHelper(t *testing.T, fooOptions testOptions, barOptions testOptions, bazOptions testOptions) {
 	t.Helper()
 	t.Parallel()

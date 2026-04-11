@@ -24,38 +24,24 @@ var errISOBootURLRequired = errors.New("iso boot mode requires an isoURL")
 func (scope *machineReconcileScope) getWorkflow() (*tinkv1.Workflow, error) {
 	namespacedName := types.NamespacedName{
 		Name:      scope.tinkerbellMachine.Name,
-		Namespace: scope.tinkerbellMachine.Namespace,
+		Namespace: scope.tinkerbellNamespace(),
 	}
 
 	t := &tinkv1.Workflow{}
 
-	err := scope.client.Get(scope.ctx, namespacedName, t)
+	err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, t)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return t, fmt.Errorf("no workflow exists: %w", err)
-		}
-
-		return t, fmt.Errorf("failed to get workflow: %w", err)
+		return t, fmt.Errorf("getting workflow %s: %w", namespacedName, err)
 	}
 
 	return t, nil
 }
 
 func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
-	c := true
 	workflow := &tinkv1.Workflow{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scope.tinkerbellMachine.Name,
-			Namespace: scope.tinkerbellMachine.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
-					Kind:       "TinkerbellMachine",
-					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.UID,
-					Controller: &c,
-				},
-			},
+			Namespace: scope.tinkerbellNamespace(),
 		},
 		Spec: tinkv1.WorkflowSpec{
 			TemplateRef: scope.tinkerbellMachine.Name,
@@ -66,6 +52,8 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 			},
 		},
 	}
+
+	scope.setResourceOwnership(workflow)
 
 	// We check the BMCRef so that the implementation behaves similar to how it was when
 	// CAPT was creating the BMCJob.
@@ -99,7 +87,7 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 		}
 	}
 
-	if err := scope.client.Create(scope.ctx, workflow); err != nil {
+	if err := scope.tinkerbellClient.Create(scope.ctx, workflow); err != nil {
 		return fmt.Errorf("creating workflow: %w", err)
 	}
 
@@ -110,12 +98,12 @@ func (scope *machineReconcileScope) createWorkflow(hw *tinkv1.Hardware) error {
 func (scope *machineReconcileScope) removeWorkflow() error {
 	namespacedName := types.NamespacedName{
 		Name:      scope.tinkerbellMachine.Name,
-		Namespace: scope.tinkerbellMachine.Namespace,
+		Namespace: scope.tinkerbellNamespace(),
 	}
 
 	workflow := &tinkv1.Workflow{}
 
-	err := scope.client.Get(scope.ctx, namespacedName, workflow)
+	err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, workflow)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			scope.log.Info("Workflow already removed", "name", namespacedName)
@@ -128,7 +116,7 @@ func (scope *machineReconcileScope) removeWorkflow() error {
 
 	scope.log.Info("Removing Workflow", "name", namespacedName)
 
-	if err := scope.client.Delete(scope.ctx, workflow); err != nil {
+	if err := scope.tinkerbellClient.Delete(scope.ctx, workflow); err != nil {
 		return fmt.Errorf("ensuring workflow has been removed: %w", err)
 	}
 
