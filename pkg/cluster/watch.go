@@ -114,9 +114,10 @@ func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace strin
 	// Backoff: if the namespace has a recent failure, reject the call early.
 	if fr, ok := m.failures[namespace]; ok {
 		wait := backoffDuration(fr.count)
-		if m.nowFn().Sub(fr.lastAttempt) < wait {
+		now := m.nowFn()
+		if elapsed := now.Sub(fr.lastAttempt); elapsed < wait {
 			m.mu.Unlock()
-			return fmt.Errorf("namespace %q watch in backoff (%s remaining)", namespace, wait-m.nowFn().Sub(fr.lastAttempt))
+			return fmt.Errorf("namespace %q watch in backoff (%s remaining)", namespace, wait-elapsed)
 		}
 	}
 	m.mu.Unlock()
@@ -181,6 +182,12 @@ func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace strin
 
 // backoffDuration computes an exponential backoff capped at backoffMax.
 func backoffDuration(failureCount int) time.Duration {
+	// 2^6 * backoffBase already exceeds backoffMax, so short-circuit for any
+	// count >= 6 to avoid float64 → int64 overflow at very high counts.
+	if failureCount >= 6 { //nolint:mnd
+		return backoffMax
+	}
+
 	d := time.Duration(math.Pow(2, float64(failureCount))) * backoffBase //nolint:mnd
 	if d > backoffMax {
 		return backoffMax

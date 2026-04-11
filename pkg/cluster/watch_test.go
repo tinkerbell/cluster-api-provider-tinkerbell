@@ -358,6 +358,7 @@ func TestBackoffDuration(t *testing.T) {
 		{5, 160 * time.Second}, // 2^5 * 5s
 		{6, 5 * time.Minute},   // 2^6 * 5s = 320s > 300s → capped
 		{10, 5 * time.Minute},  // capped
+		{100, 5 * time.Minute}, // extreme count — must not overflow
 	}
 
 	for _, tc := range tests {
