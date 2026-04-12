@@ -10,7 +10,7 @@ require (
 	github.com/onsi/gomega v1.39.1
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/rs/zerolog v1.34.0
-	github.com/tinkerbell/tinkerbell/api v0.22.1
+	github.com/tinkerbell/tinkerbell/api v0.23.0
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
