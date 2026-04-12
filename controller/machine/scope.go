@@ -58,6 +58,10 @@ var (
 	// the required Tinkerbell client configured.
 	ErrMissingTinkerbellClient = fmt.Errorf("tinkerbell client is nil")
 
+	// ErrMissingScheme is the error returned when TinkerbellMachineReconciler does not have
+	// a Scheme configured.
+	ErrMissingScheme = fmt.Errorf("scheme is nil")
+
 	// ErrMissingBootstrapDataSecretValueKey is the error returned when the Secret referenced for bootstrap data
 	// is missing the value key.
 	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")

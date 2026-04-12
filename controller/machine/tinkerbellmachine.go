@@ -230,7 +230,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 			)
 	}
 
-	ctrl, err := ctrlBuilder.Build(r)
+	c, err := ctrlBuilder.Build(r)
 	if err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
 	}
@@ -238,7 +238,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 	// In JIT mode, provide the controller reference so the WatchManager can
 	// register per-namespace watch sources dynamically during reconciliation.
 	if r.WatchManager != nil {
-		r.WatchManager.SetController(ctrl)
+		r.WatchManager.SetController(c)
 	}
 
 	return nil
@@ -326,6 +326,10 @@ func (r *TinkerbellMachineReconciler) validate() error {
 
 	if r.TinkerbellClient == nil {
 		return ErrMissingTinkerbellClient
+	}
+
+	if r.Scheme == nil {
+		return ErrMissingScheme
 	}
 
 	return nil
