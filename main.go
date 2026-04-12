@@ -20,10 +20,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zerologr"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/rs/zerolog"
@@ -46,13 +46,6 @@ import (
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/build"
 	tinkcluster "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/cluster"
-	// +kubebuilder:scaffold:imports
-)
-
-//nolint:gochecknoglobals
-var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
 )
 
 type config struct {
@@ -60,7 +53,6 @@ type config struct {
 	MetricsBindAddress            string
 	LeaderElectionNamespace       string
 	WatchNamespace                string
-	ProfilerAddress               string
 	HealthAddr                    string
 	WatchFilterValue              string
 	WebhookCertDir                string
@@ -77,19 +69,24 @@ type config struct {
 	ExternalKubeconfig            string
 }
 
-func main() { //nolint:funlen
-	cfg := &config{}
+type tinkerbellClientResult struct {
+	Client       client.Client
+	External     bool
+	WatchManager *tinkcluster.NamespaceWatchManager
+}
+
+func main() {
+	// Set up logging before any log calls so all startup messages are visible.
+	zl := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Caller().Timestamp().Logger()
+	ctrl.SetLogger(zerologr.New(&zl))
+	klog.SetLogger(ctrl.Log)
+
+	log := ctrl.Log.WithName("setup")
 
 	fs := flag.NewFlagSet("capt", flag.ExitOnError)
 	klog.InitFlags(fs)
 
-	_ = clientgoscheme.AddToScheme(scheme)
-	_ = infrastructurev1.AddToScheme(scheme)
-	_ = clusterv1.AddToScheme(scheme)
-	_ = captctrl.AddToSchemeTinkerbell(scheme)
-	_ = captctrl.AddToSchemeBMC(scheme)
-
-	// +kubebuilder:scaffold:scheme
+	cfg := &config{}
 	cfg.initFlags(fs)
 
 	if err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarNoPrefix(), ff.WithConfigFileParser(ff.PlainParser)); err != nil {
@@ -98,22 +95,14 @@ func main() { //nolint:funlen
 	}
 
 	if cfg.WatchNamespace != "" {
-		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", cfg.WatchNamespace)
+		log.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", cfg.WatchNamespace)
 	}
 
-	if cfg.ProfilerAddress != "" {
-		setupLog.Info("Profiler listening for requests", "profiler-address", cfg.ProfilerAddress)
-
-		go func() {
-			//nolint:gosec
-			setupLog.Error(http.ListenAndServe(cfg.ProfilerAddress, nil), "listen and serve error")
-		}()
+	rs, err := newScheme()
+	if err != nil {
+		log.Error(err, "failed to setup runtime scheme")
+		os.Exit(1)
 	}
-
-	zl := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Caller().Timestamp().Logger()
-	logger := zerologr.New(&zl)
-	ctrl.SetLogger(logger)
-	klog.SetLogger(logger)
 
 	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
 	// Setting the burst size higher ensures all events will be recorded and submitted to the API
@@ -121,7 +110,7 @@ func main() { //nolint:funlen
 		BurstSize: 100,
 	})
 	opts := ctrl.Options{
-		Scheme: scheme,
+		Scheme: rs,
 		Metrics: metricsserver.Options{
 			BindAddress: cfg.MetricsBindAddress,
 		},
@@ -143,7 +132,7 @@ func main() { //nolint:funlen
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), opts)
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		log.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
@@ -153,34 +142,33 @@ func main() { //nolint:funlen
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
 
-	if err := cfg.setupReconcilers(ctx, mgr); err != nil {
-		setupLog.Error(err, "failed to add Tinkerbell Reconcilers")
+	if err := cfg.setupReconcilers(ctx, log, rs, mgr); err != nil {
+		log.Error(err, "failed to add Tinkerbell Reconcilers")
 		os.Exit(1)
 	}
 
 	if err := setupWebhooks(mgr); err != nil {
-		setupLog.Error(err, "failed to add Tinkerbell Webhooks")
+		log.Error(err, "failed to add Tinkerbell Webhooks")
 		os.Exit(1)
 	}
 
 	if err := addHealthChecks(mgr); err != nil {
-		setupLog.Error(err, "failed to add health checks")
+		log.Error(err, "failed to add health checks")
 		os.Exit(1)
 	}
 
-	// +kubebuilder:scaffold:builder
-	setupLog.Info("starting manager", "version", build.GitRevision())
+	log.Info("starting manager", "version", build.GitRevision())
 
 	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
+		log.Error(err, "problem running manager")
 		os.Exit(1)
 	}
 }
 
-func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
-	setupLog.Info("Setting up kubernetes clients for controllers")
+func (c *config) setupReconcilers(ctx context.Context, log logr.Logger, rs *runtime.Scheme, mgr ctrl.Manager) error {
+	log.Info("Setting up kubernetes clients for controllers")
 
-	result, err := c.buildTinkerbellClient(ctx, mgr)
+	result, err := c.buildTinkerbellClient(ctx, log, rs, mgr)
 	if err != nil {
 		return err
 	}
@@ -188,7 +176,7 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 	if err := (&cluster.TinkerbellClusterReconciler{
 		Client:           mgr.GetClient(),
 		WatchFilterValue: c.WatchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellClusterConcurrency}, mgr.GetScheme()); err != nil {
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellClusterConcurrency}, rs); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster controller:%w", err)
 	}
 
@@ -197,22 +185,16 @@ func (c *config) setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
 		TinkerbellClient:   result.Client,
 		ExternalTinkerbell: result.External,
 		WatchManager:       result.WatchManager,
-		Scheme:             mgr.GetScheme(),
+		Scheme:             rs,
 		WatchFilterValue:   c.WatchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellMachineConcurrency}, mgr.GetScheme()); err != nil {
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellMachineConcurrency}, rs); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine controller:%w", err)
 	}
 
 	return nil
 }
 
-type tinkerbellClientResult struct {
-	Client       client.Client
-	External     bool
-	WatchManager *tinkcluster.NamespaceWatchManager
-}
-
-func (c *config) buildTinkerbellClient(ctx context.Context, mgr ctrl.Manager) (tinkerbellClientResult, error) {
+func (c *config) buildTinkerbellClient(ctx context.Context, setupLog logr.Logger, rs *runtime.Scheme, mgr ctrl.Manager) (tinkerbellClientResult, error) {
 	tinkClient := mgr.GetClient()
 
 	restConfig, restErr := tinkcluster.RestConfig(c.ExternalKubeconfig)
@@ -228,12 +210,12 @@ func (c *config) buildTinkerbellClient(ctx context.Context, mgr ctrl.Manager) (t
 	setupLog.Info("using external Tinkerbell with JIT per-namespace watches",
 		"tinkerbellClientMode", "external",
 	)
-	directClient, dErr := tinkcluster.NewDirectClient(restConfig, scheme)
+	directClient, dErr := tinkcluster.NewDirectClient(restConfig, rs)
 	if dErr != nil {
 		return tinkerbellClientResult{}, fmt.Errorf("failed to create external Tinkerbell client: %w", dErr)
 	}
 	wm := tinkcluster.NewNamespaceWatchManager(
-		restConfig, scheme,
+		restConfig, rs,
 		machine.LabelMachineName, machine.LabelMachineNamespace,
 	)
 	wm.SetContext(ctx)
@@ -319,13 +301,6 @@ func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
 	)
 
 	fs.StringVar(
-		&c.ProfilerAddress,
-		"profiler-address",
-		"",
-		"Bind address to expose the pprof profiler (e.g. localhost:6060)",
-	)
-
-	fs.StringVar(
 		&c.WatchFilterValue,
 		"watch-filter",
 		"",
@@ -391,4 +366,25 @@ func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
 		"/var/run/secrets/external-tinkerbell/kubeconfig",
 		"Path to a kubeconfig file for an external Tinkerbell cluster.",
 	)
+}
+
+// newScheme returns a runtime.Scheme with all CAPT needed schemes added.
+func newScheme() (*runtime.Scheme, error) {
+	rs := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add client-go scheme: err: %w", err)
+	}
+	if err := infrastructurev1.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add infrastructurev1 scheme: err: %w", err)
+	}
+	if err := clusterv1.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add clusterv1 scheme: err: %w", err)
+	}
+	if err := captctrl.AddToSchemeTinkerbell(rs); err != nil {
+		return nil, fmt.Errorf("failed to add Tinkerbell scheme: err: %w", err)
+	}
+	if err := captctrl.AddToSchemeBMC(rs); err != nil {
+		return nil, fmt.Errorf("failed to add BMC scheme: err: %w", err)
+	}
+	return rs, nil
 }
