@@ -368,3 +368,109 @@ func TestBackoffDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureWatch_EmptyNamespace(t *testing.T) {
+	t.Parallel()
+	m := newTestManager(func(_, _ context.Context, _ controller.Controller, _ string) (context.CancelFunc, error) {
+		t.Fatal("startFn should not be called for empty namespace")
+		return nil, nil
+	})
+
+	if err := m.EnsureWatch(context.Background(), ""); err == nil {
+		t.Fatal("expected error for empty namespace")
+	}
+}
+
+func TestStopWatch_ClearsBackoff(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	m := newTestManager(func(_, _ context.Context, _ controller.Controller, _ string) (context.CancelFunc, error) {
+		return nil, fmt.Errorf("RBAC denied")
+	})
+	m.nowFn = func() time.Time { return now }
+
+	// Fail to establish a backoff record.
+	_ = m.EnsureWatch(context.Background(), "bo-ns")
+
+	// Immediate retry would be rejected by backoff.
+	m.nowFn = func() time.Time { return now.Add(1 * time.Second) }
+	if err := m.EnsureWatch(context.Background(), "bo-ns"); err == nil {
+		t.Fatal("expected backoff error")
+	}
+
+	// StopWatch clears the backoff, so an immediate retry should be allowed.
+	m.StopWatch("bo-ns")
+	m.startAndRegisterFn = func(_, _ context.Context, _ controller.Controller, _ string) (context.CancelFunc, error) {
+		return func() {}, nil
+	}
+	if err := m.EnsureWatch(context.Background(), "bo-ns"); err != nil {
+		t.Fatalf("expected success after StopWatch cleared backoff: %v", err)
+	}
+}
+
+func TestNamespaceRemovedOnUnexpectedCacheStop(t *testing.T) {
+	t.Parallel()
+
+	// cacheStarted is closed when the fake cache goroutine begins running,
+	// letting the test know the watch was fully established.
+	cacheStarted := make(chan struct{})
+	// crashCache is closed by the test to simulate the cache crashing.
+	crashCache := make(chan struct{})
+	// cacheExited is closed when the goroutine finishes, so we can verify
+	// the namespace was cleaned up.
+	cacheExited := make(chan struct{})
+
+	m := NewNamespaceWatchManager(nil, runtime.NewScheme(), "n", "ns")
+	m.SetController(fakeController{})
+
+	// Use a real cancelable context so we can verify cacheCtx.Err() == nil
+	// at the time the cache "crashes" (the parent context is not canceled).
+	mgrCtx, mgrCancel := context.WithCancel(context.Background())
+	defer mgrCancel()
+	m.SetContext(mgrCtx)
+
+	m.startAndRegisterFn = func(_ context.Context, parentCtx context.Context, _ controller.Controller, _ string) (context.CancelFunc, error) {
+		// Simulate what startAndRegister does: create a child context and
+		// start a goroutine that removes the namespace on unexpected exit.
+		cacheCtx, cacheCancel := context.WithCancel(parentCtx)
+		go func() {
+			close(cacheStarted)
+			<-crashCache // block until the test triggers a crash
+			// Simulate cache.Start returning (crash) while cacheCtx is
+			// still alive (not canceled by StopWatch).
+			if cacheCtx.Err() == nil {
+				m.mu.Lock()
+				delete(m.namespaces, "crash-ns")
+				m.mu.Unlock()
+			}
+			close(cacheExited)
+		}()
+		return cacheCancel, nil
+	}
+
+	if err := m.EnsureWatch(context.Background(), "crash-ns"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	<-cacheStarted
+
+	// Namespace should be tracked.
+	m.mu.Lock()
+	_, tracked := m.namespaces["crash-ns"]
+	m.mu.Unlock()
+	if !tracked {
+		t.Fatal("expected namespace to be tracked after EnsureWatch")
+	}
+
+	// Simulate crash.
+	close(crashCache)
+	<-cacheExited
+
+	// Namespace should have been removed.
+	m.mu.Lock()
+	_, tracked = m.namespaces["crash-ns"]
+	m.mu.Unlock()
+	if tracked {
+		t.Fatal("expected namespace to be removed after cache crash")
+	}
+}

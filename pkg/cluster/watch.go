@@ -103,7 +103,11 @@ func (m *NamespaceWatchManager) SetContext(ctx context.Context) {
 // completes; all receive the same result.
 // If a previous attempt for the namespace failed recently, the call is rejected
 // with a backoff error to avoid flooding the external API server.
-func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace string) error {
+func (m *NamespaceWatchManager) EnsureWatch(ctx context.Context, namespace string) error { //nolint:cyclop
+	if namespace == "" {
+		return fmt.Errorf("NamespaceWatchManager: namespace must not be empty")
+	}
+
 	// Fast path: namespace already fully established.
 	m.mu.Lock()
 	if _, ok := m.namespaces[namespace]; ok {
@@ -225,6 +229,13 @@ func (m *NamespaceWatchManager) startAndRegister(
 	go func() {
 		if err := nsCache.Start(cacheCtx); err != nil {
 			log.FromContext(cacheCtx).Error(err, "namespace cache stopped", "namespace", namespace)
+		}
+		// If the cache stopped unexpectedly (not via StopWatch/StopAll),
+		// remove the namespace so the next EnsureWatch call re-creates it.
+		if cacheCtx.Err() == nil {
+			m.mu.Lock()
+			delete(m.namespaces, namespace)
+			m.mu.Unlock()
 		}
 	}()
 
