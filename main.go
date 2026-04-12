@@ -17,15 +17,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zerologr"
+	"github.com/peterbourgon/ff/v3"
 	"github.com/rs/zerolog"
-	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
@@ -34,6 +35,7 @@ import (
 	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -43,197 +45,181 @@ import (
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/build"
-	// +kubebuilder:scaffold:imports
+	tinkcluster "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/cluster"
 )
 
-//nolint:gochecknoglobals
-var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-)
-
-//nolint:wsl,gochecknoinits
-func init() {
-	klog.InitFlags(nil)
-
-	_ = clientgoscheme.AddToScheme(scheme)
-	_ = infrastructurev1.AddToScheme(scheme)
-	_ = clusterv1.AddToScheme(scheme)
-	_ = captctrl.AddToSchemeTinkerbell(scheme)
-	_ = captctrl.AddToSchemeBMC(scheme)
-
-	// +kubebuilder:scaffold:scheme
+type config struct {
+	EnableLeaderElection          bool
+	MetricsBindAddress            string
+	LeaderElectionNamespace       string
+	WatchNamespace                string
+	HealthAddr                    string
+	WatchFilterValue              string
+	WebhookCertDir                string
+	TinkerbellClusterConcurrency  int
+	TinkerbellMachineConcurrency  int
+	TinkerbellHardwareConcurrency int
+	TinkerbellTemplateConcurrency int
+	TinkerbellWorkflowConcurrency int
+	WebhookPort                   int
+	SyncPeriod                    time.Duration
+	LeaderElectionLeaseDuration   time.Duration
+	LeaderElectionRenewDeadline   time.Duration
+	LeaderElectionRetryPeriod     time.Duration
+	ExternalKubeconfig            string
 }
 
-//nolint:gochecknoglobals
-var (
-	enableLeaderElection          bool
-	metricsAddr                   string
-	leaderElectionNamespace       string
-	watchNamespace                string
-	profilerAddress               string
-	healthAddr                    string
-	watchFilterValue              string
-	webhookCertDir                string
-	tinkerbellClusterConcurrency  int
-	tinkerbellMachineConcurrency  int
-	tinkerbellHardwareConcurrency int
-	tinkerbellTemplateConcurrency int
-	tinkerbellWorkflowConcurrency int
-	webhookPort                   int
-	syncPeriod                    time.Duration
-	leaderElectionLeaseDuration   time.Duration
-	leaderElectionRenewDeadline   time.Duration
-	leaderElectionRetryPeriod     time.Duration
-)
-
-func initFlags(fs *pflag.FlagSet) { //nolint:funlen
-	fs.StringVar(
-		&metricsAddr,
-		"metrics-bind-addr",
-		"localhost:8080",
-		"The address the metric endpoint binds to.",
-	)
-
-	fs.BoolVar(
-		&enableLeaderElection,
-		"leader-elect",
-		false,
-		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.",
-	)
-
-	fs.DurationVar(
-		&leaderElectionLeaseDuration,
-		"leader-elect-lease-duration",
-		15*time.Second,
-		"Interval at which non-leader candidates will wait to force acquire leadership (duration string)",
-	)
-
-	fs.DurationVar(
-		&leaderElectionRenewDeadline,
-		"leader-elect-renew-deadline",
-		10*time.Second,
-		"Duration that the leading controller manager will retry refreshing leadership before giving up (duration string)",
-	)
-
-	fs.DurationVar(
-		&leaderElectionRetryPeriod,
-		"leader-elect-retry-period",
-		2*time.Second,
-		"Duration the LeaderElector clients should wait between tries of actions (duration string)",
-	)
-
-	fs.StringVar(
-		&watchNamespace,
-		"namespace",
-		"",
-		"Namespace that the controller watches to reconcile cluster-api objects. If unspecified, the controller watches for cluster-api objects across all namespaces.", //nolint:lll
-	)
-
-	fs.StringVar(
-		&leaderElectionNamespace,
-		"leader-election-namespace",
-		"",
-		"Namespace that the controller performs leader election in. If unspecified, the controller will discover which namespace it is running in.",
-	)
-
-	fs.StringVar(
-		&profilerAddress,
-		"profiler-address",
-		"",
-		"Bind address to expose the pprof profiler (e.g. localhost:6060)",
-	)
-
-	fs.StringVar(
-		&watchFilterValue,
-		"watch-filter",
-		"",
-		fmt.Sprintf("Label value that the controller watches to reconcile cluster-api objects. Label key is always %s. If unspecified, the controller watches for all cluster-api objects.", clusterv1.WatchLabel), //nolint:lll
-	)
-
-	fs.IntVar(&tinkerbellClusterConcurrency,
-		"tinkerbellcluster-concurrency",
-		10,
-		"Number of TinkerbellClusters to process simultaneously",
-	)
-
-	fs.IntVar(&tinkerbellMachineConcurrency,
-		"tinkerbellmachine-concurrency",
-		10,
-		"Number of TinkerbellMachines to process simultaneously",
-	)
-
-	fs.IntVar(&tinkerbellHardwareConcurrency,
-		"tinkerbell-hardware-concurrency",
-		10,
-		"Number of Tinkerbell Hardware resources to process simultaneously",
-	)
-
-	fs.IntVar(&tinkerbellTemplateConcurrency,
-		"tinkerbell-template-concurrency",
-		10,
-		"Number of Tinkerbell Template resources to process simultaneously",
-	)
-
-	fs.IntVar(&tinkerbellWorkflowConcurrency,
-		"tinkerbell-workflow-concurrency",
-		10,
-		"Number of Tinkerbell Workflow resources to process simultaneously",
-	)
-
-	fs.DurationVar(&syncPeriod,
-		"sync-period",
-		10*time.Minute,
-		"The minimum interval at which watched resources are reconciled (e.g. 15m)",
-	)
-
-	fs.IntVar(&webhookPort,
-		"webhook-port",
-		9443,
-		"Webhook Server port",
-	)
-
-	fs.StringVar(&webhookCertDir,
-		"webhook-cert-dir",
-		"/tmp/k8s-webhook-server/serving-certs",
-		"Webhook Server Certificate Directory, is the directory that contains the server key and certificate",
-	)
-
-	fs.StringVar(&healthAddr,
-		"health-addr",
-		":9440",
-		"The address the health endpoint binds to.",
-	)
+type tinkerbellClientResult struct {
+	Client       client.Client
+	External     bool
+	WatchManager *tinkcluster.NamespaceWatchManager
 }
 
-func addHealthChecks(mgr ctrl.Manager) error {
-	if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
-		return fmt.Errorf("unable to create ready check: %w", err)
+func main() {
+	// Set up logging before any log calls so all startup messages are visible.
+	zl := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Caller().Timestamp().Logger()
+	ctrl.SetLogger(zerologr.New(&zl))
+	klog.SetLogger(ctrl.Log)
+
+	log := ctrl.Log.WithName("setup")
+
+	fs := flag.NewFlagSet("capt", flag.ExitOnError)
+	klog.InitFlags(fs)
+
+	cfg := &config{}
+	cfg.initFlags(fs)
+
+	if err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarNoPrefix(), ff.WithConfigFileParser(ff.PlainParser)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 
-	if err := mgr.AddHealthzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
-		return fmt.Errorf("unable to create healthz check: %w", err)
+	if cfg.WatchNamespace != "" {
+		log.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", cfg.WatchNamespace)
 	}
 
-	return nil
+	rs, err := newScheme()
+	if err != nil {
+		log.Error(err, "failed to setup runtime scheme")
+		os.Exit(1)
+	}
+
+	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
+	// Setting the burst size higher ensures all events will be recorded and submitted to the API
+	broadcaster := cgrecord.NewBroadcasterWithCorrelatorOptions(cgrecord.CorrelatorOptions{
+		BurstSize: 100,
+	})
+	opts := ctrl.Options{
+		Scheme: rs,
+		Metrics: metricsserver.Options{
+			BindAddress: cfg.MetricsBindAddress,
+		},
+		LeaderElection:          cfg.EnableLeaderElection,
+		LeaderElectionID:        "controller-leader-election-capt",
+		LeaderElectionNamespace: cfg.LeaderElectionNamespace,
+		LeaseDuration:           &cfg.LeaderElectionLeaseDuration,
+		RenewDeadline:           &cfg.LeaderElectionRenewDeadline,
+		RetryPeriod:             &cfg.LeaderElectionRetryPeriod,
+		HealthProbeBindAddress:  cfg.HealthAddr,
+		EventBroadcaster:        broadcaster,
+	}
+
+	if cfg.WatchNamespace != "" {
+		opts.Cache = cache.Options{
+			DefaultNamespaces: map[string]cache.Config{cfg.WatchNamespace: {}},
+		}
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), opts)
+	if err != nil {
+		log.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	// Initialize event recorder.
+	record.InitFromRecorder(mgr.GetEventRecorderFor("tinkerbell-controller"))
+
+	// Setup the context that's going to be used in controllers and for the manager.
+	ctx := ctrl.SetupSignalHandler()
+
+	if err := cfg.setupReconcilers(ctx, log, rs, mgr); err != nil {
+		log.Error(err, "failed to add Tinkerbell Reconcilers")
+		os.Exit(1)
+	}
+
+	if err := setupWebhooks(mgr); err != nil {
+		log.Error(err, "failed to add Tinkerbell Webhooks")
+		os.Exit(1)
+	}
+
+	if err := addHealthChecks(mgr); err != nil {
+		log.Error(err, "failed to add health checks")
+		os.Exit(1)
+	}
+
+	log.Info("starting manager", "version", build.GitRevision())
+
+	if err := mgr.Start(ctx); err != nil {
+		log.Error(err, "problem running manager")
+		os.Exit(1)
+	}
 }
 
-func setupReconcilers(ctx context.Context, mgr ctrl.Manager) error {
+func (c *config) setupReconcilers(ctx context.Context, log logr.Logger, rs *runtime.Scheme, mgr ctrl.Manager) error {
+	log.Info("Setting up kubernetes clients for controllers")
+
+	result, err := c.buildTinkerbellClient(ctx, log, rs, mgr)
+	if err != nil {
+		return err
+	}
+
 	if err := (&cluster.TinkerbellClusterReconciler{
 		Client:           mgr.GetClient(),
-		WatchFilterValue: watchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellClusterConcurrency}, mgr.GetScheme()); err != nil {
+		WatchFilterValue: c.WatchFilterValue,
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellClusterConcurrency}, rs); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster controller:%w", err)
 	}
 
 	if err := (&machine.TinkerbellMachineReconciler{
-		Client:           mgr.GetClient(),
-		WatchFilterValue: watchFilterValue,
-	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: tinkerbellMachineConcurrency}, mgr.GetScheme()); err != nil {
+		Client:             mgr.GetClient(),
+		TinkerbellClient:   result.Client,
+		ExternalTinkerbell: result.External,
+		WatchManager:       result.WatchManager,
+		Scheme:             rs,
+		WatchFilterValue:   c.WatchFilterValue,
+	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellMachineConcurrency}, rs); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine controller:%w", err)
 	}
 
 	return nil
+}
+
+func (c *config) buildTinkerbellClient(ctx context.Context, setupLog logr.Logger, rs *runtime.Scheme, mgr ctrl.Manager) (tinkerbellClientResult, error) {
+	tinkClient := mgr.GetClient()
+
+	restConfig, restErr := tinkcluster.RestConfig(c.ExternalKubeconfig)
+	if restErr != nil && !errors.Is(restErr, tinkcluster.NoConfigError{}) {
+		return tinkerbellClientResult{}, fmt.Errorf("failed to build external Tinkerbell client: %w", restErr)
+	}
+
+	if errors.Is(restErr, tinkcluster.NoConfigError{}) {
+		setupLog.Info("using local Tinkerbell for CRD operations", "tinkerbellClientMode", "local", "reason", restErr.Error())
+		return tinkerbellClientResult{Client: tinkClient}, nil
+	}
+
+	setupLog.Info("using external Tinkerbell with JIT per-namespace watches",
+		"tinkerbellClientMode", "external",
+	)
+	directClient, dErr := tinkcluster.NewDirectClient(restConfig, rs)
+	if dErr != nil {
+		return tinkerbellClientResult{}, fmt.Errorf("failed to create external Tinkerbell client: %w", dErr)
+	}
+	wm := tinkcluster.NewNamespaceWatchManager(
+		restConfig, rs,
+		machine.LabelMachineName, machine.LabelMachineNamespace,
+	)
+	wm.SetContext(ctx)
+	return tinkerbellClientResult{Client: directClient, External: true, WatchManager: wm}, nil
 }
 
 func setupWebhooks(mgr ctrl.Manager) error {
@@ -252,87 +238,153 @@ func setupWebhooks(mgr ctrl.Manager) error {
 	return nil
 }
 
-func main() { //nolint:funlen
-	initFlags(pflag.CommandLine)
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	pflag.Parse()
-
-	if watchNamespace != "" {
-		setupLog.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", watchNamespace)
+func addHealthChecks(mgr ctrl.Manager) error {
+	if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
+		return fmt.Errorf("unable to create ready check: %w", err)
 	}
 
-	if profilerAddress != "" {
-		setupLog.Info("Profiler listening for requests", "profiler-address", profilerAddress)
-
-		go func() {
-			//nolint:gosec
-			setupLog.Error(http.ListenAndServe(profilerAddress, nil), "listen and serve error")
-		}()
+	if err := mgr.AddHealthzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
+		return fmt.Errorf("unable to create healthz check: %w", err)
 	}
 
-	zl := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Caller().Timestamp().Logger()
-	logger := zerologr.New(&zl)
-	ctrl.SetLogger(logger)
-	klog.SetLogger(logger)
+	return nil
+}
 
-	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
-	// Setting the burst size higher ensures all events will be recorded and submitted to the API
-	broadcaster := cgrecord.NewBroadcasterWithCorrelatorOptions(cgrecord.CorrelatorOptions{
-		BurstSize: 100,
-	})
-	opts := ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress: metricsAddr,
-		},
-		LeaderElection:          enableLeaderElection,
-		LeaderElectionID:        "controller-leader-election-capt",
-		LeaderElectionNamespace: leaderElectionNamespace,
-		LeaseDuration:           &leaderElectionLeaseDuration,
-		RenewDeadline:           &leaderElectionRenewDeadline,
-		RetryPeriod:             &leaderElectionRetryPeriod,
-		HealthProbeBindAddress:  healthAddr,
-		EventBroadcaster:        broadcaster,
+func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
+	fs.StringVar(
+		&c.MetricsBindAddress,
+		"metrics-bind-addr",
+		"localhost:8080",
+		"The address the metric endpoint binds to.",
+	)
+
+	fs.BoolVar(
+		&c.EnableLeaderElection,
+		"leader-elect",
+		false,
+		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.",
+	)
+
+	fs.DurationVar(
+		&c.LeaderElectionLeaseDuration,
+		"leader-elect-lease-duration",
+		15*time.Second,
+		"Interval at which non-leader candidates will wait to force acquire leadership (duration string)",
+	)
+
+	fs.DurationVar(
+		&c.LeaderElectionRenewDeadline,
+		"leader-elect-renew-deadline",
+		10*time.Second,
+		"Duration that the leading controller manager will retry refreshing leadership before giving up (duration string)",
+	)
+
+	fs.DurationVar(
+		&c.LeaderElectionRetryPeriod,
+		"leader-elect-retry-period",
+		2*time.Second,
+		"Duration the LeaderElector clients should wait between tries of actions (duration string)",
+	)
+
+	fs.StringVar(
+		&c.WatchNamespace,
+		"namespace",
+		"",
+		"Namespace that the controller watches to reconcile cluster-api objects. If unspecified, the controller watches for cluster-api objects across all namespaces.",
+	)
+
+	fs.StringVar(
+		&c.LeaderElectionNamespace,
+		"leader-election-namespace",
+		"",
+		"Namespace that the controller performs leader election in. If unspecified, the controller will discover which namespace it is running in.",
+	)
+
+	fs.StringVar(
+		&c.WatchFilterValue,
+		"watch-filter",
+		"",
+		fmt.Sprintf("Label value that the controller watches to reconcile cluster-api objects. Label key is always %s. If unspecified, the controller watches for all cluster-api objects.", clusterv1.WatchLabel), //nolint:lll
+	)
+
+	fs.IntVar(&c.TinkerbellClusterConcurrency,
+		"tinkerbellcluster-concurrency",
+		10,
+		"Number of TinkerbellClusters to process simultaneously",
+	)
+
+	fs.IntVar(&c.TinkerbellMachineConcurrency,
+		"tinkerbellmachine-concurrency",
+		10,
+		"Number of TinkerbellMachines to process simultaneously",
+	)
+
+	fs.IntVar(&c.TinkerbellHardwareConcurrency,
+		"tinkerbell-hardware-concurrency",
+		10,
+		"Number of Tinkerbell Hardware resources to process simultaneously",
+	)
+
+	fs.IntVar(&c.TinkerbellTemplateConcurrency,
+		"tinkerbell-template-concurrency",
+		10,
+		"Number of Tinkerbell Template resources to process simultaneously",
+	)
+
+	fs.IntVar(&c.TinkerbellWorkflowConcurrency,
+		"tinkerbell-workflow-concurrency",
+		10,
+		"Number of Tinkerbell Workflow resources to process simultaneously",
+	)
+
+	fs.DurationVar(&c.SyncPeriod,
+		"sync-period",
+		10*time.Minute,
+		"The minimum interval at which watched resources are reconciled (e.g. 15m)",
+	)
+
+	fs.IntVar(&c.WebhookPort,
+		"webhook-port",
+		9443,
+		"Webhook Server port",
+	)
+
+	fs.StringVar(&c.WebhookCertDir,
+		"webhook-cert-dir",
+		"/tmp/k8s-webhook-server/serving-certs",
+		"Webhook Server Certificate Directory, is the directory that contains the server key and certificate",
+	)
+
+	fs.StringVar(&c.HealthAddr,
+		"health-addr",
+		":9440",
+		"The address the health endpoint binds to.",
+	)
+
+	fs.StringVar(&c.ExternalKubeconfig,
+		"external-kubeconfig",
+		"/var/run/secrets/external-tinkerbell/kubeconfig",
+		"Path to a kubeconfig file for an external Tinkerbell cluster.",
+	)
+}
+
+// newScheme returns a runtime.Scheme with all CAPT needed schemes added.
+func newScheme() (*runtime.Scheme, error) {
+	rs := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add client-go scheme: err: %w", err)
 	}
-
-	if watchNamespace != "" {
-		opts.Cache = cache.Options{
-			DefaultNamespaces: map[string]cache.Config{watchNamespace: {}},
-		}
+	if err := infrastructurev1.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add infrastructurev1 scheme: err: %w", err)
 	}
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), opts)
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+	if err := clusterv1.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add clusterv1 scheme: err: %w", err)
 	}
-
-	// Initialize event recorder.
-	record.InitFromRecorder(mgr.GetEventRecorderFor("tinkerbell-controller"))
-
-	// Setup the context that's going to be used in controllers and for the manager.
-	ctx := ctrl.SetupSignalHandler()
-
-	if err := setupReconcilers(ctx, mgr); err != nil {
-		setupLog.Error(err, "failed to add Tinkerbell Reconcilers")
-		os.Exit(1)
+	if err := captctrl.AddToSchemeTinkerbell(rs); err != nil {
+		return nil, fmt.Errorf("failed to add Tinkerbell scheme: err: %w", err)
 	}
-
-	if err := setupWebhooks(mgr); err != nil {
-		setupLog.Error(err, "failed to add Tinkerbell Webhooks")
-		os.Exit(1)
+	if err := captctrl.AddToSchemeBMC(rs); err != nil {
+		return nil, fmt.Errorf("failed to add BMC scheme: err: %w", err)
 	}
-
-	if err := addHealthChecks(mgr); err != nil {
-		setupLog.Error(err, "failed to add health checks")
-		os.Exit(1)
-	}
-
-	// +kubebuilder:scaffold:builder
-	setupLog.Info("starting manager", "version", build.GitRevision())
-
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
+	return rs, nil
 }

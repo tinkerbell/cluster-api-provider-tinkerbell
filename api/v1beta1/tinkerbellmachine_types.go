@@ -20,6 +20,7 @@ import (
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 const (
@@ -154,6 +155,22 @@ type TinkerbellMachineStatus struct {
 	// +optional
 	InstanceStatus *TinkerbellResourceStatus `json:"instanceStatus,omitempty"`
 
+	// ExternalTargetNamespace is the resolved namespace on the external Tinkerbell cluster
+	// where resources (Template, Workflow, Job) for this machine are created.
+	// It is computed once during hardware selection and persisted so that subsequent
+	// reconcile loops (including deletion when the Hardware object may be gone) always
+	// target the correct namespace without re-deriving it.
+	// Empty in local (non-external) mode.
+	// +optional
+	ExternalTargetNamespace string `json:"externalTargetNamespace,omitempty"`
+
+	// Conditions defines current service state of the TinkerbellMachine.
+	// Required to satisfy the Cluster API conditions.Getter/conditions.Setter
+	// interface contract. The CAPI framework may call GetConditions/SetConditions
+	// via interface assertion.
+	// +optional
+	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+
 	// Any transient errors that occur during the reconciliation of Machines
 	// can be added as events to the Machine object and/or logged in the
 	// controller's output.
@@ -178,6 +195,16 @@ type TinkerbellMachineStatus struct {
 	// controller's output.
 	// +optional
 	ErrorMessage *string `json:"errorMessage,omitempty"`
+}
+
+// GetConditions returns the conditions for the TinkerbellMachine.
+func (m *TinkerbellMachine) GetConditions() clusterv1.Conditions {
+	return m.Status.Conditions
+}
+
+// SetConditions sets the conditions on the TinkerbellMachine.
+func (m *TinkerbellMachine) SetConditions(conditions clusterv1.Conditions) {
+	m.Status.Conditions = conditions
 }
 
 // +kubebuilder:subresource:status

@@ -87,7 +87,7 @@ func parse(versionString string) (*pseudoVersion, error) {
 		return pv, nil
 	}
 
-	return nil, fmt.Errorf("invalid pseudo-version format: %q", versionString) //nolint:err113 // this linting rule doesn't matter.
+	return nil, fmt.Errorf("invalid pseudo-version format: %q", versionString)
 }
 
 // String returns the formatted pseudo-version string.

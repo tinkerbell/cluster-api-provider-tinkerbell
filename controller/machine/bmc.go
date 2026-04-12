@@ -16,25 +16,15 @@ func toPtr[T any](v T) *T {
 
 // createPowerOffJob creates a BMCJob object with the required tasks for hardware power off.
 func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error {
-	controller := true
 	bmcJob := &rufiov1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-poweroff", scope.tinkerbellMachine.Name),
-			Namespace: scope.tinkerbellMachine.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
-					Kind:       "TinkerbellMachine",
-					Name:       scope.tinkerbellMachine.Name,
-					UID:        scope.tinkerbellMachine.UID,
-					Controller: &controller,
-				},
-			},
+			Namespace: scope.tinkerbellNamespace(),
 		},
 		Spec: rufiov1.JobSpec{
 			MachineRef: rufiov1.MachineRef{
 				Name:      hw.Spec.BMCRef.Name,
-				Namespace: scope.tinkerbellMachine.Namespace,
+				Namespace: scope.tinkerbellNamespace(),
 			},
 			Tasks: []rufiov1.Action{
 				{
@@ -44,7 +34,11 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		},
 	}
 
-	if err := scope.client.Create(scope.ctx, bmcJob); err != nil {
+	if err := scope.setResourceOwnership(bmcJob); err != nil {
+		return fmt.Errorf("setting BMCJob ownership: %w", err)
+	}
+
+	if err := scope.tinkerbellClient.Create(scope.ctx, bmcJob); err != nil {
 		return fmt.Errorf("creating BMCJob: %w", err)
 	}
 
@@ -52,18 +46,18 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 		"Name", bmcJob.Name,
 		"Namespace", bmcJob.Namespace)
 
-	return fmt.Errorf("requeue to wait for job.bmc completion: %s/%s", bmcJob.Namespace, bmcJob.Name) //nolint:err113
+	return fmt.Errorf("requeue to wait for job.bmc completion: %s/%s", bmcJob.Namespace, bmcJob.Name)
 }
 
 // getJob fetches the Job by name.
 func (scope *machineReconcileScope) getJob(name string, job *rufiov1.Job) error {
 	namespacedName := types.NamespacedName{
 		Name:      name,
-		Namespace: scope.tinkerbellMachine.Namespace,
+		Namespace: scope.tinkerbellNamespace(),
 	}
 
-	if err := scope.client.Get(scope.ctx, namespacedName, job); err != nil {
-		return fmt.Errorf("GET BMCJob: %w", err)
+	if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, job); err != nil {
+		return fmt.Errorf("getting BMCJob: %w", err)
 	}
 
 	return nil
@@ -82,7 +76,7 @@ func (scope *machineReconcileScope) ensureBMCJobCompletionForDelete(hardware *ti
 			return scope.createPowerOffJob(hardware)
 		}
 
-		return fmt.Errorf("get bmc job for machine: %w", err)
+		return fmt.Errorf("getting BMC job for machine: %w", err)
 	}
 
 	// Check the Job conditions to ensure the power off job is complete.
@@ -91,8 +85,8 @@ func (scope *machineReconcileScope) ensureBMCJobCompletionForDelete(hardware *ti
 	}
 
 	if bmcJob.HasCondition(rufiov1.JobFailed, rufiov1.ConditionTrue) {
-		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name) //nolint:err113
+		return fmt.Errorf("bmc job %s/%s failed", bmcJob.Namespace, bmcJob.Name)
 	}
 
-	return fmt.Errorf("requeue, bmc job %s/%s is not completed", bmcJob.Namespace, bmcJob.Name) //nolint:err113
+	return fmt.Errorf("requeue, bmc job %s/%s is not completed", bmcJob.Namespace, bmcJob.Name)
 }
