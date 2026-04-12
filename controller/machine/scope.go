@@ -25,6 +25,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
@@ -35,6 +36,7 @@ import (
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	tinkcluster "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/cluster"
 )
 
 const (
@@ -52,6 +54,14 @@ var (
 	// not have a Client configured.
 	ErrMissingClient = fmt.Errorf("client is nil")
 
+	// ErrMissingTinkerbellClient is the error returned when TinkerbellMachineReconciler does not have
+	// the required Tinkerbell client configured.
+	ErrMissingTinkerbellClient = fmt.Errorf("tinkerbell client is nil")
+
+	// ErrMissingScheme is the error returned when TinkerbellMachineReconciler does not have
+	// a Scheme configured.
+	ErrMissingScheme = fmt.Errorf("scheme is nil")
+
 	// ErrMissingBootstrapDataSecretValueKey is the error returned when the Secret referenced for bootstrap data
 	// is missing the value key.
 	ErrMissingBootstrapDataSecretValueKey = fmt.Errorf("retrieving bootstrap data: secret value key is missing")
@@ -65,10 +75,17 @@ type machineReconcileScope struct {
 	ctx                  context.Context
 	tinkerbellMachine    *infrastructurev1.TinkerbellMachine
 	patchHelper          *patch.Helper
-	client               client.Client
+	client               client.Client // management cluster client for CAPI objects
+	scheme               *runtime.Scheme
 	machine              *clusterv1.Machine
 	tinkerbellCluster    *infrastructurev1.TinkerbellCluster
 	bootstrapCloudConfig string
+
+	// Tinkerbell cluster fields — in local mode tinkerbellClient == client;
+	// in external mode it targets a separate Tinkerbell cluster.
+	tinkerbellClient   client.Client
+	externalTinkerbell bool // true when tinkerbellClient targets an external cluster
+	watchManager       *tinkcluster.NamespaceWatchManager
 }
 
 func (scope *machineReconcileScope) addFinalizer() error {
@@ -76,6 +93,74 @@ func (scope *machineReconcileScope) addFinalizer() error {
 
 	if err := scope.patch(); err != nil {
 		return fmt.Errorf("patching TinkerbellMachine object with finalizer: %w", err)
+	}
+
+	return nil
+}
+
+// isExternal returns true when the Tinkerbell client targets an external
+// Tinkerbell cluster, i.e. a different cluster than the CAPT management client.
+func (scope *machineReconcileScope) isExternal() bool {
+	return scope.externalTinkerbell
+}
+
+// tinkerbellNamespace returns the namespace on the Tinkerbell cluster where resources
+// (Template, Workflow, Job) should be created or looked up. In local mode it always
+// returns the TinkerbellMachine's namespace. In external mode it returns the
+// persisted Status.ExternalTargetNamespace (set once during ensureHardware), falling
+// back to the management cluster namespace for the very first reconcile before
+// hardware has been selected.
+func (scope *machineReconcileScope) tinkerbellNamespace() string {
+	if !scope.isExternal() {
+		return scope.tinkerbellMachine.Namespace
+	}
+
+	// Once resolved and persisted, always use the persisted value. This ensures
+	// consistency across create/delete even if the hardware object disappears.
+	if ns := scope.tinkerbellMachine.Status.ExternalTargetNamespace; ns != "" {
+		return ns
+	}
+
+	// Fallback for the first reconcile before ensureHardware has run.
+	return scope.resolveExternalNamespace(nil)
+}
+
+// resolveExternalNamespace returns the namespace where Tinkerbell resources
+// should be created. In external mode, the Hardware object's namespace is
+// authoritative — all Tinkerbell resources for a machine (Template, Workflow,
+// Job) must be co-located with the Hardware because Workflow.Spec.HardwareRef
+// is a name-only reference resolved within the Workflow's own namespace.
+//
+// If hw is nil (before hardware selection) the management cluster namespace is
+// returned as a fallback for backward-compatibility.
+func (scope *machineReconcileScope) resolveExternalNamespace(hw *tinkv1.Hardware) string {
+	if hw != nil {
+		return hw.Namespace
+	}
+
+	return scope.tinkerbellMachine.Namespace
+}
+
+// setResourceOwnership configures cross-cluster or in-cluster ownership on obj.
+// In external mode it sets label-based ownership (owner references don't work
+// across clusters). In local mode it sets a standard controller owner reference
+// pointing at the TinkerbellMachine.
+func (scope *machineReconcileScope) setResourceOwnership(obj client.Object) error {
+	if scope.isExternal() {
+		labels := obj.GetLabels()
+		if labels == nil {
+			labels = make(map[string]string, 2)
+		}
+
+		labels[LabelMachineName] = scope.tinkerbellMachine.Name
+		labels[LabelMachineNamespace] = scope.tinkerbellMachine.Namespace
+		obj.SetLabels(labels)
+
+		return nil
+	}
+
+	if err := controllerutil.SetControllerReference(scope.tinkerbellMachine, obj, scope.scheme); err != nil {
+		return fmt.Errorf("setting controller reference: %w", err)
 	}
 
 	return nil
@@ -171,10 +256,10 @@ func (scope *machineReconcileScope) setStatus(hw *tinkv1.Hardware) error {
 
 		namespacedName := types.NamespacedName{
 			Name:      scope.tinkerbellMachine.Spec.HardwareName,
-			Namespace: scope.tinkerbellMachine.Namespace,
+			Namespace: scope.tinkerbellNamespace(),
 		}
 
-		if err := scope.client.Get(scope.ctx, namespacedName, hw); err != nil {
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, hw); err != nil {
 			return fmt.Errorf("getting Hardware: %w", err)
 		}
 	}

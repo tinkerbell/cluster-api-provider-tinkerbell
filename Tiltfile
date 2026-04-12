@@ -17,7 +17,17 @@ docker_build(
     build_args={
         'TARGETPLATFORM': TARGETPLATFORM,
     },
+    only=[TARGETPLATFORM, 'Dockerfile'],
 )
-k8s_yaml(kustomize('./config/default'))
+# kustomize build bypasses clusterctl, so we must substitute ${VAR:=default}
+# placeholders that clusterctl would normally handle.
+manifests = kustomize('./config/default')
+manifests = blob(
+    str(manifests)
+    .replace("${TINKERBELL_IP:=''}", os.getenv('TINKERBELL_IP', '""'))
+    .replace("${EXTERNAL_TINKERBELL_KUBECONFIG:=external-tinkerbell-kubeconfig}", os.getenv('EXTERNAL_TINKERBELL_KUBECONFIG', 'external-tinkerbell-kubeconfig'))
+)
+k8s_yaml(manifests)
+
 default_registry('ttl.sh/meohmy-dghentld')
 allow_k8s_contexts('capt-playground-admin@capt-playground')
