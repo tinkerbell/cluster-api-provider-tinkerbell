@@ -43,6 +43,15 @@ import (
 	tinkcluster "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/cluster"
 )
 
+const (
+	// LabelMachineName is the label key used on external Tinkerbell resources to identify
+	// the owning TinkerbellMachine by name.
+	LabelMachineName = "capt.tinkerbell.org/machine-name"
+	// LabelMachineNamespace is the label key used on external Tinkerbell resources to identify
+	// the owning TinkerbellMachine by namespace.
+	LabelMachineNamespace = "capt.tinkerbell.org/machine-namespace"
+)
+
 // TinkerbellMachineReconciler implements Reconciler interface by managing Tinkerbell machines.
 type TinkerbellMachineReconciler struct {
 	client.Client
@@ -304,15 +313,6 @@ func (r *TinkerbellMachineReconciler) TinkerbellClusterToTinkerbellMachines(ctx 
 		return result
 	}
 }
-
-const (
-	// LabelMachineName is the label key used on external Tinkerbell resources to identify
-	// the owning TinkerbellMachine by name.
-	LabelMachineName = "capt.tinkerbell.org/machine-name"
-	// LabelMachineNamespace is the label key used on external Tinkerbell resources to identify
-	// the owning TinkerbellMachine by namespace.
-	LabelMachineNamespace = "capt.tinkerbell.org/machine-namespace"
-)
 
 // validate validates if context configuration has all required fields properly populated.
 func (r *TinkerbellMachineReconciler) validate() error {

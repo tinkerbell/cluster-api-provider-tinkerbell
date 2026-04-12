@@ -24,7 +24,9 @@ import (
 )
 
 const (
-	// backoffBase is the initial backoff interval for failed EnsureWatch calls.
+	// backoffBase is the base unit for exponential backoff on failed EnsureWatch
+	// calls. The actual backoff is 2^failures * backoffBase, so the first
+	// retry waits 2*backoffBase (10s), doubling on each subsequent failure.
 	backoffBase = 5 * time.Second
 	// backoffMax is the maximum backoff interval.
 	backoffMax = 5 * time.Minute
