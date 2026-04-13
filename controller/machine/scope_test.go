@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -40,7 +40,7 @@ func readyMachine() *clusterv1.Machine {
 			Bootstrap: clusterv1.Bootstrap{
 				DataSecretName: &dataSecretName,
 			},
-			Version: &version,
+			Version: version,
 		},
 	}
 }
@@ -68,7 +68,7 @@ func Test_Machine(t *testing.T) {
 		},
 		"is_not_valid_when_version_is_not_set": {
 			mutateF: func(m *clusterv1.Machine) *clusterv1.Machine {
-				m.Spec.Version = nil
+				m.Spec.Version = ""
 
 				return m
 			},
@@ -78,7 +78,7 @@ func Test_Machine(t *testing.T) {
 		"is_not_valid_when_version_is_empty": {
 			mutateF: func(m *clusterv1.Machine) *clusterv1.Machine {
 				v := ""
-				m.Spec.Version = &v
+				m.Spec.Version = v
 
 				return m
 			},
