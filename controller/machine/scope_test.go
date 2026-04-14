@@ -17,6 +17,7 @@ limitations under the License.
 package machine //nolint:testpackage
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -26,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -126,26 +129,15 @@ func Test_tinkerbellNamespace(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		external                   bool
-		machineNS                  string
-		persistedExternalNamespace string
-		expectedNamespace          string
+		targetNamespace   string
+		expectedNamespace string
 	}{
-		"local_mode_returns_machine_namespace": {
-			external:          false,
-			machineNS:         "capt-system",
-			expectedNamespace: "capt-system",
+		"returns_empty_when_nothing_persisted": {
+			expectedNamespace: "",
 		},
-		"external_uses_persisted_status_namespace": {
-			external:                   true,
-			machineNS:                  "capt-system",
-			persistedExternalNamespace: "persisted-ns",
-			expectedNamespace:          "persisted-ns",
-		},
-		"external_fallback_to_machine_namespace_when_nothing_set": {
-			external:          true,
-			machineNS:         "capt-system",
-			expectedNamespace: "capt-system",
+		"returns_persisted_namespace": {
+			targetNamespace:   "tinkerbell",
+			expectedNamespace: "tinkerbell",
 		},
 	}
 
@@ -156,65 +148,13 @@ func Test_tinkerbellNamespace(t *testing.T) {
 
 			scope := &machineReconcileScope{
 				tinkerbellMachine: &infrastructurev1.TinkerbellMachine{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: tc.machineNS,
-					},
 					Status: infrastructurev1.TinkerbellMachineStatus{
-						ExternalTargetNamespace: tc.persistedExternalNamespace,
+						TargetNamespace: tc.targetNamespace,
 					},
 				},
-				externalTinkerbell: tc.external,
 			}
 
 			g.Expect(scope.tinkerbellNamespace()).To(Equal(tc.expectedNamespace))
-		})
-	}
-}
-
-func Test_resolveExternalNamespace(t *testing.T) {
-	t.Parallel()
-
-	cases := map[string]struct {
-		machineNS         string
-		hwNamespace       string
-		hwProvided        bool
-		expectedNamespace string
-	}{
-		"hardware_namespace_is_authoritative": {
-			machineNS:         "capt-system",
-			hwProvided:        true,
-			hwNamespace:       "tink-system",
-			expectedNamespace: "tink-system",
-		},
-		"fallback_to_machine_namespace_when_no_hw": {
-			machineNS:         "capt-system",
-			expectedNamespace: "capt-system",
-		},
-	}
-
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			scope := &machineReconcileScope{
-				tinkerbellMachine: &infrastructurev1.TinkerbellMachine{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: tc.machineNS,
-					},
-				},
-			}
-
-			var hw *tinkv1.Hardware
-			if tc.hwProvided {
-				hw = &tinkv1.Hardware{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: tc.hwNamespace,
-					},
-				}
-			}
-
-			g.Expect(scope.resolveExternalNamespace(hw)).To(Equal(tc.expectedNamespace))
 		})
 	}
 }
@@ -239,11 +179,17 @@ func TestSetResourceOwnership(t *testing.T) {
 
 	tests := map[string]struct {
 		external      bool
+		objNamespace  string
 		wantLabels    map[string]string
 		wantOwnerRefs []metav1.OwnerReference
 	}{
-		"local mode sets owner reference": {
-			external: false,
+		"local same namespace sets labels and owner reference": {
+			external:     false,
+			objNamespace: "mgmt-ns",
+			wantLabels: map[string]string{
+				LabelMachineName:      "my-machine",
+				LabelMachineNamespace: "mgmt-ns",
+			},
 			wantOwnerRefs: []metav1.OwnerReference{{
 				APIVersion:         infrastructurev1.GroupVersion.String(),
 				Kind:               "TinkerbellMachine",
@@ -253,8 +199,17 @@ func TestSetResourceOwnership(t *testing.T) {
 				BlockOwnerDeletion: &trueVal,
 			}},
 		},
-		"external mode sets labels": {
-			external: true,
+		"local cross namespace sets labels only": {
+			external:     false,
+			objNamespace: "tinkerbell",
+			wantLabels: map[string]string{
+				LabelMachineName:      "my-machine",
+				LabelMachineNamespace: "mgmt-ns",
+			},
+		},
+		"external mode sets labels only": {
+			external:     true,
+			objNamespace: "tink-system",
 			wantLabels: map[string]string{
 				LabelMachineName:      "my-machine",
 				LabelMachineNamespace: "mgmt-ns",
@@ -281,7 +236,7 @@ func TestSetResourceOwnership(t *testing.T) {
 			obj := &tinkv1.Template{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-template",
-					Namespace: "mgmt-ns",
+					Namespace: tc.objNamespace,
 				},
 			}
 			if err := scope.setResourceOwnership(obj); err != nil {
@@ -293,6 +248,95 @@ func TestSetResourceOwnership(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.wantOwnerRefs, obj.GetOwnerReferences()); diff != "" {
 				t.Errorf("ownerReferences mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestLabelToMachineMapper(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		labels map[string]string
+		want   []reconcile.Request
+	}{
+		"valid labels returns reconcile request": {
+			labels: map[string]string{
+				LabelMachineName:      "my-machine",
+				LabelMachineNamespace: "capi-system",
+			},
+			want: []reconcile.Request{
+				{NamespacedName: types.NamespacedName{Name: "my-machine", Namespace: "capi-system"}},
+			},
+		},
+		"missing name label returns nil": {
+			labels: map[string]string{
+				LabelMachineNamespace: "capi-system",
+			},
+		},
+		"missing namespace label returns nil": {
+			labels: map[string]string{
+				LabelMachineName: "my-machine",
+			},
+		},
+		"no labels returns nil": {},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := &tinkv1.Workflow{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workflow",
+					Namespace: "tinkerbell",
+					Labels:    tc.labels,
+				},
+			}
+
+			got := labelToMachineMapper(context.Background(), obj)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("reconcile requests mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFinalizerMigration(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		initialFinalizers []string
+	}{
+		"legacy finalizer only": {
+			initialFinalizers: []string{infrastructurev1.MachineLegacyFinalizer},
+		},
+		"new finalizer only": {
+			initialFinalizers: []string{infrastructurev1.MachineFinalizer},
+		},
+		"both finalizers": {
+			initialFinalizers: []string{infrastructurev1.MachineLegacyFinalizer, infrastructurev1.MachineFinalizer},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Simulate the removal logic used in releaseHardware and removeFinalizer.
+			hw := &tinkv1.Hardware{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-hw",
+					Namespace:  "tinkerbell",
+					Finalizers: tc.initialFinalizers,
+				},
+			}
+
+			controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineFinalizer)
+			controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineLegacyFinalizer)
+
+			if len(hw.Finalizers) != 0 {
+				t.Errorf("expected no finalizers, got %v", hw.Finalizers)
 			}
 		})
 	}

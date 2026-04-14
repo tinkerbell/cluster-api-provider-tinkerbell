@@ -2,13 +2,27 @@
 
 In this tutorial we’ll cover the basics of how to use Cluster API to create one or more Kubernetes clusters.
 
+## Try it with the Playground
+
+If you want to quickly experiment with CAPT in a local virtual environment, see the
+[CAPT Playground](https://github.com/tinkerbell/playground/tree/main/capt). It automates
+the entire setup — including a KinD management cluster, Tinkerbell stack, virtual machines,
+and a virtual BMC — so you can create a workload cluster with a single command:
+
+```bash
+task create-playground
+```
+
+The rest of this guide covers manual setup on real (or pre-existing virtual) infrastructure.
+
 ## Installation
 
 ### Prerequisites
 
-- Install and setup [kubectl] in your local environment
-- Install [clusterctl]
-- A running [Tinkerbell stack].
+- [kubectl] >= v1.33
+- [clusterctl] >= v1.12
+- [Helm] >= v3.13
+- A running [Tinkerbell stack] >= v0.23.
 
 ### Initialize the management cluster
 
@@ -26,12 +40,11 @@ and `kubeadm` control-plane providers.
 cat >> ~/.cluster-api/clusterctl.yaml <<EOF
 providers:
   - name: "tinkerbell"
-    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/v0.4.0/infrastructure-components.yaml"
+    url: "https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases/v0.7.0/infrastructure-components.yaml"
     type: "InfrastructureProvider"
 EOF
 
-# Finally, initialize the management cluster
-export TINKERBELL_IP=<hegel ip>
+# Initialize the management cluster
 clusterctl init --infrastructure tinkerbell
 ```
 
@@ -39,12 +52,12 @@ The output of `clusterctl init` is similar to the following:
 
 ```shell
 Fetching providers
-Installing cert-manager Version="v1.10.1"
+Installing cert-manager Version="v1.17.2"
 Waiting for cert-manager to be available...
-Installing Provider="cluster-api" Version="v1.3.2" TargetNamespace="capi-system"
-Installing Provider="bootstrap-kubeadm" Version="v1.3.2" TargetNamespace="capi-kubeadm-bootstrap-system"
-Installing Provider="control-plane-kubeadm" Version="v1.3.2" TargetNamespace="capi-kubeadm-control-plane-system"
-Installing Provider="infrastructure-tinkerbell" Version="v0.4.0" TargetNamespace="capt-system"
+Installing Provider="cluster-api" Version="v1.12.5" TargetNamespace="capi-system"
+Installing Provider="bootstrap-kubeadm" Version="v1.12.5" TargetNamespace="capi-kubeadm-bootstrap-system"
+Installing Provider="control-plane-kubeadm" Version="v1.12.5" TargetNamespace="capi-kubeadm-control-plane-system"
+Installing Provider="infrastructure-tinkerbell" Version="v0.7.0" TargetNamespace="capt-system"
 
 Your management cluster has been initialized successfully!
 
@@ -57,61 +70,57 @@ You can now create your first workload cluster by running the following:
 
 Cluster API Provider Tinkerbell does not assume all hardware configured in Tinkerbell is available for provisioning.
 To make Tinkerbell Hardware available create a `Hardware` resource in the management cluster.
-For this quick start, the `hardware.tinkerbell.org` custom resource objects need to live in the same namespace as the Tink stack(specifically where `tink-controller` lives).
+Hardware objects should live in the same namespace as the Tinkerbell stack
+(specifically where `tink-controller` lives). CAPT will automatically create
+Template and Workflow resources in the Hardware's namespace, even if the CAPI
+objects are in a different namespace.
 
-An example of a valid Hardware resource definition:
+CAPT validates the following fields on each Hardware object during provisioning:
 
-- Required metadata for hardware:
-    - metadata.facility.facility_code is set (default is "onprem")
-    - metadata.instance.id is set (should be a MAC address)
-    - metadata.instance.hostname is set
-    - metadata.spec.disks is set and contains at least one device matching an available disk on the system
-  - An example of a valid hardware definition for use with the Tinkerbell provider:
+- `spec.interfaces` — at least one interface must be defined
+- `spec.interfaces[0].dhcp` — the first interface must have DHCP configured
+- `spec.interfaces[0].dhcp.ip.address` — the DHCP configuration must include an IP address
+- `spec.disks` — at least one disk must be defined
 
-    ```yaml
-    apiVersion: "tinkerbell.org/v1alpha1"
-    kind: Hardware
-    metadata:
-      name: node-1
-      namespace: default
-      labels: # Labels are optional, and can be used for machine selection later
-        manufacturer: dell
-        idrac-version: 8
-        rack: 1
-        room: 2
-    spec:
-      disks:
-        - device: /dev/sda
-      metadata:
-        facility:
-          facility_code: onprem
-        instance:
-          userdata: ""
-          hostname: "node-1"
-          id: "xx:xx:xx:xx:xx:xx"
-          operating_system:
-            distro: "ubuntu"
-            os_slug: "ubuntu_20_04"
-            version: "20.04"
-      interfaces:
-        - dhcp:
-            arch: x86_64
-            hostname: node-1
-            ip:
-              address: 0.0.0.0
-              gateway: 0.0.0.1
-              netmask: 255.255.255.0
-            lease_time: 86400
-            mac: xx:xx:xx:xx:xx
-            name_servers:
-              - 8.8.8.8
-            uefi: true
-          netboot:
-            allowPXE: true
-            allowWorkflow: true
-      ```
+The `metadata`, `netboot`, and `labels` fields are optional but recommended. Labels are used
+for [hardware affinity](#select-your-hardware) matching.
 
-**NOTE:** The name and id in each hardware YAML file will need to be unique.
+An example of a valid Hardware resource:
+
+```yaml
+apiVersion: tinkerbell.org/v1alpha1
+kind: Hardware
+metadata:
+  name: node-1
+  namespace: tink-system
+  labels:
+    tinkerbell.org/role: worker
+spec:
+  disks:
+    - device: /dev/sda
+  interfaces:
+    - dhcp:
+        arch: x86_64
+        hostname: node-1
+        ip:
+          address: 192.168.1.10
+          gateway: 192.168.1.1
+          netmask: 255.255.255.0
+        lease_time: 86400
+        mac: "aa:bb:cc:dd:ee:ff"
+        name_servers:
+          - 8.8.8.8
+        uefi: true
+      netboot:
+        allowPXE: true
+        allowWorkflow: true
+  metadata:
+    instance:
+      hostname: node-1
+      id: "aa:bb:cc:dd:ee:ff"
+```
+
+**NOTE:** The `metadata.name` and `spec.interfaces[0].dhcp.mac` must be unique across all Hardware objects.
 
 ### Create your first workload cluster
 
@@ -153,20 +162,34 @@ export POD_CIDR=172.25.0.0/16
 
 #### Generating the cluster configuration
 
-For the purpose of this tutorial, we'll name our cluster capi-quickstart. The `--target-namespace` needs to be the namespace where the Tink stack is deployed. Otherwise you will see an error.
+For the purpose of this tutorial, we'll name our cluster capi-quickstart.
 
-<details>
-<summary>error message</summary>
+The `--target-namespace` specifies where CAPI objects (Cluster, Machine, etc.)
+are created. CAPT will automatically create Tinkerbell resources (Template,
+Workflow) in the same namespace as the selected Hardware, even if that differs
+from the CAPI namespace. For the simplest setup, use the namespace where both
+the Tink stack and Hardware objects live.
 
-```bash
-Error from server (InternalError): error when creating "capi-quickstart.yaml": Internal error occurred: failed calling webhook "validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io": failed to call webhook: Post "https://capt-webhook-service.capt-system.svc:443/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster?timeout=10s": EOF
-```
+##### Cross-namespace support
 
-</details>
+CAPI objects and Tinkerbell objects do not need to be in the same namespace.
+For example, you can have CAPI objects in a `capi-cluster` namespace while
+Hardware lives in the `tinkerbell` namespace. CAPT will create Template,
+Workflow, and Job resources in the Hardware's namespace and use label-based
+watches to reconcile them back to the `TinkerbellMachine`.
+
+When resources are in different namespaces, Kubernetes owner references are
+not set (they cannot cross namespace boundaries). Cleanup relies on CAPT's
+finalizer-driven deletion logic and ownership labels
+(`capt.tinkerbell.org/machine-name`, `capt.tinkerbell.org/machine-namespace`).
+If the CAPT controller is not running when a `TinkerbellMachine` is
+force-deleted, orphaned resources may remain. See
+[REMOTE-TINKERBELL.md](REMOTE-TINKERBELL.md#orphaned-resources) for cleanup
+instructions.
 
 ```bash
 clusterctl generate cluster capi-quickstart \
-  --kubernetes-version v1.22.8 \
+  --kubernetes-version v1.35.0 \
   --control-plane-machine-count=3 \
   --worker-machine-count=3 \
   --target-namespace=tink-system \
@@ -190,7 +213,7 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: TinkerbellMachineTemplate
 metadata:
   name: capi-quickstart-md-0
-  namespace: capt-system
+  namespace: tink-system
 spec:
   template:
     spec:
@@ -211,6 +234,118 @@ spec:
                 rack: 1
                 room: 2
 ```
+
+#### Customize the provisioning template
+
+By default, CAPT generates a Tinkerbell Template for each machine based on the OS image settings in the
+`TinkerbellCluster` and `TinkerbellMachineTemplate`. For most deployments you will want to override the
+default template to control exactly which actions run during provisioning.
+
+Set the `templateOverride` field in the `TinkerbellMachineTemplate` spec with a full
+[Tinkerbell Template](https://docs.tinkerbell.org) definition. The template supports Go template
+variables for hardware-specific values:
+
+| Variable | Description |
+|---|---|
+| `{{.device_1}}` | Worker device identifier |
+| `{{ index .Hardware.Disks 0 }}` | First disk device path (e.g. `/dev/sda`) |
+| `{{ formatPartition (index .Hardware.Disks 0) N }}` | Nth partition of the first disk |
+
+Here is an example that streams an OS image to disk, configures cloud-init for the
+Tinkerbell metadata service, and kexecs into the installed OS:
+
+```yaml
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: TinkerbellMachineTemplate
+metadata:
+  name: capi-quickstart-control-plane
+  namespace: tink-system
+spec:
+  template:
+    spec:
+      bootOptions:
+        bootMode: netboot
+      hardwareAffinity:
+        required:
+        - labelSelector:
+            matchLabels:
+              tinkerbell.org/role: control-plane
+      templateOverride: |
+        version: "0.1"
+        name: my-provisioning-template
+        global_timeout: 6000
+        tasks:
+          - name: "my-provisioning-template"
+            worker: "{{.device_1}}"
+            volumes:
+              - /dev:/dev
+            actions:
+              - name: "stream image"
+                image: quay.io/tinkerbell/actions/oci2disk
+                timeout: 1200
+                environment:
+                  IMG_URL: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu-2404:v1.35.0.gz
+                  DEST_DISK: {{ index .Hardware.Disks 0 }}
+                  COMPRESSED: true
+              - name: "add tink cloud-init config"
+                image: quay.io/tinkerbell/actions/writefile
+                timeout: 90
+                environment:
+                  DEST_DISK: {{ formatPartition ( index .Hardware.Disks 0 ) 3 }}
+                  FS_TYPE: ext4
+                  DEST_PATH: /etc/cloud/cloud.cfg.d/10_tinkerbell.cfg
+                  UID: 0
+                  GID: 0
+                  MODE: 0600
+                  DIRMODE: 0700
+                  CONTENTS: |
+                    datasource:
+                      Ec2:
+                        metadata_urls: ["http://<TINKERBELL_VIP>:7080"]
+                        strict_id: false
+                    system_info:
+                      default_user:
+                        name: tink
+                        groups: [wheel, adm]
+                        sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+                        shell: /bin/bash
+                    manage_etc_hosts: localhost
+                    warnings:
+                      dsid_missing_source: off
+              - name: "add tink cloud-init ds-config"
+                image: quay.io/tinkerbell/actions/writefile
+                timeout: 90
+                environment:
+                  DEST_DISK: {{ formatPartition ( index .Hardware.Disks 0 ) 3 }}
+                  FS_TYPE: ext4
+                  DEST_PATH: /etc/cloud/ds-identify.cfg
+                  UID: 0
+                  GID: 0
+                  MODE: 0600
+                  DIRMODE: 0700
+                  CONTENTS: |
+                    datasource: Ec2
+              - name: "kexec image"
+                image: quay.io/tinkerbell/actions/kexec
+                timeout: 90
+                pid: host
+                environment:
+                  BLOCK_DEVICE: {{ formatPartition ( index .Hardware.Disks 0 ) 1 }}
+                  FS_TYPE: vfat
+```
+
+The `bootOptions.bootMode` field controls how the machine boots into the provisioning
+environment (HookOS). Available modes:
+
+| Boot Mode | Description |
+|---|---|
+| `netboot` | PXE/iPXE network boot (default) |
+| `isoboot` | Boot from an ISO image served by the Tinkerbell stack |
+| `iso` | Boot from a custom ISO URL |
+| `customboot` | Custom BMC boot actions |
+
+For a complete working example including kube-vip, SSH keys, and kustomize overlays,
+see the [CAPT Playground templates](https://github.com/tinkerbell/playground/tree/main/capt/templates).
 
 #### Apply the workload cluster
 
@@ -256,7 +391,7 @@ You should see an output is similar to this:
 
 ```bash
 NAME                            INITIALIZED   API SERVER AVAILABLE   VERSION   REPLICAS   READY   UPDATED   UNAVAILABLE
-capi-quickstart-control-plane   true                                 v1.22.0   3                  3         3
+capi-quickstart-control-plane   true                                 v1.35.0   3                  3         3
 ```
 
 **NOTE** The control plane won't be `Ready` until we install a CNI in the next step.
@@ -275,7 +410,10 @@ either in the CNI deployment or in the Cluster deployment manifests to ensure
 a working cluster.
 
 ```bash
-kubectl --kubeconfig=capi-quickstart.kubeconfig create -f https://raw.githubusercontent.com/cilium/cilium/v1.9/install/kubernetes/quick-install.yaml
+helm repo add cilium https://helm.cilium.io/
+helm install cilium cilium/cilium --version 1.17.3 \
+  --namespace kube-system \
+  --kubeconfig=capi-quickstart.kubeconfig
 ```
 
 ### Clean Up
@@ -286,9 +424,14 @@ Delete workload cluster.
 kubectl delete cluster capi-quickstart
 ```
 
-**NOTE** IMPORTANT: In order to ensure a proper cleanup of your infrastructure you must always delete the cluster object. Deleting the entire cluster template with `kubectl delete -f capi-quickstart.yaml` might lead to pending resources to be cleaned up manually.
+**IMPORTANT:** Always delete the Cluster object (`kubectl delete cluster <name>`) rather than
+deleting the full manifest (`kubectl delete -f capi-quickstart.yaml`). CAPI's Cluster controller
+orchestrates cascading deletion in the correct order — Machines are drained and deprovisioned
+before infrastructure is torn down, and Tinkerbell resources (Templates, Workflows) are cleaned
+up by CAPT's finalizers. Deleting with `-f` sends parallel delete requests that can bypass this
+ordering and leave Hardware stuck with finalizers or orphaned Workflows.
 
-**NOTE** IMPORTANT: The OS images used in this quick start live here: https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell and are only build for BIOS based systems.
+**NOTE:** The OS images used in this quick start are available in the [Tinkerbell container registry](https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell).
 
 <!-- links -->
 [bootstrap cluster]: https://cluster-api.sigs.k8s.io/reference/glossary.html#bootstrap-cluster
@@ -304,5 +447,6 @@ kubectl delete cluster capi-quickstart
 [provider]: https://cluster-api.sigs.k8s.io/reference/providers.html
 [provider components]: https://cluster-api.sigs.k8s.io/reference/glossary.html#provider-components
 [workload cluster]: https://cluster-api.sigs.k8s.io/reference/glossary.html#workload-cluster
+[Helm]: https://helm.sh/docs/intro/install/
 [Tinkerbell]: https://tinkerbell.org
-[Tinkerbell stack]: https://github.com/tinkerbell/charts/blob/main/tinkerbell/stack/README.md
+[Tinkerbell stack]: https://github.com/tinkerbell/tinkerbell/tree/main/helm/tinkerbell#readme

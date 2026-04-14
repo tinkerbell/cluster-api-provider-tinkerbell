@@ -197,6 +197,7 @@ release-templates: $(RELEASE_DIR)
 
 release-local: ## Builds the manifests for use in local development
 	$(MAKE) release RELEASE_DIR=out/release/infrastructure-tinkerbell/$(RELEASE_TAG)
+	git checkout -- config/default/manager_image_patch.yaml
 
 ## --------------------------------------
 ## Cleanup / Verification

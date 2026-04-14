@@ -45,23 +45,27 @@ changes and reconcile the owning `TinkerbellMachine`:
 Hardware and Template objects are accessed on demand rather than through the
 watch cache.
 
-### Cross-Cluster Ownership
+### Ownership Tracking
 
-Kubernetes owner references do not work across cluster boundaries. When
-operating in external mode, CAPT uses **labels** instead of owner references to
-associate Tinkerbell resources with their owning `TinkerbellMachine`:
+Kubernetes owner references do not work across cluster or namespace boundaries.
+CAPT uses **labels** on all Tinkerbell resources (Template, Workflow, Job) to
+associate them with their owning `TinkerbellMachine`:
 
 | Label | Description |
 |---|---|
 | `capt.tinkerbell.org/machine-name` | Name of the owning `TinkerbellMachine` |
 | `capt.tinkerbell.org/machine-namespace` | Namespace of the owning `TinkerbellMachine` |
 
-These labels are set on `Template`, `Workflow`, and `Job` objects created in the
-external cluster and used to map events back to the correct `TinkerbellMachine`
-reconcile request.
+These labels are **always set**, regardless of whether CAPT is running in local
+or external mode. They enable label-based watches and cleanup for
+cross-namespace and cross-cluster resources.
 
-When operating in local (same-cluster) mode, standard Kubernetes owner
-references are used as before.
+In local mode, when Tinkerbell resources are in the **same namespace** as the
+`TinkerbellMachine`, a standard Kubernetes controller owner reference is also
+set for backward compatibility. When resources are in a **different namespace**,
+only the labels are used because owner references cannot cross namespace
+boundaries. See the [QUICK-START guide](QUICK-START.md#cross-namespace-support)
+for details on local cross-namespace usage.
 
 ## Configuration
 
@@ -124,7 +128,7 @@ The resolution is simple:
 1. Hardware is selected (via `HardwareAffinity` label selectors)
 2. The Hardware's namespace becomes the target namespace
 3. Template, Workflow, and Job are created in that namespace
-4. The namespace is persisted in `TinkerbellMachine.Status.ExternalTargetNamespace`
+4. The namespace is persisted in `TinkerbellMachine.Status.TargetNamespace`
    for consistency across subsequent reconcile loops (including deletion)
 
 This zero-configuration approach requires no namespace flags or spec overrides —
@@ -134,9 +138,11 @@ resources are automatically co-located with Hardware.
 
 ### Orphaned Resources
 
-In external mode, Tinkerbell resources (Template, Workflow, Job) on the external
-cluster use **labels** for ownership tracking instead of Kubernetes owner
-references (which do not work cross-cluster). This means:
+When Tinkerbell resources live in a different namespace or cluster from the
+`TinkerbellMachine`, they use **labels** for ownership tracking instead of
+Kubernetes owner references (which do not work across namespace or cluster
+boundaries). This applies to both **external mode** and **local
+cross-namespace** setups. It means:
 
 - If the management cluster is deleted or becomes unreachable, resources created
   by CAPT on the external Tinkerbell cluster **will not be garbage-collected**

@@ -115,6 +115,8 @@ func (scope *machineReconcileScope) takeHardwareOwnership(hw *tinkv1.Hardware) e
 	hw.Labels[HardwareOwnerNamespaceLabel] = scope.tinkerbellMachine.Namespace
 
 	// Add finalizer to hardware as well to make sure we release it before Machine object is removed.
+	// Remove the legacy name first so upgraded Hardware objects don't carry both.
+	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineLegacyFinalizer)
 	controllerutil.AddFinalizer(hw, infrastructurev1.MachineFinalizer)
 
 	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
@@ -159,12 +161,13 @@ func (scope *machineReconcileScope) ensureHardware() (*tinkv1.Hardware, error) {
 	scope.tinkerbellMachine.Spec.HardwareName = hw.Name
 	scope.tinkerbellMachine.Spec.ProviderID = fmt.Sprintf("%s://%s/%s", ProviderIDScheme, hw.Namespace, hw.Name)
 
-	// In external mode, resolve and persist the target namespace now that the
-	// hardware object is available. This ensures all subsequent
-	// operations — including deletion when the hardware may already be gone —
-	// use a consistent namespace without re-deriving it.
-	if scope.isExternal() && scope.tinkerbellMachine.Status.ExternalTargetNamespace == "" {
-		scope.tinkerbellMachine.Status.ExternalTargetNamespace = scope.resolveExternalNamespace(hw)
+	// Persist the hardware's namespace as the target namespace for all
+	// Tinkerbell resources. The Hardware namespace is authoritative because
+	// Workflow.Spec.HardwareRef is a name-only reference resolved within the
+	// Workflow's own namespace. Persisting it ensures deletion works even if
+	// the Hardware object is already gone.
+	if scope.tinkerbellMachine.Status.TargetNamespace == "" {
+		scope.tinkerbellMachine.Status.TargetNamespace = hw.Namespace
 	}
 
 	// In JIT watch mode, ensure there is a namespace-scoped informer cache
@@ -312,6 +315,7 @@ func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
 	delete(hw.Annotations, HardwareProvisionedAnnotation)
 
 	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineFinalizer)
+	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineLegacyFinalizer)
 
 	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
