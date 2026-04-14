@@ -26,7 +26,11 @@ import (
 const (
 	// MachineFinalizer allows ReconcileTinkerbellMachine to clean up Tinkerbell resources before
 	// removing it from the apiserver.
-	MachineFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
+	MachineFinalizer = "infrastructure.cluster.x-k8s.io/tinkerbellmachine"
+
+	// MachineLegacyFinalizer is the old finalizer name without a path separator.
+	// Kept for backward-compatible removal during upgrades.
+	MachineLegacyFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
 )
 
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
@@ -162,14 +166,13 @@ type TinkerbellMachineStatus struct {
 	// +optional
 	InstanceStatus *TinkerbellResourceStatus `json:"instanceStatus,omitempty"`
 
-	// ExternalTargetNamespace is the resolved namespace on the external Tinkerbell cluster
-	// where resources (Template, Workflow, Job) for this machine are created.
+	// TargetNamespace is the resolved namespace where Tinkerbell resources
+	// (Template, Workflow, Job) for this machine are created.
 	// It is computed once during hardware selection and persisted so that subsequent
 	// reconcile loops (including deletion when the Hardware object may be gone) always
 	// target the correct namespace without re-deriving it.
-	// Empty in local (non-external) mode.
 	// +optional
-	ExternalTargetNamespace string `json:"externalTargetNamespace,omitempty"`
+	TargetNamespace string `json:"targetNamespace,omitempty"`
 
 	// Conditions defines current service state of the TinkerbellMachine.
 	// Required to satisfy the Cluster API conditions.Getter/conditions.Setter

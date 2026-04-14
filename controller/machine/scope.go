@@ -90,6 +90,9 @@ type machineReconcileScope struct {
 }
 
 func (scope *machineReconcileScope) addFinalizer() error {
+	// Migrate from the legacy finalizer name (without a path separator) to the
+	// new domain-qualified name. Remove the old one first to avoid carrying both.
+	controllerutil.RemoveFinalizer(scope.tinkerbellMachine, infrastructurev1.MachineLegacyFinalizer)
 	controllerutil.AddFinalizer(scope.tinkerbellMachine, infrastructurev1.MachineFinalizer)
 
 	if err := scope.patch(); err != nil {
@@ -105,63 +108,37 @@ func (scope *machineReconcileScope) isExternal() bool {
 	return scope.externalTinkerbell
 }
 
-// tinkerbellNamespace returns the namespace on the Tinkerbell cluster where resources
-// (Template, Workflow, Job) should be created or looked up. In local mode it always
-// returns the TinkerbellMachine's namespace. In external mode it returns the
-// persisted Status.ExternalTargetNamespace (set once during ensureHardware), falling
-// back to the management cluster namespace for the very first reconcile before
-// hardware has been selected.
+// tinkerbellNamespace returns the namespace on the Tinkerbell cluster where
+// resources (Template, Workflow, Job) should be created or looked up.
+// The value is persisted in Status.TargetNamespace during ensureHardware and
+// must be set before this method is called.
 func (scope *machineReconcileScope) tinkerbellNamespace() string {
-	if !scope.isExternal() {
-		return scope.tinkerbellMachine.Namespace
-	}
-
-	// Once resolved and persisted, always use the persisted value. This ensures
-	// consistency across create/delete even if the hardware object disappears.
-	if ns := scope.tinkerbellMachine.Status.ExternalTargetNamespace; ns != "" {
-		return ns
-	}
-
-	// Fallback for the first reconcile before ensureHardware has run.
-	return scope.resolveExternalNamespace(nil)
+	return scope.tinkerbellMachine.Status.TargetNamespace
 }
 
-// resolveExternalNamespace returns the namespace where Tinkerbell resources
-// should be created. In external mode, the Hardware object's namespace is
-// authoritative — all Tinkerbell resources for a machine (Template, Workflow,
-// Job) must be co-located with the Hardware because Workflow.Spec.HardwareRef
-// is a name-only reference resolved within the Workflow's own namespace.
+// setResourceOwnership configures ownership on obj.
 //
-// If hw is nil (before hardware selection) the management cluster namespace is
-// returned as a fallback for backward-compatibility.
-func (scope *machineReconcileScope) resolveExternalNamespace(hw *tinkv1.Hardware) string {
-	if hw != nil {
-		return hw.Namespace
-	}
-
-	return scope.tinkerbellMachine.Namespace
-}
-
-// setResourceOwnership configures cross-cluster or in-cluster ownership on obj.
-// In external mode it sets label-based ownership (owner references don't work
-// across clusters). In local mode it sets a standard controller owner reference
-// pointing at the TinkerbellMachine.
+// Labels (LabelMachineName + LabelMachineNamespace) are always set so that
+// label-based watches and cleanup work regardless of namespace placement.
+//
+// A standard controller owner reference is additionally set when the resource
+// lives in the same namespace as the TinkerbellMachine AND we are not in
+// external mode (owner references cannot cross namespace or cluster boundaries).
 func (scope *machineReconcileScope) setResourceOwnership(obj client.Object) error {
-	if scope.isExternal() {
-		labels := obj.GetLabels()
-		if labels == nil {
-			labels = make(map[string]string, 2)
-		}
-
-		labels[LabelMachineName] = scope.tinkerbellMachine.Name
-		labels[LabelMachineNamespace] = scope.tinkerbellMachine.Namespace
-		obj.SetLabels(labels)
-
-		return nil
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string, 2)
 	}
 
-	if err := controllerutil.SetControllerReference(scope.tinkerbellMachine, obj, scope.scheme); err != nil {
-		return fmt.Errorf("setting controller reference: %w", err)
+	labels[LabelMachineName] = scope.tinkerbellMachine.Name
+	labels[LabelMachineNamespace] = scope.tinkerbellMachine.Namespace
+	obj.SetLabels(labels)
+
+	// Owner references only work within the same namespace on the same cluster.
+	if !scope.isExternal() && obj.GetNamespace() == scope.tinkerbellMachine.Namespace {
+		if err := controllerutil.SetControllerReference(scope.tinkerbellMachine, obj, scope.scheme); err != nil {
+			return fmt.Errorf("setting controller reference: %w", err)
+		}
 	}
 
 	return nil
@@ -295,6 +272,14 @@ func (scope *machineReconcileScope) MachineScheduledForDeletion() bool {
 // DeleteMachineWithDependencies removes template and workflow objects associated with given machine.
 func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //nolint:cyclop
 	scope.log.Info("Removing machine", "hardwareName", scope.tinkerbellMachine.Spec.HardwareName)
+
+	// If TargetNamespace was never persisted (e.g. the machine was deleted
+	// before hardware selection completed), fall back to the machine's own
+	// namespace so that cleanup lookups have a valid namespace.
+	if scope.tinkerbellMachine.Status.TargetNamespace == "" {
+		scope.tinkerbellMachine.Status.TargetNamespace = scope.tinkerbellMachine.Namespace
+	}
+
 	// Fetch hw for the machine.
 	hw := &tinkv1.Hardware{}
 
@@ -364,6 +349,7 @@ func (scope *machineReconcileScope) removeDependencies() error {
 
 func (scope *machineReconcileScope) removeFinalizer() error {
 	controllerutil.RemoveFinalizer(scope.tinkerbellMachine, infrastructurev1.MachineFinalizer)
+	controllerutil.RemoveFinalizer(scope.tinkerbellMachine, infrastructurev1.MachineLegacyFinalizer)
 
 	scope.log.Info("Patching Machine object to remove finalizer")
 

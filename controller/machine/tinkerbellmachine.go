@@ -24,6 +24,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
@@ -44,10 +46,10 @@ import (
 )
 
 const (
-	// LabelMachineName is the label key used on external Tinkerbell resources to identify
+	// LabelMachineName is the label key used on Tinkerbell resources to identify
 	// the owning TinkerbellMachine by name.
 	LabelMachineName = "capt.tinkerbell.org/machine-name"
-	// LabelMachineNamespace is the label key used on external Tinkerbell resources to identify
+	// LabelMachineNamespace is the label key used on Tinkerbell resources to identify
 	// the owning TinkerbellMachine by namespace.
 	LabelMachineNamespace = "capt.tinkerbell.org/machine-namespace"
 )
@@ -215,8 +217,10 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 		)
 
 	// In local mode, watch Workflow and Job objects via owner references on the
-	// management cluster. In external mode, the WatchManager registers JIT
-	// per-namespace watches dynamically when Hardware is selected.
+	// management cluster (for backward compatibility with same-namespace resources)
+	// and via labels (for cross-namespace resources).
+	// In external mode, the WatchManager registers JIT per-namespace watches
+	// dynamically when Hardware is selected.
 	if !r.ExternalTinkerbell {
 		ctrlBuilder = ctrlBuilder.
 			Watches(
@@ -236,6 +240,14 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 					&infrastructurev1.TinkerbellMachine{},
 					handler.OnlyControllerOwner(),
 				),
+			).
+			Watches(
+				&tinkv1.Workflow{},
+				handler.EnqueueRequestsFromMapFunc(labelToMachineMapper),
+			).
+			Watches(
+				&rufiov1.Job{},
+				handler.EnqueueRequestsFromMapFunc(labelToMachineMapper),
 			)
 	}
 
@@ -251,6 +263,24 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 	}
 
 	return nil
+}
+
+// labelToMachineMapper maps a Tinkerbell resource (Workflow or Job) back to the
+// owning TinkerbellMachine using the label-based ownership convention. This
+// enables reconciliation for cross-namespace resources where Kubernetes
+// OwnerReferences are not available.
+func labelToMachineMapper(_ context.Context, o client.Object) []reconcile.Request {
+	labels := o.GetLabels()
+	name := labels[LabelMachineName]
+	namespace := labels[LabelMachineNamespace]
+
+	if name == "" || namespace == "" {
+		return nil
+	}
+
+	return []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}},
+	}
 }
 
 // TinkerbellClusterToTinkerbellMachines is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation

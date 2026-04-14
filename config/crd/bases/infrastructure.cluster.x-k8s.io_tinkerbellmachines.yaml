@@ -546,15 +546,6 @@ spec:
                   can be added as events to the Machine object and/or logged in the
                   controller's output.
                 type: string
-              externalTargetNamespace:
-                description: |-
-                  ExternalTargetNamespace is the resolved namespace on the external Tinkerbell cluster
-                  where resources (Template, Workflow, Job) for this machine are created.
-                  It is computed once during hardware selection and persisted so that subsequent
-                  reconcile loops (including deletion when the Hardware object may be gone) always
-                  target the correct namespace without re-deriving it.
-                  Empty in local (non-external) mode.
-                type: string
               initialization:
                 description: |-
                   Initialization provides observations of the TinkerbellMachine initialization process.
@@ -574,6 +565,14 @@ spec:
               ready:
                 description: Ready is true when the provider resource is ready.
                 type: boolean
+              targetNamespace:
+                description: |-
+                  TargetNamespace is the resolved namespace where Tinkerbell resources
+                  (Template, Workflow, Job) for this machine are created.
+                  It is computed once during hardware selection and persisted so that subsequent
+                  reconcile loops (including deletion when the Hardware object may be gone) always
+                  target the correct namespace without re-deriving it.
+                type: string
             type: object
         type: object
     served: true
