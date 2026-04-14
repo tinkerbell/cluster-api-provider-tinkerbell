@@ -21,27 +21,23 @@ import (
 	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var _ webhook.CustomValidator = &TinkerbellMachineTemplate{}
+var _ admission.Validator[*TinkerbellMachineTemplate] = &TinkerbellMachineTemplate{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (m *TinkerbellMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).WithValidator(m).For(m).Complete() //nolint:wrapcheck
+	return ctrl.NewWebhookManagedBy(mgr, m).WithValidator(m).Complete() //nolint:wrapcheck
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachinetemplates,versions=v1beta1,name=validation.tinkerbellmachinetemplate.infrastructure.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type.
+func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, tmt *TinkerbellMachineTemplate) (admission.Warnings, error) {
 	var allErrs field.ErrorList
-
-	tmt, _ := obj.(*TinkerbellMachineTemplate)
 
 	spec := tmt.Spec.Template.Spec
 	fieldBasePath := field.NewPath("spec", "template", "spec")
@@ -57,11 +53,8 @@ func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, obj runtim
 	return nil, aggregateObjErrors(tmt.GroupVersionKind().GroupKind(), tmt.Name, allErrs)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, old runtime.Object, newObj runtime.Object) (admission.Warnings, error) {
-	oldTMT, _ := old.(*TinkerbellMachineTemplate)
-	newTMT, _ := newObj.(*TinkerbellMachineTemplate)
-
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type.
+func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, oldTMT *TinkerbellMachineTemplate, newTMT *TinkerbellMachineTemplate) (admission.Warnings, error) {
 	if !reflect.DeepEqual(newTMT.Spec, oldTMT.Spec) {
 		return nil, apierrors.NewBadRequest("TinkerbellMachineTemplate.Spec is immutable")
 	}
@@ -69,7 +62,7 @@ func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, old runtim
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateDelete(context.Context, runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type.
+func (m *TinkerbellMachineTemplate) ValidateDelete(_ context.Context, _ *TinkerbellMachineTemplate) (admission.Warnings, error) {
 	return nil, nil
 }

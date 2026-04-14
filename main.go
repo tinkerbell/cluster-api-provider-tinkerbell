@@ -31,7 +31,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	cgrecord "k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -137,6 +137,9 @@ func main() {
 	}
 
 	// Initialize event recorder.
+	// GetEventRecorderFor is deprecated in favor of GetEventRecorder, but
+	// record.InitFromRecorder requires the old record.EventRecorder type.
+	//nolint:staticcheck // SA1019
 	record.InitFromRecorder(mgr.GetEventRecorderFor("tinkerbell-controller"))
 
 	// Setup the context that's going to be used in controllers and for the manager.

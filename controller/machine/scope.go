@@ -27,7 +27,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"k8s.io/utils/ptr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -215,6 +216,9 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error { //nol
 	if v, found := hw.GetAnnotations()[HardwareProvisionedAnnotation]; found && v == "true" {
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
+		scope.tinkerbellMachine.Status.Initialization = &infrastructurev1.TinkerbellMachineInitializationStatus{
+			Provisioned: ptr.To(true),
+		}
 
 		return nil
 	}
@@ -239,6 +243,9 @@ func (scope *machineReconcileScope) reconcile(hw *tinkv1.Hardware) error { //nol
 	case tinkv1.WorkflowStateSuccess, tinkv1.WorkflowState("STATE_SUCCESS"):
 		scope.log.Info("Marking TinkerbellMachine as Ready")
 		scope.tinkerbellMachine.Status.Ready = true
+		scope.tinkerbellMachine.Status.Initialization = &infrastructurev1.TinkerbellMachineInitializationStatus{
+			Provisioned: ptr.To(true),
+		}
 
 		if err := scope.patchHardwareAnnotations(hw, map[string]string{HardwareProvisionedAnnotation: "true"}); err != nil {
 			return fmt.Errorf("failed to patch hardware: %w", err)
@@ -416,7 +423,7 @@ func isMachineReady(machine *clusterv1.Machine) (string, error) {
 
 	// Spec says this field is optional, but @detiber says it's effectively required,
 	// so treat it as so.
-	if machine.Spec.Version == nil || *machine.Spec.Version == "" {
+	if machine.Spec.Version == "" {
 		return "", ErrMachineVersionEmpty
 	}
 
@@ -463,7 +470,11 @@ func (scope *machineReconcileScope) getReadyTinkerbellCluster(machine *clusterv1
 		return nil, fmt.Errorf("getting TinkerbellCluster object: %w", err)
 	}
 
-	if !tinkerbellCluster.Status.Ready {
+	// Use OR (not AND): the v1beta2 transitional contract requires "one of"
+	// status.ready or status.initialization.provisioned. Pre-v0.7 clusters
+	// upgraded in-place only have status.ready set.
+	if !tinkerbellCluster.Status.Ready &&
+		(tinkerbellCluster.Status.Initialization == nil || tinkerbellCluster.Status.Initialization.Provisioned == nil || !*tinkerbellCluster.Status.Initialization.Provisioned) {
 		scope.log.Info("cluster not ready yet")
 
 		return nil, nil

@@ -20,7 +20,7 @@ import (
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
 const (
@@ -77,7 +77,12 @@ type TinkerbellMachineSpec struct {
 	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
 	// we put them in spec instead of status.
 	HardwareName string `json:"hardwareName,omitempty"`
-	ProviderID   string `json:"providerID,omitempty"`
+
+	// providerID must match the provider ID as seen on the node object corresponding to this machine.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	ProviderID string `json:"providerID,omitempty"`
 }
 
 // BootOptions are options that control the booting of Hardware.
@@ -97,7 +102,7 @@ type BootOptions struct {
 	//
 	// BootMode must be set to "isoboot".
 	// +optional
-	// +kubebuilder:validation:Format=url
+	// +kubebuilder:validation:Format=uri
 	ISOURL string `json:"isoURL,omitempty"`
 
 	// BootMode is the type of booting that will be done. One of "netboot", "isoboot", or "customboot".
@@ -141,12 +146,14 @@ type WeightedHardwareAffinityTerm struct {
 
 // TinkerbellMachineStatus defines the observed state of TinkerbellMachine.
 type TinkerbellMachineStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Ready is true when the provider resource is ready.
 	// +optional
 	Ready bool `json:"ready"`
+
+	// Initialization provides observations of the TinkerbellMachine initialization process.
+	// NOTE: Fields in this struct are part of the Cluster API contract and are used to orchestrate initial Machine provisioning.
+	// +optional
+	Initialization *TinkerbellMachineInitializationStatus `json:"initialization,omitempty"`
 
 	// Addresses contains the Tinkerbell device associated addresses.
 	Addresses []corev1.NodeAddress `json:"addresses,omitempty"`
@@ -195,6 +202,15 @@ type TinkerbellMachineStatus struct {
 	// controller's output.
 	// +optional
 	ErrorMessage *string `json:"errorMessage,omitempty"`
+}
+
+// TinkerbellMachineInitializationStatus provides observations of the TinkerbellMachine initialization process.
+// +kubebuilder:validation:MinProperties=1
+type TinkerbellMachineInitializationStatus struct {
+	// provisioned is true when the infrastructure provider reports that the Machine's infrastructure is fully provisioned.
+	// NOTE: this field is part of the Cluster API contract, and it is used to orchestrate initial Machine provisioning.
+	// +optional
+	Provisioned *bool `json:"provisioned,omitempty"`
 }
 
 // GetConditions returns the conditions for the TinkerbellMachine.

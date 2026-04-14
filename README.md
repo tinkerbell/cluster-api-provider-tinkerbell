@@ -25,6 +25,10 @@ See the [Quick Start](docs/QUICK-START.md).
 
 Pre-built images are pushed to the [GitHub Container Registry](https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell). We currently publish images for [Ubuntu 18.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-1804) and [Ubuntu 20.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-2004).
 
+## Compatibility
+
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for details on version compatibility with Cluster API, contract versions, and what changed between releases.
+
 ## Current state
 
 See the [release docs](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases) for each version to find details on features and CAPI compatibility.

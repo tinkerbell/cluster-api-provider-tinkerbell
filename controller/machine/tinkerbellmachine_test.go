@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -107,7 +107,7 @@ func validCluster(name, namespace string) *clusterv1.Cluster {
 			Namespace: namespace,
 		},
 		Spec: clusterv1.ClusterSpec{
-			InfrastructureRef: &corev1.ObjectReference{
+			InfrastructureRef: clusterv1.ContractVersionedObjectReference{
 				Name: name,
 			},
 		},
@@ -130,17 +130,20 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 			},
 		},
 		Spec: infrastructurev1.TinkerbellClusterSpec{
-			ControlPlaneEndpoint: clusterv1.APIEndpoint{
+			ControlPlaneEndpoint: &clusterv1.APIEndpoint{
 				Host: hardwareIP,
 				Port: 6443,
 			},
 		},
 		Status: infrastructurev1.TinkerbellClusterStatus{
 			Ready: true,
+			Initialization: &infrastructurev1.TinkerbellClusterInitializationStatus{
+				Provisioned: ptr.To[bool](true),
+			},
 		},
 	}
 
-	_ = tinkCluster.Default(context.TODO(), nil)
+	_ = tinkCluster.Default(context.TODO(), tinkCluster)
 
 	return tinkCluster
 }
@@ -156,7 +159,7 @@ func validMachine(name, namespace, clusterName string) *clusterv1.Machine {
 			},
 		},
 		Spec: clusterv1.MachineSpec{
-			Version: ptr.To[string]("1.19.4"),
+			Version: "1.19.4",
 			Bootstrap: clusterv1.Bootstrap{
 				DataSecretName: ptr.To[string](name),
 			},
@@ -517,6 +520,9 @@ func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 		g := NewWithT(t)
 
 		g.Expect(updatedMachine.Status.Ready).To(BeTrue(), "Machine is not ready")
+		g.Expect(updatedMachine.Status.Initialization).NotTo(BeNil(), "Expected initialization status to be set")
+		g.Expect(updatedMachine.Status.Initialization.Provisioned).NotTo(BeNil(), "Expected initialization.provisioned to be set")
+		g.Expect(*updatedMachine.Status.Initialization.Provisioned).To(BeTrue(), "Expected initialization.provisioned to be true")
 	})
 
 	// From https://cluster-api.sigs.k8s.io/developer/providers/machine-infrastructure.html#normal-resource.
@@ -608,6 +614,10 @@ func Test_Machine_reconciliation(t *testing.T) {
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior
 		// Requeue will be handled when bootstrap secret is set through the Watch on Clusters
 		t.Run("cluster_infrastructure_is_not_ready", machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady)
+
+		// Upgrade edge case: pre-v0.7 clusters have Ready=true but no Initialization field.
+		// The OR gate should treat this as ready for backward compatibility.
+		t.Run("cluster_ready_but_initialization_nil", machineReconciliationProceedsWhenClusterReadyButInitializationNil)
 	})
 
 	t.Run("fails_when", func(t *testing.T) {
@@ -862,6 +872,7 @@ func machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady(t *testi
 	hardwareUUID := uuid.New().String()
 	notReadyTinkerbellCluster := validTinkerbellCluster(clusterName, clusterNamespace)
 	notReadyTinkerbellCluster.Status.Ready = false
+	notReadyTinkerbellCluster.Status.Initialization = nil
 
 	objects := []runtime.Object{
 		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
@@ -879,13 +890,52 @@ func machineReconciliationIsRequeuedWhenClusterInfrastructureIsNotReady(t *testi
 	g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue to be requested")
 }
 
+// machineReconciliationProceedsWhenClusterReadyButInitializationNil verifies that
+// the machine reconciler treats a TinkerbellCluster with Ready=true but
+// Initialization=nil as ready. This simulates a pre-v0.7 cluster upgraded
+// in-place that only has status.ready set (the v1beta1 contract field).
+func machineReconciliationProceedsWhenClusterReadyButInitializationNil(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+	upgradedCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	upgradedCluster.Status.Ready = true
+	upgradedCluster.Status.Initialization = nil // simulates pre-v0.7 cluster
+
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+		validCluster(clusterName, clusterNamespace),
+		upgradedCluster,
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	k8sClient := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(k8sClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify reconciliation proceeded past the cluster readiness gate by
+	// checking that the TinkerbellMachine received its finalizer, which is
+	// only added inside scope.Reconcile() (after the gate).
+	updatedMachine := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(k8sClient.Get(context.TODO(), types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, updatedMachine)).To(Succeed())
+	g.Expect(updatedMachine.Finalizers).To(ContainElement(infrastructurev1.MachineFinalizer),
+		"Expected finalizer to be set, indicating reconciliation proceeded past the cluster readiness gate")
+}
+
 func machineReconciliationFailsWhenMachineHasNoVersionSet(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
 	hardwareUUID := uuid.New().String()
 	machineWithoutVersion := validMachine(machineName, clusterNamespace, clusterName)
-	machineWithoutVersion.Spec.Version = nil
+	machineWithoutVersion.Spec.Version = ""
 
 	objects := []runtime.Object{
 		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),

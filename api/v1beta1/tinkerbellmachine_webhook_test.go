@@ -82,7 +82,7 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 			},
 		},
 	} {
-		_, err := machine.ValidateCreate(context.Background(), nil)
+		_, err := machine.ValidateCreate(context.Background(), &machine)
 		g.Expect(err).ToNot(HaveOccurred())
 		_, err = machine.ValidateUpdate(context.Background(), existingValidMachine, &machine)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -130,7 +130,7 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 			},
 		},
 	} {
-		_, err := machine.ValidateCreate(context.Background(), nil)
+		_, err := machine.ValidateCreate(context.Background(), &machine)
 		g.Expect(err).To(HaveOccurred())
 		_, err = machine.ValidateUpdate(context.Background(), existingValidMachine, &machine)
 		g.Expect(err).To(HaveOccurred())

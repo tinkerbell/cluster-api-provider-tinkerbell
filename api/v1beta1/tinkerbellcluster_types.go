@@ -18,7 +18,7 @@ package v1beta1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
 // ObjectRef is a reference to a Kubernetes object by name and namespace.
@@ -39,13 +39,14 @@ const (
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster.
 // +kubebuilder:validation:XValidation:rule="!has(self.templateOverride) || !has(self.templateOverrideRef)",message="templateOverride and templateOverrideRef are mutually exclusive"
 type TinkerbellClusterSpec struct {
-	// ControlPlaneEndpoint is a required field by ClusterAPI v1beta1.
+	// ControlPlaneEndpoint is the address of the cluster control plane.
+	// When not set, it is populated from the owning Cluster's spec.
 	//
 	// See https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
 	// for more details.
 	//
 	// +optional
-	ControlPlaneEndpoint clusterv1.APIEndpoint `json:"controlPlaneEndpoint,omitempty"`
+	ControlPlaneEndpoint *clusterv1.APIEndpoint `json:"controlPlaneEndpoint,omitempty,omitzero"`
 
 	// ImageLookupFormat is the URL naming format to use for machine images when
 	// a machine does not specify. When set, this will be used for all cluster machines
@@ -96,12 +97,27 @@ type TinkerbellClusterSpec struct {
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
 type TinkerbellClusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file.
-
 	// Ready denotes that the cluster (infrastructure) is ready.
 	// +optional
 	Ready bool `json:"ready"`
+
+	// Initialization provides observations of the TinkerbellCluster initialization process.
+	// NOTE: Fields in this struct are part of the Cluster API contract and are used to orchestrate initial Cluster provisioning.
+	// +optional
+	Initialization *TinkerbellClusterInitializationStatus `json:"initialization,omitempty"`
+
+	// Conditions defines current service state of the TinkerbellCluster.
+	// +optional
+	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+}
+
+// TinkerbellClusterInitializationStatus provides observations of the TinkerbellCluster initialization process.
+// +kubebuilder:validation:MinProperties=1
+type TinkerbellClusterInitializationStatus struct {
+	// provisioned is true when the infrastructure provider reports that the Cluster's infrastructure is fully provisioned.
+	// NOTE: this field is part of the Cluster API contract, and it is used to orchestrate initial Cluster provisioning.
+	// +optional
+	Provisioned *bool `json:"provisioned,omitempty"`
 }
 
 // +kubebuilder:subresource:status
@@ -117,6 +133,16 @@ type TinkerbellCluster struct {
 
 	Spec   TinkerbellClusterSpec   `json:"spec,omitempty"`
 	Status TinkerbellClusterStatus `json:"status,omitempty"`
+}
+
+// GetConditions returns the conditions for the TinkerbellCluster.
+func (c *TinkerbellCluster) GetConditions() clusterv1.Conditions {
+	return c.Status.Conditions
+}
+
+// SetConditions sets the conditions on the TinkerbellCluster.
+func (c *TinkerbellCluster) SetConditions(conditions clusterv1.Conditions) {
+	c.Status.Conditions = conditions
 }
 
 // +kubebuilder:object:root=true

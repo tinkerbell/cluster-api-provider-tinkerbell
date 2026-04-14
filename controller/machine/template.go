@@ -370,7 +370,7 @@ func (scope *machineReconcileScope) imageURL() (string, error) {
 		imageLookupBaseRegistry,
 		imageLookupOSDistro,
 		imageLookupOSVersion,
-		*scope.machine.Spec.Version,
+		scope.machine.Spec.Version,
 	)
 }
 
