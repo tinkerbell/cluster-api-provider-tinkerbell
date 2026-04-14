@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -44,8 +44,7 @@ func unreadyTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbe
 	unreadyTinkerbellCluster := validTinkerbellCluster(name, namespace)
 	unreadyTinkerbellCluster.Status.Ready = false
 	unreadyTinkerbellCluster.Finalizers = nil
-	unreadyTinkerbellCluster.Spec.ControlPlaneEndpoint.Host = ""
-	unreadyTinkerbellCluster.Spec.ControlPlaneEndpoint.Port = 0
+	unreadyTinkerbellCluster.Spec.ControlPlaneEndpoint = nil
 
 	return unreadyTinkerbellCluster
 }
@@ -101,6 +100,9 @@ func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_cluster(t *te
 		To(BeEquivalentTo(cluster.Spec.ControlPlaneEndpoint.Port), "Expected controlplane endpoint port to be set")
 
 	g.Expect(updatedTinkerbellCluster.Status.Ready).To(BeTrue(), "Expected infrastructure to be ready")
+	g.Expect(updatedTinkerbellCluster.Status.Initialization).NotTo(BeNil(), "Expected initialization status to be set")
+	g.Expect(updatedTinkerbellCluster.Status.Initialization.Provisioned).NotTo(BeNil(), "Expected initialization.provisioned to be set")
+	g.Expect(*updatedTinkerbellCluster.Status.Initialization.Provisioned).To(BeTrue(), "Expected initialization.provisioned to be true")
 }
 
 type testOptions struct {
@@ -160,8 +162,7 @@ func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_tinkerbellClu
 	g := NewWithT(t)
 
 	tinkCluster := unreadyTinkerbellCluster(clusterName, clusterNamespace)
-	tinkCluster.Spec.ControlPlaneEndpoint.Host = "192.168.1.10"
-	tinkCluster.Spec.ControlPlaneEndpoint.Port = 443
+	tinkCluster.Spec.ControlPlaneEndpoint = &clusterv1.APIEndpoint{Host: "192.168.1.10", Port: 443}
 
 	objects := []runtime.Object{
 		validHardware(hardwareName, uuid.New().String(), hardwareIP),
@@ -190,6 +191,9 @@ func Test_Cluster_reconciliation_when_controlplane_endpoint_set_on_tinkerbellClu
 		To(BeEquivalentTo(tinkCluster.Spec.ControlPlaneEndpoint.Port), "Expected controlplane endpoint port to be set")
 
 	g.Expect(updatedTinkerbellCluster.Status.Ready).To(BeTrue(), "Expected infrastructure to be ready")
+	g.Expect(updatedTinkerbellCluster.Status.Initialization).NotTo(BeNil(), "Expected initialization status to be set")
+	g.Expect(updatedTinkerbellCluster.Status.Initialization.Provisioned).NotTo(BeNil(), "Expected initialization.provisioned to be set")
+	g.Expect(*updatedTinkerbellCluster.Status.Initialization.Provisioned).To(BeTrue(), "Expected initialization.provisioned to be true")
 }
 
 func Test_Cluster_reconciliation(t *testing.T) {
@@ -298,7 +302,7 @@ func validCluster(name, namespace string) *clusterv1.Cluster {
 			Namespace: namespace,
 		},
 		Spec: clusterv1.ClusterSpec{
-			InfrastructureRef: &corev1.ObjectReference{
+			InfrastructureRef: clusterv1.ContractVersionedObjectReference{
 				Name: name,
 			},
 		},
@@ -320,17 +324,20 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 			},
 		},
 		Spec: infrastructurev1.TinkerbellClusterSpec{
-			ControlPlaneEndpoint: clusterv1.APIEndpoint{
+			ControlPlaneEndpoint: &clusterv1.APIEndpoint{
 				Host: hardwareIP,
 				Port: 6443,
 			},
 		},
 		Status: infrastructurev1.TinkerbellClusterStatus{
 			Ready: true,
+			Initialization: &infrastructurev1.TinkerbellClusterInitializationStatus{
+				Provisioned: ptr.To(true),
+			},
 		},
 	}
 
-	_ = tinkCluster.Default(context.TODO(), nil)
+	_ = tinkCluster.Default(context.TODO(), tinkCluster)
 
 	return tinkCluster
 }
@@ -378,7 +385,7 @@ func clusterReconciliationIsNotRequeuedWhenClusterIsPaused(t *testing.T) {
 	g := NewWithT(t)
 
 	pausedCluster := validCluster(clusterName, clusterNamespace)
-	pausedCluster.Spec.Paused = true
+	pausedCluster.Spec.Paused = ptr.To(true)
 
 	objects := []runtime.Object{
 		pausedCluster,

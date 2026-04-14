@@ -19,33 +19,29 @@ package v1beta1
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var _ webhook.CustomValidator = &TinkerbellMachine{}
+var _ admission.Validator[*TinkerbellMachine] = &TinkerbellMachine{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (m *TinkerbellMachine) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).WithValidator(m).For(m).Complete() //nolint:wrapcheck
+	return ctrl.NewWebhookManagedBy(mgr, m).WithValidator(m).Complete() //nolint:wrapcheck
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachine,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines,versions=v1beta1,name=validation.tinkerbellmachine.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateCreate(context.Context, runtime.Object) (admission.Warnings, error) {
-	allErrs := m.validateSpec()
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type.
+func (m *TinkerbellMachine) ValidateCreate(_ context.Context, obj *TinkerbellMachine) (admission.Warnings, error) {
+	allErrs := obj.validateSpec()
 
-	return nil, aggregateObjErrors(m.GroupVersionKind().GroupKind(), m.Name, allErrs)
+	return nil, aggregateObjErrors(obj.GroupVersionKind().GroupKind(), obj.Name, allErrs)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateUpdate(_ context.Context, oldRaw runtime.Object, newRaw runtime.Object) (admission.Warnings, error) {
-	old, _ := oldRaw.(*TinkerbellMachine)
-	newTM, _ := newRaw.(*TinkerbellMachine)
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type.
+func (m *TinkerbellMachine) ValidateUpdate(_ context.Context, old *TinkerbellMachine, newTM *TinkerbellMachine) (admission.Warnings, error) {
 	allErrs := newTM.validateSpec()
 
 	if old.Spec.HardwareName != "" && newTM.Spec.HardwareName != old.Spec.HardwareName {
@@ -59,8 +55,8 @@ func (m *TinkerbellMachine) ValidateUpdate(_ context.Context, oldRaw runtime.Obj
 	return nil, aggregateObjErrors(newTM.GroupVersionKind().GroupKind(), newTM.Name, allErrs)
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateDelete(context.Context, runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type.
+func (m *TinkerbellMachine) ValidateDelete(_ context.Context, _ *TinkerbellMachine) (admission.Warnings, error) {
 	return nil, nil
 }
 

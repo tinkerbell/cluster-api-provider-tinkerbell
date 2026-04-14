@@ -25,7 +25,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"k8s.io/utils/ptr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/patch"
@@ -168,9 +169,9 @@ type clusterReconcileContext struct {
 
 func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoint, error) {
 	switch {
-	case crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.IsValid():
+	case crc.tinkerbellCluster.Spec.ControlPlaneEndpoint != nil && crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.IsValid():
 		// If the ControlPlaneEndpoint on tinkCluster is already configured, return it.
-		return crc.tinkerbellCluster.Spec.ControlPlaneEndpoint, nil
+		return *crc.tinkerbellCluster.Spec.ControlPlaneEndpoint, nil
 	case crc.cluster == nil:
 		// If the owning cluster has not been set yet, error.
 		return clusterv1.APIEndpoint{}, ErrClusterNotReady
@@ -184,12 +185,14 @@ func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoin
 		Port: crc.cluster.Spec.ControlPlaneEndpoint.Port,
 	}
 
-	if endpoint.Host == "" {
-		endpoint.Host = crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Host
-	}
+	if tinkEP := crc.tinkerbellCluster.Spec.ControlPlaneEndpoint; tinkEP != nil {
+		if endpoint.Host == "" {
+			endpoint.Host = tinkEP.Host
+		}
 
-	if endpoint.Port == 0 {
-		endpoint.Port = crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Port
+		if endpoint.Port == 0 {
+			endpoint.Port = tinkEP.Port
+		}
 	}
 
 	if endpoint.Host == "" {
@@ -213,10 +216,18 @@ func (crc *clusterReconcileContext) reconcile() error {
 
 	// Ensure that we are setting the ControlPlaneEndpoint on the TinkerbellCluster
 	// in the event that it was defined on the Cluster resource instead
-	crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Host = controlPlaneEndpoint.Host
-	crc.tinkerbellCluster.Spec.ControlPlaneEndpoint.Port = controlPlaneEndpoint.Port
+	crc.tinkerbellCluster.Spec.ControlPlaneEndpoint = &clusterv1.APIEndpoint{
+		Host: controlPlaneEndpoint.Host,
+		Port: controlPlaneEndpoint.Port,
+	}
 
+	// Set both Ready and Initialization.Provisioned: CAPI checks status.ready
+	// under the v1beta1 contract and status.initialization.provisioned under
+	// v1beta2. Both are set to maintain backward compatibility during upgrades.
 	crc.tinkerbellCluster.Status.Ready = true
+	crc.tinkerbellCluster.Status.Initialization = &infrastructurev1.TinkerbellClusterInitializationStatus{
+		Provisioned: ptr.To(true),
+	}
 
 	crc.log.Info("Setting cluster status to ready")
 

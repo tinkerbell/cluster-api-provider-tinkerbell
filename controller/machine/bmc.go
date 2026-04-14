@@ -8,11 +8,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
-
-func toPtr[T any](v T) *T {
-	return &v
-}
 
 // createPowerOffJob creates a BMCJob object with the required tasks for hardware power off.
 func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error {
@@ -28,7 +25,7 @@ func (scope *machineReconcileScope) createPowerOffJob(hw *tinkv1.Hardware) error
 			},
 			Tasks: []rufiov1.Action{
 				{
-					PowerAction: toPtr(rufiov1.PowerHardOff),
+					PowerAction: ptr.To(rufiov1.PowerHardOff),
 				},
 			},
 		},
