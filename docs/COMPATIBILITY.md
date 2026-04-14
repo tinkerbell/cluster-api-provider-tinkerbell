@@ -7,7 +7,7 @@ This document describes the version compatibility between CAPT (Cluster API Prov
 | CAPT Version | CAPI Contract | CAPI Version | API Group Version | Kubernetes | Go  |
 |---|---|---|---|---|---|
 | v0.7.x | v1beta2 | >= v1.12.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.35+ | 1.25+ |
-| v0.5.x - v0.6.x | v1beta1 | v1.6.x - v1.10.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.29 - v1.33 | 1.22 - 1.24 |
+| v0.5.x - v0.6.x | v1beta1 | v1.6.x - v1.10.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.29 - v1.34 | 1.22 - 1.24 |
 | v0.3.x - v0.4.x | v1beta1 | v1.3.x - v1.5.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.22 - v1.28 | 1.19 - 1.21 |
 
 ## Contract vs API Version
