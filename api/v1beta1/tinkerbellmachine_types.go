@@ -20,7 +20,6 @@ import (
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
 const (
@@ -175,11 +174,8 @@ type TinkerbellMachineStatus struct {
 	TargetNamespace string `json:"targetNamespace,omitempty"`
 
 	// Conditions defines current service state of the TinkerbellMachine.
-	// Required to satisfy the Cluster API conditions.Getter/conditions.Setter
-	// interface contract. The CAPI framework may call GetConditions/SetConditions
-	// via interface assertion.
 	// +optional
-	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// Any transient errors that occur during the reconciliation of Machines
 	// can be added as events to the Machine object and/or logged in the
@@ -217,12 +213,12 @@ type TinkerbellMachineInitializationStatus struct {
 }
 
 // GetConditions returns the conditions for the TinkerbellMachine.
-func (m *TinkerbellMachine) GetConditions() clusterv1.Conditions {
+func (m *TinkerbellMachine) GetConditions() []metav1.Condition {
 	return m.Status.Conditions
 }
 
 // SetConditions sets the conditions on the TinkerbellMachine.
-func (m *TinkerbellMachine) SetConditions(conditions clusterv1.Conditions) {
+func (m *TinkerbellMachine) SetConditions(conditions []metav1.Condition) {
 	m.Status.Conditions = conditions
 }
 

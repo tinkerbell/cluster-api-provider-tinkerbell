@@ -21,7 +21,8 @@ limitations under the License.
 package v1beta1
 
 import (
-	"k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
@@ -216,7 +217,7 @@ func (in *TinkerbellClusterStatus) DeepCopyInto(out *TinkerbellClusterStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make(v1beta2.Conditions, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -343,7 +344,7 @@ func (in *TinkerbellMachineStatus) DeepCopyInto(out *TinkerbellMachineStatus) {
 	}
 	if in.Addresses != nil {
 		in, out := &in.Addresses, &out.Addresses
-		*out = make([]v1.NodeAddress, len(*in))
+		*out = make([]corev1.NodeAddress, len(*in))
 		copy(*out, *in)
 	}
 	if in.InstanceStatus != nil {
@@ -353,7 +354,7 @@ func (in *TinkerbellMachineStatus) DeepCopyInto(out *TinkerbellMachineStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make(v1beta2.Conditions, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
