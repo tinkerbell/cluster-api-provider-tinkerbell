@@ -251,8 +251,9 @@ spec:
 CAPT requires a Tinkerbell Template for each machine. There is no default template — you must
 provide one at the cluster or machine level.
 
-Set the `templateOverride` field in the `TinkerbellMachineTemplate` spec with a full
-[Tinkerbell Template](https://docs.tinkerbell.org) definition. The template supports Go template
+Set the `templateInline` field in the `TinkerbellMachineTemplate` spec with a full
+[Tinkerbell Template](https://docs.tinkerbell.org) definition, or use `templateRef` to reference
+an existing Tinkerbell Template object. The template supports Go template
 variables for hardware-specific values:
 
 | Variable | Description |
@@ -270,9 +271,9 @@ workflow creation time from the Hardware's `spec.metadata.instance.id` via the W
 When CAPT creates a Tinkerbell Template for a machine, it evaluates these sources in order
 and uses the first one found:
 
-1. **`TinkerbellMachineTemplate.spec.template.spec.templateOverride`** — machine-level override, set directly in the CAPI manifest.
+1. **`TinkerbellMachineTemplate.spec.template.spec.templateInline`** (or `templateRef`) — machine-level template, set directly in the CAPI manifest.
 2. **Hardware annotation `hardware.tinkerbell.org/capt-template-override`** — set the annotation value to the name of an existing `Template` resource in the same namespace as the Hardware. This enables per-hardware template overrides without changing CAPI objects.
-3. **`TinkerbellCluster.spec.templateOverride`** (or `templateOverrideRef`) — cluster-wide override applied to all machines that don't match a higher-priority source.
+3. **`TinkerbellCluster.spec.templateInline`** (or `templateRef`) — cluster-wide template applied to all machines that don't match a higher-priority source.
 
 If none of these sources provides a template, the machine reconciliation will fail with an error.
 
@@ -295,7 +296,7 @@ spec:
         - labelSelector:
             matchLabels:
               tinkerbell.org/role: control-plane
-      templateOverride: |
+      templateInline: |
         version: "0.1"
         name: my-provisioning-template
         global_timeout: 6000

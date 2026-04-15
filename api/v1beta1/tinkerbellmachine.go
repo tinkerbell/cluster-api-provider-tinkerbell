@@ -33,11 +33,22 @@ const (
 )
 
 // TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+// +kubebuilder:validation:XValidation:rule="!has(self.templateInline) || !has(self.templateRef)",message="templateInline and templateRef are mutually exclusive"
 type TinkerbellMachineSpec struct {
-	// TemplateOverride overrides the default Tinkerbell template used by CAPT.
-	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+	// TemplateInline is an inline Tinkerbell Template definition for this machine.
+	// Takes precedence over hardware annotations and cluster-level templates.
+	// Mutually exclusive with TemplateRef.
+	//
 	// +optional
-	TemplateOverride string `json:"templateOverride,omitempty"`
+	TemplateInline string `json:"templateInline,omitempty"`
+
+	// TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+	// be used as the template for this machine. Takes precedence over hardware annotations and
+	// cluster-level templates. Mutually exclusive with TemplateInline.
+	// When Namespace is omitted, defaults to the Hardware's namespace.
+	//
+	// +optional
+	TemplateRef *ObjectRef `json:"templateRef,omitempty"`
 
 	// HardwareAffinity allows filtering for hardware.
 	// +optional

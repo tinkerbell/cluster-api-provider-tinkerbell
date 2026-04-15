@@ -37,7 +37,7 @@ const (
 )
 
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster.
-// +kubebuilder:validation:XValidation:rule="!has(self.templateOverride) || !has(self.templateOverrideRef)",message="templateOverride and templateOverrideRef are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!has(self.templateInline) || !has(self.templateRef)",message="templateInline and templateRef are mutually exclusive"
 type TinkerbellClusterSpec struct {
 	// ControlPlaneEndpoint is the address of the cluster control plane.
 	// When not set, it is populated from the owning Cluster's spec.
@@ -48,17 +48,20 @@ type TinkerbellClusterSpec struct {
 	// +optional
 	ControlPlaneEndpoint *clusterv1.APIEndpoint `json:"controlPlaneEndpoint,omitempty,omitzero"`
 
-	// TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
-	// in the cluster. If a Machine specifies its own TemplateOverride, the Machine's template takes precedence.
+	// TemplateInline is an inline Tinkerbell Template definition applied to all machines in the
+	// cluster. If a Machine specifies its own template, the Machine's template takes precedence.
+	// Mutually exclusive with TemplateRef.
 	//
 	// +optional
-	TemplateOverride string `json:"templateOverride,omitempty"`
+	TemplateInline string `json:"templateInline,omitempty"`
 
-	// TemplateOverrideRef is a reference to a Tinkerbell Template object that provides the template data for all machines
-	// in the cluster. If a Machine specifies its own TemplateOverride, the Machine's template takes precedence.
+	// TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+	// be used as the template for all machines in the cluster. If a Machine specifies its own
+	// template, the Machine's template takes precedence. Mutually exclusive with TemplateInline.
+	// When Namespace is omitted, defaults to the Hardware's namespace.
 	//
 	// +optional
-	TemplateOverrideRef *ObjectRef `json:"templateOverrideRef,omitempty"`
+	TemplateRef *ObjectRef `json:"templateRef,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
