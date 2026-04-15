@@ -82,8 +82,19 @@ CAPT validates the following fields on each Hardware object during provisioning:
 - `spec.interfaces[0].dhcp.ip.address` — the DHCP configuration must include an IP address
 - `spec.disks` — at least one disk must be defined
 
-The `metadata`, `netboot`, and `labels` fields are optional but recommended. Labels are used
+CAPT also requires the following field (used but not explicitly validated at reconciliation time):
+
+- `spec.metadata.instance.id` — must be set. CAPT maps this value to the `device_1` workflow variable, which identifies the target device in every Workflow. It is also used to construct per-hardware ISO URL paths when using ISO boot modes.
+
+The `spec.metadata.instance.hostname` field is optional but recommended.
+The `spec.interfaces[0].netboot` block and `labels` field are also optional. Labels are used
 for [hardware affinity](#select-your-hardware) matching.
+
+**NOTE:** If the Hardware has a `spec.bmcRef`, CAPT uses it for boot mode
+operations (netboot, ISO, custom) and for powering off the machine during
+deletion. If `spec.bmcRef` is **not** set, the `bootOptions.bootMode` setting
+on the `TinkerbellMachineTemplate` is silently ignored and no power management
+is performed.
 
 An example of a valid Hardware resource:
 
@@ -247,9 +258,22 @@ variables for hardware-specific values:
 
 | Variable | Description |
 |---|---|
-| `{{.device_1}}` | Worker device identifier |
+| `{{.device_1}}` | Worker device identifier (maps to `spec.metadata.instance.id` from the Hardware) |
 | `{{ index .Hardware.Disks 0 }}` | First disk device path (e.g. `/dev/sda`) |
 | `{{ formatPartition (index .Hardware.Disks 0) N }}` | Nth partition of the first disk |
+
+**IMPORTANT:** Every `task` block in the template **must** include `worker: "{{.device_1}}"`. This
+is how Tinkerbell determines which device should execute the task. The value is resolved at
+workflow creation time from the Hardware's `spec.metadata.instance.id` via the Workflow `HardwareMap`.
+
+##### Template selection precedence
+
+When CAPT creates a Tinkerbell Template for a machine, it evaluates these sources in order
+and uses the first one found:
+
+1. **`TinkerbellMachineTemplate.spec.template.spec.templateOverride`** — machine-level override, set directly in the CAPI manifest.
+2. **Hardware annotation `hardware.tinkerbell.org/capt-template-override`** — set the annotation value to the name of an existing `Template` resource in the same namespace as the Hardware. This enables per-hardware template overrides without changing CAPI objects.
+3. **`TinkerbellCluster.spec.templateOverride`** (or `templateOverrideRef`) — cluster-wide override applied to all machines that don't match a higher-priority source.
 
 Here is an example that streams an OS image to disk, configures cloud-init for the
 Tinkerbell metadata service, and kexecs into the installed OS:
@@ -334,6 +358,34 @@ spec:
                   FS_TYPE: vfat
 ```
 
+##### Cloud-init integration
+
+CAPT expects the provisioned OS to use [cloud-init](https://cloud-init.io/) with an
+EC2-compatible metadata datasource. The provisioning template must write two configuration
+files so that cloud-init discovers the Tinkerbell metadata service:
+
+| File | Purpose |
+|---|---|
+| `/etc/cloud/cloud.cfg.d/10_tinkerbell.cfg` | Configures the `Ec2` datasource with the Tinkerbell metadata URL (port `7080`) and any default user settings. |
+| `/etc/cloud/ds-identify.cfg` | Tells `ds-identify` to use the `Ec2` datasource (`datasource: Ec2`). |
+
+Both files are shown in the example template above. Without them, cloud-init will not
+contact the Tinkerbell metadata service and bootstrap data (kubeadm join tokens, etc.)
+will not be applied to the machine.
+
+**`PROVIDER_ID` placeholder:** CAPT looks for the literal string `PROVIDER_ID` in the
+bootstrap cloud-config (from the CAPI `Machine`'s bootstrap `Secret`) and replaces it with
+the actual provider ID (`tinkerbell://<namespace>/<hardware-name>`) before writing the
+data to `Hardware.spec.userData`. If you are using the default CAPI Kubeadm bootstrap
+provider, this is handled automatically and no action is needed. This is only relevant
+if you are using a custom (non-Kubeadm) bootstrap provider that generates its own
+cloud-config — in that case, include the literal string `PROVIDER_ID` wherever the
+provider ID is needed and CAPT will substitute the real value at provisioning time.
+If you are unsure which bootstrap provider you are using, it is almost certainly the
+Kubeadm bootstrap provider and you can ignore this.
+
+##### Boot modes
+
 The `bootOptions.bootMode` field controls how the machine boots into the provisioning
 environment (HookOS). Available modes:
 
@@ -341,8 +393,21 @@ environment (HookOS). Available modes:
 |---|---|
 | `netboot` | PXE/iPXE network boot (default) |
 | `isoboot` | Boot from an ISO image served by the Tinkerbell stack |
-| `iso` | Boot from a custom ISO URL |
+| `iso` | Deprecated alias for `isoboot`. Use `isoboot` instead. |
 | `customboot` | Custom BMC boot actions |
+
+**NOTE:** Boot modes only take effect when the Hardware has `spec.bmcRef` set (see
+[Hardware requirements](#create-hardware-resources-to-make-tinkerbell-hardware-available)).
+When using `iso` or `isoboot`, the `bootOptions.isoURL` field is required. CAPT inserts
+the Hardware's `spec.metadata.instance.id` (with `:` replaced by `-`) into the ISO URL
+path to enable per-hardware ISO customization.
+
+##### Provisioned annotation
+
+When provisioning completes, CAPT sets the annotation
+`v1alpha1.tinkerbell.org/provisioned: "true"` on the Hardware object. This is how CAPT
+determines that the machine is ready. Do not set or remove this annotation manually
+unless you are troubleshooting a stuck machine.
 
 For a complete working example including kube-vip, SSH keys, and kustomize overlays,
 see the [CAPT Playground templates](https://github.com/tinkerbell/playground/tree/main/capt/templates).
