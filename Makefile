@@ -121,8 +121,9 @@ generate-manifests: tools ## Generate manifests e.g. CRD, RBAC etc.
 	$(CONTROLLER_GEN) \
 		paths=./api/... \
 		crd:crdVersions=v1 \
-		rbac:roleName=manager-role \
-		output:crd:dir=$(CRD_ROOT) \
+		output:crd:dir=$(CRD_ROOT)
+	$(CONTROLLER_GEN) \
+		paths=./webhooks/... \
 		output:webhook:dir=$(WEBHOOK_ROOT) \
 		webhook
 	$(CONTROLLER_GEN) \

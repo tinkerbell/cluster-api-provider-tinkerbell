@@ -46,6 +46,7 @@ import (
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/build"
 	tinkcluster "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/cluster"
+	tinkerbellwebhooks "github.com/tinkerbell/cluster-api-provider-tinkerbell/webhooks"
 )
 
 type config struct {
@@ -226,15 +227,15 @@ func (c *config) buildTinkerbellClient(ctx context.Context, setupLog logr.Logger
 }
 
 func setupWebhooks(mgr ctrl.Manager) error {
-	if err := (&infrastructurev1.TinkerbellCluster{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&tinkerbellwebhooks.TinkerbellCluster{}).SetupWebhookWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster webhook:%w", err)
 	}
 
-	if err := (&infrastructurev1.TinkerbellMachine{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&tinkerbellwebhooks.TinkerbellMachine{}).SetupWebhookWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine webhook:%w", err)
 	}
 
-	if err := (&infrastructurev1.TinkerbellMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&tinkerbellwebhooks.TinkerbellMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachineTemplate webhook:%w", err)
 	}
 

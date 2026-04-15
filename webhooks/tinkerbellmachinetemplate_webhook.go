@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package webhooks
 
 import (
 	"context"
@@ -23,27 +23,34 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
 
-var _ admission.Validator[*TinkerbellMachineTemplate] = &TinkerbellMachineTemplate{}
+// TinkerbellMachineTemplate implements webhook interfaces for the TinkerbellMachineTemplate API type.
+type TinkerbellMachineTemplate struct{}
+
+var _ admission.Validator[*infrastructurev1.TinkerbellMachineTemplate] = &TinkerbellMachineTemplate{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
-func (m *TinkerbellMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr, m).WithValidator(m).Complete() //nolint:wrapcheck
+func (w *TinkerbellMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellMachineTemplate{}).
+		WithValidator(w).
+		Complete() //nolint:wrapcheck
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachinetemplates,versions=v1beta1,name=validation.tinkerbellmachinetemplate.infrastructure.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
-// ValidateCreate implements admission.Validator so a webhook will be registered for the type.
+// ValidateCreate implements admission.Validator.
 // HardwareName and ProviderID are structurally prevented from appearing in templates
 // because TinkerbellMachineTemplateResource.Spec uses TinkerbellMachineConfig (which
 // does not include those fields) instead of TinkerbellMachineSpec.
-func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, _ *TinkerbellMachineTemplate) (admission.Warnings, error) {
+func (w *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, _ *infrastructurev1.TinkerbellMachineTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// ValidateUpdate implements admission.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, oldTMT *TinkerbellMachineTemplate, newTMT *TinkerbellMachineTemplate) (admission.Warnings, error) {
+// ValidateUpdate implements admission.Validator.
+func (w *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, oldTMT *infrastructurev1.TinkerbellMachineTemplate, newTMT *infrastructurev1.TinkerbellMachineTemplate) (admission.Warnings, error) {
 	if !reflect.DeepEqual(newTMT.Spec, oldTMT.Spec) {
 		return nil, apierrors.NewBadRequest("TinkerbellMachineTemplate.Spec is immutable")
 	}
@@ -51,7 +58,7 @@ func (m *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, oldTMT *Ti
 	return nil, nil
 }
 
-// ValidateDelete implements admission.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateDelete(_ context.Context, _ *TinkerbellMachineTemplate) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator.
+func (w *TinkerbellMachineTemplate) ValidateDelete(_ context.Context, _ *infrastructurev1.TinkerbellMachineTemplate) (admission.Warnings, error) {
 	return nil, nil
 }

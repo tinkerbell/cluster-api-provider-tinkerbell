@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1_test
+package webhooks_test
 
 import (
 	"context"
@@ -24,12 +24,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/webhooks"
 )
 
 func Test_valid_tinkerbell_machine(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 	existingValidMachine := &v1beta1.TinkerbellMachine{}
+	w := &webhooks.TinkerbellMachine{}
 
 	for _, machine := range []v1beta1.TinkerbellMachine{
 		// preferred affinity weight ranges
@@ -82,9 +84,9 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 			}},
 		},
 	} {
-		_, err := machine.ValidateCreate(context.Background(), &machine)
+		_, err := w.ValidateCreate(context.Background(), &machine)
 		g.Expect(err).ToNot(HaveOccurred())
-		_, err = machine.ValidateUpdate(context.Background(), existingValidMachine, &machine)
+		_, err = w.ValidateUpdate(context.Background(), existingValidMachine, &machine)
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 }
@@ -94,6 +96,7 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 	g := NewWithT(t)
 
 	existingValidMachine := &v1beta1.TinkerbellMachine{}
+	w := &webhooks.TinkerbellMachine{}
 
 	for _, machine := range []v1beta1.TinkerbellMachine{
 		// invalid preferred affinity weight values
@@ -130,9 +133,9 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 			}},
 		},
 	} {
-		_, err := machine.ValidateCreate(context.Background(), &machine)
+		_, err := w.ValidateCreate(context.Background(), &machine)
 		g.Expect(err).To(HaveOccurred())
-		_, err = machine.ValidateUpdate(context.Background(), existingValidMachine, &machine)
+		_, err = w.ValidateUpdate(context.Background(), existingValidMachine, &machine)
 		g.Expect(err).To(HaveOccurred())
 	}
 }
