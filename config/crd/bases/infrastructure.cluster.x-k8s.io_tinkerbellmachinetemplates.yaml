@@ -44,8 +44,17 @@ spec:
               TinkerbellMachineTemplate.
             properties:
               template:
-                description: TinkerbellMachineTemplateResource describes the data
-                  needed to create am TinkerbellMachine from a template.
+                description: |-
+                  TinkerbellMachineTemplateResource describes the data needed to create a TinkerbellMachine
+                  from a template. It uses TinkerbellMachineConfig instead of TinkerbellMachineSpec because
+                  templates must not contain controller-managed runtime fields (HardwareName, ProviderID).
+
+                  The CAPI MachineDeployment controller copies spec.template.spec from the
+                  InfrastructureMachineTemplate into the new InfrastructureMachine.spec as raw JSON.
+                  Because TinkerbellMachineConfig is embedded (json:",inline") in TinkerbellMachineSpec,
+                  the JSON paths are identical — CAPI's copy produces a valid TinkerbellMachineSpec
+                  with HardwareName and ProviderID absent (zero-valued), which is correct since
+                  the controller sets them later during hardware selection.
                 properties:
                   spec:
                     description: Spec is the specification of the desired behavior
@@ -391,17 +400,6 @@ spec:
                               type: object
                             type: array
                         type: object
-                      hardwareName:
-                        description: |-
-                          Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
-                          we put them in spec instead of status.
-                        type: string
-                      providerID:
-                        description: providerID must match the provider ID as seen
-                          on the node object corresponding to this machine.
-                        maxLength: 512
-                        minLength: 1
-                        type: string
                       templateInline:
                         description: |-
                           TemplateInline is an inline Tinkerbell Template definition for this machine.

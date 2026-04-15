@@ -34,7 +34,7 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 	for _, machine := range []v1beta1.TinkerbellMachine{
 		// preferred affinity weight ranges
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{
+			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
 				HardwareAffinity: &v1beta1.HardwareAffinity{
 					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
 						{
@@ -47,10 +47,10 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 						},
 					},
 				},
-			},
+			}},
 		},
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{
+			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
 				HardwareAffinity: &v1beta1.HardwareAffinity{
 					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
 						{
@@ -63,10 +63,10 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 						},
 					},
 				},
-			},
+			}},
 		},
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{
+			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
 				HardwareAffinity: &v1beta1.HardwareAffinity{
 					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
 						{
@@ -79,7 +79,7 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 						},
 					},
 				},
-			},
+			}},
 		},
 	} {
 		_, err := machine.ValidateCreate(context.Background(), &machine)
@@ -98,7 +98,7 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 	for _, machine := range []v1beta1.TinkerbellMachine{
 		// invalid preferred affinity weight values
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{
+			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
 				HardwareAffinity: &v1beta1.HardwareAffinity{
 					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
 						{
@@ -111,10 +111,10 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 						},
 					},
 				},
-			},
+			}},
 		},
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{
+			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
 				HardwareAffinity: &v1beta1.HardwareAffinity{
 					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
 						{
@@ -127,7 +127,7 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 						},
 					},
 				},
-			},
+			}},
 		},
 	} {
 		_, err := machine.ValidateCreate(context.Background(), &machine)

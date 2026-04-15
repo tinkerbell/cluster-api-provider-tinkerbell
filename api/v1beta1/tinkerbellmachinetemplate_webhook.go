@@ -21,7 +21,6 @@ import (
 	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -36,21 +35,11 @@ func (m *TinkerbellMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) er
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachinetemplates,versions=v1beta1,name=validation.tinkerbellmachinetemplate.infrastructure.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
 // ValidateCreate implements admission.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, tmt *TinkerbellMachineTemplate) (admission.Warnings, error) {
-	var allErrs field.ErrorList
-
-	spec := tmt.Spec.Template.Spec
-	fieldBasePath := field.NewPath("spec", "template", "spec")
-
-	if spec.ProviderID != "" {
-		allErrs = append(allErrs, field.Forbidden(fieldBasePath.Child("providerID"), "cannot be set in templates"))
-	}
-
-	if spec.HardwareName != "" {
-		allErrs = append(allErrs, field.Forbidden(fieldBasePath.Child("hardwareName"), "cannot be set in templates"))
-	}
-
-	return nil, aggregateObjErrors(tmt.GroupVersionKind().GroupKind(), tmt.Name, allErrs)
+// HardwareName and ProviderID are structurally prevented from appearing in templates
+// because TinkerbellMachineTemplateResource.Spec uses TinkerbellMachineConfig (which
+// does not include those fields) instead of TinkerbellMachineSpec.
+func (m *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, _ *TinkerbellMachineTemplate) (admission.Warnings, error) {
+	return nil, nil
 }
 
 // ValidateUpdate implements admission.Validator so a webhook will be registered for the type.

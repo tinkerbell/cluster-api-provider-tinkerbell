@@ -32,9 +32,12 @@ const (
 	MachineLegacyFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
 )
 
-// TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+// TinkerbellMachineConfig contains user-configurable fields that define how a machine
+// should be provisioned. These fields are safe to set in a TinkerbellMachineTemplate
+// and will be copied into each TinkerbellMachine created from the template.
+//
 // +kubebuilder:validation:XValidation:rule="!has(self.templateInline) || !has(self.templateRef)",message="templateInline and templateRef are mutually exclusive"
-type TinkerbellMachineSpec struct {
+type TinkerbellMachineConfig struct {
 	// TemplateInline is an inline Tinkerbell Template definition for this machine.
 	// Takes precedence over hardware annotations and cluster-level templates.
 	// Mutually exclusive with TemplateRef.
@@ -54,19 +57,32 @@ type TinkerbellMachineSpec struct {
 	// +optional
 	HardwareAffinity *HardwareAffinity `json:"hardwareAffinity,omitempty"`
 
-	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
-	// we put them in spec instead of status.
+	// BootOptions are options that control the booting of Hardware.
+	// +optional
+	BootOptions BootOptions `json:"bootOptions,omitempty"`
+}
+
+// TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+// It embeds TinkerbellMachineConfig (user-intent fields from the template) and adds
+// controller-managed fields that are set at runtime during hardware selection.
+// The embedded fields flatten into the JSON spec, so the CRD schema is unchanged.
+type TinkerbellMachineSpec struct {
+	TinkerbellMachineConfig `json:",inline"`
+
+	// HardwareName is the name of the Hardware resource selected for this machine.
+	// Set by the controller during hardware selection — not user-configurable.
+	// Immutable once set (enforced by webhook).
 	HardwareName string `json:"hardwareName,omitempty"`
 
-	// providerID must match the provider ID as seen on the node object corresponding to this machine.
+	// ProviderID is the unique identifier for this machine instance.
+	// Format: tinkerbell://<namespace>/<hardware-name>
+	// Set by the controller during hardware selection — not user-configurable.
+	// Immutable once set (enforced by webhook).
+	// Part of the CAPI InfrastructureMachine contract (must be in spec).
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
 	ProviderID string `json:"providerID,omitempty"`
-
-	// BootOptions are options that control the booting of Hardware.
-	// +optional
-	BootOptions BootOptions `json:"bootOptions,omitempty"`
 }
 
 // BootOptions are options that control the booting of Hardware.
