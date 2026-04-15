@@ -18,6 +18,7 @@ package webhooks
 
 import (
 	"context"
+	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -35,10 +36,14 @@ var (
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (w *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellCluster{}).
+	if err := ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellCluster{}).
 		WithDefaulter(w).
 		WithValidator(w).
-		Complete() //nolint:wrapcheck
+		Complete(); err != nil {
+		return fmt.Errorf("setting up TinkerbellCluster webhook: %w", err)
+	}
+
+	return nil
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1

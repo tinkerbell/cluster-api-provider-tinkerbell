@@ -66,44 +66,11 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		return ErrHardwareMissingDiskConfiguration
 	}
 
-	templateData := scope.tinkerbellMachine.Spec.TemplateInline
-
-	// If no inline template, check for a machine-level TemplateRef.
-	if templateData == "" && scope.tinkerbellMachine.Spec.TemplateRef != nil {
-		ref := scope.tinkerbellMachine.Spec.TemplateRef
-		refTemplate := &tinkv1.Template{}
-		namespacedName := types.NamespacedName{
-			Name:      ref.Name,
-			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
-		}
-		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
-			return fmt.Errorf("failed to get Template %q referenced by machine TemplateRef: %w", namespacedName.String(), err)
-		}
-		if refTemplate.Spec.Data == nil {
-			return fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
-		}
-		templateData = *refTemplate.Spec.Data
+	templateData, err := scope.resolveTemplateData(hw)
+	if err != nil {
+		return err
 	}
 
-	if templateData == "" {
-		scope.log.Info("machine template fields are empty, trying from hardware annotation")
-		tmplFromAnnotation, err := scope.templateFromAnnotation(hw)
-		if err != nil {
-			return fmt.Errorf("failed to get template from hardware annotation: %w", err)
-		}
-		templateData = tmplFromAnnotation
-	}
-
-	// If still no template, try the cluster-level template.
-	if templateData == "" {
-		clusterData, err := scope.clusterTemplate()
-		if err != nil {
-			return err
-		}
-		templateData = clusterData
-	}
-
-	// No template found at any level — this is an error.
 	if templateData == "" {
 		return ErrNoTemplateFound
 	}
@@ -127,6 +94,39 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 	}
 
 	return nil
+}
+
+// resolveTemplateData resolves the workflow template data by checking, in order:
+// machine-level inline, machine-level ref, hardware annotation, cluster-level template.
+func (scope *machineReconcileScope) resolveTemplateData(hw *tinkv1.Hardware) (string, error) {
+	if data := scope.tinkerbellMachine.Spec.TemplateInline; data != "" {
+		return data, nil
+	}
+
+	if scope.tinkerbellMachine.Spec.TemplateRef != nil {
+		ref := scope.tinkerbellMachine.Spec.TemplateRef
+		refTemplate := &tinkv1.Template{}
+		namespacedName := types.NamespacedName{
+			Name:      ref.Name,
+			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
+		}
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+			return "", fmt.Errorf("failed to get Template %q referenced by machine TemplateRef: %w", namespacedName.String(), err)
+		}
+		if refTemplate.Spec.Data == nil {
+			return "", fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
+		}
+		return *refTemplate.Spec.Data, nil
+	}
+
+	scope.log.Info("machine template fields are empty, trying from hardware annotation")
+	if data, err := scope.templateFromAnnotation(hw); err != nil {
+		return "", fmt.Errorf("failed to get template from hardware annotation: %w", err)
+	} else if data != "" {
+		return data, nil
+	}
+
+	return scope.clusterTemplate()
 }
 
 func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) (string, error) {
