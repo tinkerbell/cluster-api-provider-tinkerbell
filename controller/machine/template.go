@@ -19,6 +19,24 @@ var (
 		"hardware annotation %q, or templateInline/templateRef on TinkerbellCluster", HardwareTemplateOverrideAnnotation)
 )
 
+// fetchTemplateRefData fetches a Tinkerbell Template by ObjectRef and returns its spec.data.
+// source is a human-readable label for error messages (e.g. "machine TemplateRef").
+func (scope *machineReconcileScope) fetchTemplateRefData(name, namespace, source string) (string, error) {
+	refTemplate := &tinkv1.Template{}
+	namespacedName := types.NamespacedName{
+		Name:      name,
+		Namespace: cmp.Or(namespace, scope.tinkerbellNamespace()),
+	}
+	if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+		return "", fmt.Errorf("failed to get Template %q referenced by %s: %w", namespacedName.String(), source, err)
+	}
+	if refTemplate.Spec.Data == nil {
+		return "", fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
+	}
+
+	return *refTemplate.Spec.Data, nil
+}
+
 func (scope *machineReconcileScope) templateExists() (bool, error) {
 	namespacedName := types.NamespacedName{
 		Name:      scope.tinkerbellMachine.Name,
@@ -43,19 +61,7 @@ func (scope *machineReconcileScope) clusterTemplate() (string, error) {
 		return scope.tinkerbellCluster.Spec.TemplateInline, nil
 	case scope.tinkerbellCluster.Spec.TemplateRef != nil:
 		ref := scope.tinkerbellCluster.Spec.TemplateRef
-		refTemplate := &tinkv1.Template{}
-		namespacedName := types.NamespacedName{
-			Name:      ref.Name,
-			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
-		}
-		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateRef: %w", namespacedName.String(), err)
-		}
-		if refTemplate.Spec.Data == nil {
-			return "", fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
-		}
-
-		return *refTemplate.Spec.Data, nil
+		return scope.fetchTemplateRefData(ref.Name, ref.Namespace, "cluster TemplateRef")
 	}
 
 	return "", nil
@@ -105,23 +111,12 @@ func (scope *machineReconcileScope) resolveTemplateData(hw *tinkv1.Hardware) (st
 
 	if scope.tinkerbellMachine.Spec.TemplateRef != nil {
 		ref := scope.tinkerbellMachine.Spec.TemplateRef
-		refTemplate := &tinkv1.Template{}
-		namespacedName := types.NamespacedName{
-			Name:      ref.Name,
-			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
-		}
-		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q referenced by machine TemplateRef: %w", namespacedName.String(), err)
-		}
-		if refTemplate.Spec.Data == nil {
-			return "", fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
-		}
-		return *refTemplate.Spec.Data, nil
+		return scope.fetchTemplateRefData(ref.Name, ref.Namespace, "machine TemplateRef")
 	}
 
 	scope.log.Info("machine template fields are empty, trying from hardware annotation")
 	if data, err := scope.templateFromAnnotation(hw); err != nil {
-		return "", fmt.Errorf("failed to get template from hardware annotation: %w", err)
+		return "", err
 	} else if data != "" {
 		return data, nil
 	}
@@ -130,25 +125,25 @@ func (scope *machineReconcileScope) resolveTemplateData(hw *tinkv1.Hardware) (st
 }
 
 func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) (string, error) {
-	templateData := ""
 	// Check if hardware has an annotation 'hardware.tinkerbell.org/capt-template-override', if so,
 	// use it as the name of a Template resource in the same namespace as the Hardware, load it,
-	// and use it's spec.data as the template.
+	// and use its spec.data as the template.
 	scope.log.Info("hardware annotations", "annotations", hw.Annotations)
-	if templateName, ok := hw.Annotations[HardwareTemplateOverrideAnnotation]; ok {
-		scope.log.Info("found template override in Hardware annotation", "templateName", templateName, "namespace", hw.Namespace)
-		overrideTemplate := &tinkv1.Template{}
-		namespacedName := types.NamespacedName{
-			Name:      templateName,
-			Namespace: hw.Namespace,
-		}
-		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, overrideTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q specified in hardware annotation: %w", templateName, err)
-		}
-		scope.log.V(4).Info("found template override in Hardware annotations, using it as template", "templateName", templateName)
-		templateData = *overrideTemplate.Spec.Data
+	templateName, ok := hw.Annotations[HardwareTemplateOverrideAnnotation]
+	if !ok {
+		return "", nil
 	}
-	return templateData, nil
+
+	scope.log.Info("found template override in Hardware annotation", "templateName", templateName, "namespace", hw.Namespace)
+
+	data, err := scope.fetchTemplateRefData(templateName, hw.Namespace, "hardware annotation")
+	if err != nil {
+		return "", fmt.Errorf("failed to get template from hardware annotation: %w", err)
+	}
+
+	scope.log.V(4).Info("found template override in Hardware annotations, using it as template", "templateName", templateName)
+
+	return data, nil
 }
 
 func (scope *machineReconcileScope) ensureTemplate(hardware *tinkv1.Hardware) error {

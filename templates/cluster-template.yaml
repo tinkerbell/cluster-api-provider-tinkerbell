@@ -71,7 +71,10 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: TinkerbellCluster
 metadata:
   name: "${CLUSTER_NAME}"
-spec: {}
+spec:
+  # A Tinkerbell Template is required for provisioning. Set templateInline with an
+  # inline template definition, or templateRef to reference an existing Template object.
+  # See docs/QUICK-START.md for examples and the template resolution order.
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment

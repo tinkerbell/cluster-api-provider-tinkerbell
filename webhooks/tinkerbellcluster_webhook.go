@@ -29,15 +29,11 @@ import (
 // TinkerbellCluster implements webhook interfaces for the TinkerbellCluster API type.
 type TinkerbellCluster struct{}
 
-var (
-	_ admission.Validator[*infrastructurev1.TinkerbellCluster] = &TinkerbellCluster{}
-	_ admission.Defaulter[*infrastructurev1.TinkerbellCluster] = &TinkerbellCluster{}
-)
+var _ admission.Validator[*infrastructurev1.TinkerbellCluster] = &TinkerbellCluster{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (w *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	if err := ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellCluster{}).
-		WithDefaulter(w).
 		WithValidator(w).
 		Complete(); err != nil {
 		return fmt.Errorf("setting up TinkerbellCluster webhook: %w", err)
@@ -47,7 +43,6 @@ func (w *TinkerbellCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
-// +kubebuilder:webhook:verbs=create;update,path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster,mutating=true,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,versions=v1beta1,name=default.tinkerbellcluster.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
 // ValidateCreate implements admission.Validator.
 func (w *TinkerbellCluster) ValidateCreate(_ context.Context, _ *infrastructurev1.TinkerbellCluster) (admission.Warnings, error) {
@@ -62,9 +57,4 @@ func (w *TinkerbellCluster) ValidateUpdate(_ context.Context, _, _ *infrastructu
 // ValidateDelete implements admission.Validator.
 func (w *TinkerbellCluster) ValidateDelete(_ context.Context, _ *infrastructurev1.TinkerbellCluster) (admission.Warnings, error) {
 	return nil, nil
-}
-
-// Default implements admission.Defaulter.
-func (w *TinkerbellCluster) Default(_ context.Context, _ *infrastructurev1.TinkerbellCluster) error {
-	return nil
 }
