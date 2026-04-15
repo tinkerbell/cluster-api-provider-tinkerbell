@@ -248,9 +248,8 @@ spec:
 
 #### Customize the provisioning template
 
-By default, CAPT generates a Tinkerbell Template for each machine based on the OS image settings in the
-`TinkerbellCluster` and `TinkerbellMachineTemplate`. For most deployments you will want to override the
-default template to control exactly which actions run during provisioning.
+CAPT requires a Tinkerbell Template for each machine. There is no default template — you must
+provide one at the cluster or machine level.
 
 Set the `templateOverride` field in the `TinkerbellMachineTemplate` spec with a full
 [Tinkerbell Template](https://docs.tinkerbell.org) definition. The template supports Go template
@@ -274,6 +273,8 @@ and uses the first one found:
 1. **`TinkerbellMachineTemplate.spec.template.spec.templateOverride`** — machine-level override, set directly in the CAPI manifest.
 2. **Hardware annotation `hardware.tinkerbell.org/capt-template-override`** — set the annotation value to the name of an existing `Template` resource in the same namespace as the Hardware. This enables per-hardware template overrides without changing CAPI objects.
 3. **`TinkerbellCluster.spec.templateOverride`** (or `templateOverrideRef`) — cluster-wide override applied to all machines that don't match a higher-priority source.
+
+If none of these sources provides a template, the machine reconciliation will fail with an error.
 
 Here is an example that streams an OS image to disk, configures cloud-init for the
 Tinkerbell metadata service, and kexecs into the installed OS:

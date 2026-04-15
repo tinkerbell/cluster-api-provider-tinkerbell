@@ -48,49 +48,15 @@ type TinkerbellClusterSpec struct {
 	// +optional
 	ControlPlaneEndpoint *clusterv1.APIEndpoint `json:"controlPlaneEndpoint,omitempty,omitzero"`
 
-	// ImageLookupFormat is the URL naming format to use for machine images when
-	// a machine does not specify. When set, this will be used for all cluster machines
-	// unless a machine specifies a different ImageLookupFormat. Supports substitutions
-	// for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
-	// the basse URL, OS distribution, OS version, and kubernetes version, respectively.
-	// BaseRegistry will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-	// (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
-	// OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
-	// (if known), and the kubernetes version as defined by the packages produced by
-	// kubernetes/release: v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
-	// image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz will
-	// attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/
-	// +optional
-	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
-
-	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
-	// if not set, the default will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
-	// +optional
-	// +kubebuilder:default=ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
-
-	// ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
-	// if not set it will default to ubuntu.
-	// +optional
-	// +kubebuilder:default=ubuntu
-	ImageLookupOSDistro string `json:"imageLookupOSDistro,omitempty"`
-
-	// ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
-	// images. If not set it will default based on ImageLookupOSDistro.
-	// +optional
-	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
-
 	// TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
-	// in this cluster. This is used when no machine-level or hardware annotation override is set.
-	// Mutually exclusive with TemplateOverrideRef.
-	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+	// in the cluster. If a Machine specifies its own TemplateOverride, the Machine's template takes precedence.
+	//
 	// +optional
 	TemplateOverride string `json:"templateOverride,omitempty"`
 
-	// TemplateOverrideRef references an existing Tinkerbell Template object whose spec.data
-	// will be used as the default template for all machines in this cluster.
-	// This is used when no machine-level or hardware annotation override is set.
-	// Mutually exclusive with TemplateOverride.
+	// TemplateOverrideRef is a reference to a Tinkerbell Template object that provides the template data for all machines
+	// in the cluster. If a Machine specifies its own TemplateOverride, the Machine's template takes precedence.
+	//
 	// +optional
 	TemplateOverrideRef *ObjectRef `json:"templateOverrideRef,omitempty"`
 }
