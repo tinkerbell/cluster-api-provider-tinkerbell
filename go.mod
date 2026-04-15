@@ -10,6 +10,7 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/rs/zerolog v1.35.1
+	github.com/tinkerbell/cluster-api-provider-tinkerbell/api v0.0.0
 	github.com/tinkerbell/tinkerbell/api v0.25.0
 	golang.org/x/sync v0.24.0
 	k8s.io/api v0.36.6
@@ -74,3 +75,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/tinkerbell/cluster-api-provider-tinkerbell/api => ./api

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package webhooks
 
 import (
 	"context"
@@ -22,27 +22,34 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
 
-var _ admission.Validator[*TinkerbellMachine] = &TinkerbellMachine{}
+// TinkerbellMachine implements webhook interfaces for the TinkerbellMachine API type.
+type TinkerbellMachine struct{}
+
+var _ admission.Validator[*infrastructurev1.TinkerbellMachine] = &TinkerbellMachine{}
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
-func (m *TinkerbellMachine) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr, m).WithValidator(m).Complete() //nolint:wrapcheck
+func (w *TinkerbellMachine) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellMachine{}).
+		WithValidator(w).
+		Complete() //nolint:wrapcheck
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachine,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachines,versions=v1beta1,name=validation.tinkerbellmachine.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
-// ValidateCreate implements admission.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateCreate(_ context.Context, obj *TinkerbellMachine) (admission.Warnings, error) {
-	allErrs := obj.validateSpec()
+// ValidateCreate implements admission.Validator.
+func (w *TinkerbellMachine) ValidateCreate(_ context.Context, obj *infrastructurev1.TinkerbellMachine) (admission.Warnings, error) {
+	allErrs := validateMachineSpec(&obj.Spec)
 
 	return nil, aggregateObjErrors(obj.GroupVersionKind().GroupKind(), obj.Name, allErrs)
 }
 
-// ValidateUpdate implements admission.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateUpdate(_ context.Context, old *TinkerbellMachine, newTM *TinkerbellMachine) (admission.Warnings, error) {
-	allErrs := newTM.validateSpec()
+// ValidateUpdate implements admission.Validator.
+func (w *TinkerbellMachine) ValidateUpdate(_ context.Context, old *infrastructurev1.TinkerbellMachine, newTM *infrastructurev1.TinkerbellMachine) (admission.Warnings, error) {
+	allErrs := validateMachineSpec(&newTM.Spec)
 
 	if old.Spec.HardwareName != "" && newTM.Spec.HardwareName != old.Spec.HardwareName {
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "hardwareName"), "is immutable once set"))
@@ -55,19 +62,17 @@ func (m *TinkerbellMachine) ValidateUpdate(_ context.Context, old *TinkerbellMac
 	return nil, aggregateObjErrors(newTM.GroupVersionKind().GroupKind(), newTM.Name, allErrs)
 }
 
-// ValidateDelete implements admission.Validator so a webhook will be registered for the type.
-func (m *TinkerbellMachine) ValidateDelete(_ context.Context, _ *TinkerbellMachine) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator.
+func (w *TinkerbellMachine) ValidateDelete(_ context.Context, _ *infrastructurev1.TinkerbellMachine) (admission.Warnings, error) {
 	return nil, nil
 }
 
-func (m *TinkerbellMachine) validateSpec() field.ErrorList {
+func validateMachineSpec(spec *infrastructurev1.TinkerbellMachineSpec) field.ErrorList {
 	var allErrs field.ErrorList
 
 	fieldBasePath := field.NewPath("spec")
 
-	// TODO: there are probably more fields that have requirements
-
-	if spec := m.Spec; spec.HardwareAffinity != nil {
+	if spec.HardwareAffinity != nil {
 		for i, term := range spec.HardwareAffinity.Preferred {
 			if term.Weight < 1 || term.Weight > 100 {
 				allErrs = append(allErrs,
