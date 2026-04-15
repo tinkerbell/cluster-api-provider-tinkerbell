@@ -71,15 +71,18 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
-              templateOverride:
+              templateInline:
                 description: |-
-                  TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
-                  in the cluster. If a Machine specifies its own TemplateOverride, the Machine's template takes precedence.
+                  TemplateInline is an inline Tinkerbell Template definition applied to all machines in the
+                  cluster. If a Machine specifies its own template, the Machine's template takes precedence.
+                  Mutually exclusive with TemplateRef.
                 type: string
-              templateOverrideRef:
+              templateRef:
                 description: |-
-                  TemplateOverrideRef is a reference to a Tinkerbell Template object that provides the template data for all machines
-                  in the cluster. If a Machine specifies its own TemplateOverride, the Machine's template takes precedence.
+                  TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+                  be used as the template for all machines in the cluster. If a Machine specifies its own
+                  template, the Machine's template takes precedence. Mutually exclusive with TemplateInline.
+                  When Namespace is omitted, defaults to the Hardware's namespace.
                 properties:
                   name:
                     description: Name is the name of the object.
@@ -92,8 +95,8 @@ spec:
                 type: object
             type: object
             x-kubernetes-validations:
-            - message: templateOverride and templateOverrideRef are mutually exclusive
-              rule: '!has(self.templateOverride) || !has(self.templateOverrideRef)'
+            - message: templateInline and templateRef are mutually exclusive
+              rule: '!has(self.templateInline) || !has(self.templateRef)'
           status:
             description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
             properties:

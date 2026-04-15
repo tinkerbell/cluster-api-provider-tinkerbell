@@ -409,12 +409,32 @@ spec:
                 maxLength: 512
                 minLength: 1
                 type: string
-              templateOverride:
+              templateInline:
                 description: |-
-                  TemplateOverride overrides the default Tinkerbell template used by CAPT.
-                  You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+                  TemplateInline is an inline Tinkerbell Template definition for this machine.
+                  Takes precedence over hardware annotations and cluster-level templates.
+                  Mutually exclusive with TemplateRef.
                 type: string
+              templateRef:
+                description: |-
+                  TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+                  be used as the template for this machine. Takes precedence over hardware annotations and
+                  cluster-level templates. Mutually exclusive with TemplateInline.
+                  When Namespace is omitted, defaults to the Hardware's namespace.
+                properties:
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
+                required:
+                - name
+                type: object
             type: object
+            x-kubernetes-validations:
+            - message: templateInline and templateRef are mutually exclusive
+              rule: '!has(self.templateInline) || !has(self.templateRef)'
           status:
             description: TinkerbellMachineStatus defines the observed state of TinkerbellMachine.
             properties:

@@ -134,7 +134,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 				Host: hardwareIP,
 				Port: 6443,
 			},
-			TemplateOverride: "version: \"0.1\"\nname: test\nglobal_timeout: 6000\ntasks:\n  - name: \"test\"\n    worker: \"{{.device_1}}\"\n    actions:\n      - name: \"stream image\"\n        image: quay.io/tinkerbell/actions/oci2disk\n        timeout: 600\n        environment:\n          IMG_URL: https://example.com/image.gz\n          DEST_DISK: /dev/sda\n          COMPRESSED: true\n",
+			TemplateInline: "version: \"0.1\"\nname: test\nglobal_timeout: 6000\ntasks:\n  - name: \"test\"\n    worker: \"{{.device_1}}\"\n    actions:\n      - name: \"stream image\"\n        image: quay.io/tinkerbell/actions/oci2disk\n        timeout: 600\n        environment:\n          IMG_URL: https://example.com/image.gz\n          DEST_DISK: /dev/sda\n          COMPRESSED: true\n",
 		},
 		Status: infrastructurev1.TinkerbellClusterStatus{
 			Ready: true,
@@ -1539,7 +1539,7 @@ func machineReconciliationHardwareAffinityHelper(t *testing.T, fooOptions testOp
 	g.Expect(bazMachine.Spec.HardwareName).To(Equal(bazHardwareName))
 }
 
-func Test_Machine_reconciliation_uses_cluster_level_template_override(t *testing.T) {
+func Test_Machine_reconciliation_uses_cluster_level_template_inline(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -1557,7 +1557,7 @@ tasks:
         timeout: 90`
 
 	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
-	tinkCluster.Spec.TemplateOverride = clusterTemplateData
+	tinkCluster.Spec.TemplateInline = clusterTemplateData
 
 	objects := []runtime.Object{
 		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
@@ -1587,7 +1587,7 @@ tasks:
 		cmp.Diff(clusterTemplateData, *template.Spec.Data))
 }
 
-func Test_Machine_reconciliation_uses_cluster_level_template_override_ref(t *testing.T) {
+func Test_Machine_reconciliation_uses_cluster_level_template_ref(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -1614,8 +1614,8 @@ tasks:
 	}
 
 	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
-	tinkCluster.Spec.TemplateOverride = "" // Clear so TemplateOverrideRef takes effect.
-	tinkCluster.Spec.TemplateOverrideRef = &infrastructurev1.ObjectRef{
+	tinkCluster.Spec.TemplateInline = "" // Clear so TemplateRef takes effect.
+	tinkCluster.Spec.TemplateRef = &infrastructurev1.ObjectRef{
 		Name:      "my-shared-template",
 		Namespace: clusterNamespace,
 	}

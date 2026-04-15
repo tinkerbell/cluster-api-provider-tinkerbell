@@ -11,12 +11,12 @@ import (
 )
 
 var (
-	// ErrTemplateOverrideRefNoData is returned when a Template referenced by TemplateOverrideRef has no spec.data.
-	ErrTemplateOverrideRefNoData = fmt.Errorf("template referenced by cluster TemplateOverrideRef has no spec.data")
+	// ErrTemplateRefNoData is returned when a Template referenced by TemplateRef has no spec.data.
+	ErrTemplateRefNoData = fmt.Errorf("template referenced by TemplateRef has no spec.data")
 
 	// ErrNoTemplateFound is returned when no template source is configured at any level.
-	ErrNoTemplateFound = fmt.Errorf("no template found: set templateOverride on TinkerbellMachine, " +
-		"hardware annotation %q, or templateOverride/templateOverrideRef on TinkerbellCluster", HardwareTemplateOverrideAnnotation)
+	ErrNoTemplateFound = fmt.Errorf("no template found: set templateInline or templateRef on TinkerbellMachine, "+
+		"hardware annotation %q, or templateInline/templateRef on TinkerbellCluster", HardwareTemplateOverrideAnnotation)
 )
 
 func (scope *machineReconcileScope) templateExists() (bool, error) {
@@ -37,22 +37,22 @@ func (scope *machineReconcileScope) templateExists() (bool, error) {
 	return false, nil
 }
 
-func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
+func (scope *machineReconcileScope) clusterTemplate() (string, error) {
 	switch {
-	case scope.tinkerbellCluster.Spec.TemplateOverride != "":
-		return scope.tinkerbellCluster.Spec.TemplateOverride, nil
-	case scope.tinkerbellCluster.Spec.TemplateOverrideRef != nil:
-		ref := scope.tinkerbellCluster.Spec.TemplateOverrideRef
+	case scope.tinkerbellCluster.Spec.TemplateInline != "":
+		return scope.tinkerbellCluster.Spec.TemplateInline, nil
+	case scope.tinkerbellCluster.Spec.TemplateRef != nil:
+		ref := scope.tinkerbellCluster.Spec.TemplateRef
 		refTemplate := &tinkv1.Template{}
 		namespacedName := types.NamespacedName{
 			Name:      ref.Name,
 			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
 		}
 		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName.String(), err)
+			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateRef: %w", namespacedName.String(), err)
 		}
 		if refTemplate.Spec.Data == nil {
-			return "", fmt.Errorf("%w: %s", ErrTemplateOverrideRefNoData, namespacedName.String())
+			return "", fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
 		}
 
 		return *refTemplate.Spec.Data, nil
@@ -66,9 +66,27 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		return ErrHardwareMissingDiskConfiguration
 	}
 
-	templateData := scope.tinkerbellMachine.Spec.TemplateOverride
+	templateData := scope.tinkerbellMachine.Spec.TemplateInline
+
+	// If no inline template, check for a machine-level TemplateRef.
+	if templateData == "" && scope.tinkerbellMachine.Spec.TemplateRef != nil {
+		ref := scope.tinkerbellMachine.Spec.TemplateRef
+		refTemplate := &tinkv1.Template{}
+		namespacedName := types.NamespacedName{
+			Name:      ref.Name,
+			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
+		}
+		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+			return fmt.Errorf("failed to get Template %q referenced by machine TemplateRef: %w", namespacedName.String(), err)
+		}
+		if refTemplate.Spec.Data == nil {
+			return fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
+		}
+		templateData = *refTemplate.Spec.Data
+	}
+
 	if templateData == "" {
-		scope.log.Info("tinkerbellMachine.Spec.TemplateOverride is empty, trying from hardware annotation")
+		scope.log.Info("machine template fields are empty, trying from hardware annotation")
 		tmplFromAnnotation, err := scope.templateFromAnnotation(hw)
 		if err != nil {
 			return fmt.Errorf("failed to get template from hardware annotation: %w", err)
@@ -76,9 +94,9 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		templateData = tmplFromAnnotation
 	}
 
-	// If still no template, try the cluster-level overrides.
+	// If still no template, try the cluster-level template.
 	if templateData == "" {
-		clusterData, err := scope.clusterTemplateOverride()
+		clusterData, err := scope.clusterTemplate()
 		if err != nil {
 			return err
 		}
