@@ -27,9 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
-	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/collections"
 	"sigs.k8s.io/cluster-api/util/patch"
+	"sigs.k8s.io/cluster-api/util/paused"
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -121,29 +121,42 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	scope.patchHelper = patchHelper
 
-	// We must be bound to a CAPI Machine object before we can continue.
-	machine, err := scope.getReadyMachine()
+	// Resolve the owner Machine and Cluster before checking pause state.
+	// These may be nil if not yet assigned — EnsurePausedCondition handles a nil cluster
+	// by only checking the TinkerbellMachine's own paused annotation.
+	machine, err := util.GetOwnerMachine(ctx, scope.client, scope.tinkerbellMachine.ObjectMeta)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("getting valid Machine object: %w", err)
+		return ctrl.Result{}, fmt.Errorf("getting owner Machine: %w", err)
 	}
 
-	if machine == nil {
-		return ctrl.Result{}, nil
-	}
+	var cluster *clusterv1.Cluster
 
-	// Fetch the capi cluster owning the machine and check if the cluster is paused
-	cluster, err := util.GetClusterFromMetadata(ctx, scope.client, machine.ObjectMeta)
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("getting cluster from metadata:: %w", err)
+	if machine != nil {
+		cluster, err = util.GetClusterFromMetadata(ctx, scope.client, machine.ObjectMeta)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("getting cluster from metadata: %w", err)
 		}
 	}
 
-	// TODO(enhancement): Currently using simple annotation-based pause checking. Need to implement
-	// proper pause handling using paused.EnsurePausedCondition() as per:
-	// https://cluster-api.sigs.k8s.io/developer/providers/contracts/infra-cluster#infracluster-pausing
-	if cluster != nil && annotations.IsPaused(cluster, scope.tinkerbellMachine) {
+	isPaused, _, err := paused.EnsurePausedCondition(ctx, r.Client, cluster, scope.tinkerbellMachine)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensuring paused condition: %w", err)
+	}
+
+	if isPaused {
 		log.Info("TinkerbellMachine is paused, skipping reconciliation")
+
+		return ctrl.Result{}, nil
+	}
+
+	// Validate the Machine is ready for full reconciliation.
+	reason, err := isMachineReady(machine)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("validating Machine object: %w", err)
+	}
+
+	if reason != "" {
+		log.Info("machine is not ready yet", "reason", reason)
 
 		return ctrl.Result{}, nil
 	}
@@ -198,7 +211,7 @@ func (r *TinkerbellMachineReconciler) SetupWithManager(ctx context.Context, mgr 
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, r.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceHasFilterLabel(sm, log, r.WatchFilterValue)).
 		For(&infrastructurev1.TinkerbellMachine{}).
 		Watches(
 			&clusterv1.Machine{},

@@ -28,8 +28,8 @@ import (
 	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
-	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/patch"
+	"sigs.k8s.io/cluster-api/util/paused"
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -257,28 +257,24 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	isPaused, _, err := paused.EnsurePausedCondition(ctx, tcr.Client, crc.cluster, crc.tinkerbellCluster)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensuring paused condition: %w", err)
+	}
+
+	if isPaused {
+		crc.log.Info("TinkerbellCluster is paused, skipping reconciliation")
+
+		return ctrl.Result{}, nil
+	}
+
 	if !crc.tinkerbellCluster.DeletionTimestamp.IsZero() {
-		if annotations.HasPaused(crc.tinkerbellCluster) {
-			crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile deletion")
-
-			return ctrl.Result{}, nil
-		}
-
 		crc.log.Info("Removing cluster")
 
 		return ctrl.Result{}, crc.reconcileDelete()
 	}
 
 	if crc.cluster == nil {
-		return ctrl.Result{}, nil
-	}
-
-	// TODO(enhancement): Currently using simple annotation-based pause checking. Need to implement
-	// proper pause handling using paused.EnsurePausedCondition() as per:
-	// https://cluster-api.sigs.k8s.io/developer/providers/contracts/infra-cluster#infracluster-pausing
-	if annotations.IsPaused(crc.cluster, crc.tinkerbellCluster) {
-		crc.log.Info("TinkerbellCluster is marked as paused. Won't reconcile")
-
 		return ctrl.Result{}, nil
 	}
 
@@ -299,12 +295,12 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mg
 	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrastructurev1.TinkerbellCluster{}).
-		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(sm, log, tcr.WatchFilterValue)).
+		WithEventFilter(predicates.ResourceHasFilterLabel(sm, log, tcr.WatchFilterValue)).
 		WithEventFilter(predicates.ResourceIsNotExternallyManaged(sm, log)).
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(mapper),
-			builder.WithPredicates(predicates.ClusterUnpaused(sm, log)),
+			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureProvisioned(sm, log)),
 		)
 
 	if err := builder.Complete(tcr); err != nil {

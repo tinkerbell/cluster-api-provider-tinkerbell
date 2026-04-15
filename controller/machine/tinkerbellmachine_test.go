@@ -1648,3 +1648,151 @@ tasks:
 		"Expected template data to match referenced template, diff: %s",
 		cmp.Diff(refTemplateData, *template.Spec.Data))
 }
+
+func Test_Machine_reconciliation_pausing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets_paused_condition_when_machine_has_paused_annotation", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		hardwareUUID := uuid.New().String()
+
+		pausedMachine := validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID)
+		pausedMachine.Annotations = map[string]string{
+			clusterv1.PausedAnnotation: "true",
+		}
+
+		objects := []runtime.Object{
+			pausedMachine,
+			validCluster(clusterName, clusterNamespace),
+			validTinkerbellCluster(clusterName, clusterNamespace),
+			validHardware(hardwareName, hardwareUUID, hardwareIP),
+			validMachine(machineName, clusterNamespace, clusterName),
+			validSecret(machineName, clusterNamespace),
+		}
+
+		k8sClient := kubernetesClientWithObjects(t, objects)
+
+		result, err := reconcileMachineWithClient(k8sClient, tinkerbellMachineName, clusterNamespace)
+		g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail when machine is paused")
+		g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue when paused")
+
+		updatedMachine := &infrastructurev1.TinkerbellMachine{}
+		g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: tinkerbellMachineName, Namespace: clusterNamespace}, updatedMachine)).To(Succeed())
+
+		pausedCondition := findCondition(updatedMachine.GetConditions(), clusterv1.PausedCondition)
+		g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set")
+		g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionTrue), "Expected Paused condition to be True")
+		g.Expect(pausedCondition.Reason).To(Equal(clusterv1.PausedReason), "Expected Paused reason")
+	})
+
+	t.Run("sets_paused_condition_when_machine_has_paused_annotation_without_owner", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		// TinkerbellMachine with paused annotation but no OwnerRef (Machine not yet assigned).
+		pausedMachine := &infrastructurev1.TinkerbellMachine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tinkerbellMachineName,
+				Namespace: clusterNamespace,
+				Annotations: map[string]string{
+					clusterv1.PausedAnnotation: "true",
+				},
+			},
+		}
+
+		objects := []runtime.Object{
+			pausedMachine,
+		}
+
+		k8sClient := kubernetesClientWithObjects(t, objects)
+
+		result, err := reconcileMachineWithClient(k8sClient, tinkerbellMachineName, clusterNamespace)
+		g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail when machine is paused without owner")
+		g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue when paused")
+
+		updatedMachine := &infrastructurev1.TinkerbellMachine{}
+		g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: tinkerbellMachineName, Namespace: clusterNamespace}, updatedMachine)).To(Succeed())
+
+		pausedCondition := findCondition(updatedMachine.GetConditions(), clusterv1.PausedCondition)
+		g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set even without owner Machine")
+		g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionTrue), "Expected Paused condition to be True")
+		g.Expect(pausedCondition.Reason).To(Equal(clusterv1.PausedReason), "Expected Paused reason")
+	})
+
+	t.Run("sets_paused_condition_when_cluster_is_paused", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		hardwareUUID := uuid.New().String()
+
+		pausedCluster := validCluster(clusterName, clusterNamespace)
+		pausedCluster.Spec.Paused = ptr.To(true)
+
+		objects := []runtime.Object{
+			validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+			pausedCluster,
+			validTinkerbellCluster(clusterName, clusterNamespace),
+			validHardware(hardwareName, hardwareUUID, hardwareIP),
+			validMachine(machineName, clusterNamespace, clusterName),
+			validSecret(machineName, clusterNamespace),
+		}
+
+		k8sClient := kubernetesClientWithObjects(t, objects)
+
+		result, err := reconcileMachineWithClient(k8sClient, tinkerbellMachineName, clusterNamespace)
+		g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail when cluster is paused")
+		g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue when paused")
+
+		updatedMachine := &infrastructurev1.TinkerbellMachine{}
+		g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: tinkerbellMachineName, Namespace: clusterNamespace}, updatedMachine)).To(Succeed())
+
+		pausedCondition := findCondition(updatedMachine.GetConditions(), clusterv1.PausedCondition)
+		g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set")
+		g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionTrue), "Expected Paused condition to be True")
+		g.Expect(pausedCondition.Reason).To(Equal(clusterv1.PausedReason), "Expected Paused reason")
+	})
+
+	t.Run("sets_not_paused_condition_when_not_paused", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		hardwareUUID := uuid.New().String()
+
+		objects := []runtime.Object{
+			validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+			validCluster(clusterName, clusterNamespace),
+			validTinkerbellCluster(clusterName, clusterNamespace),
+			validHardware(hardwareName, hardwareUUID, hardwareIP),
+			validMachine(machineName, clusterNamespace, clusterName),
+			validSecret(machineName, clusterNamespace),
+		}
+
+		k8sClient := kubernetesClientWithObjects(t, objects)
+
+		_, err := reconcileMachineWithClient(k8sClient, tinkerbellMachineName, clusterNamespace)
+		g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail")
+
+		updatedMachine := &infrastructurev1.TinkerbellMachine{}
+		g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: tinkerbellMachineName, Namespace: clusterNamespace}, updatedMachine)).To(Succeed())
+
+		pausedCondition := findCondition(updatedMachine.GetConditions(), clusterv1.PausedCondition)
+		g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set")
+		g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionFalse), "Expected Paused condition to be False")
+		g.Expect(pausedCondition.Reason).To(Equal(clusterv1.NotPausedReason), "Expected NotPaused reason")
+	})
+}
+
+// findCondition returns the condition with the given type, or nil if not found.
+//
+//nolint:unparam
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+
+	return nil
+}

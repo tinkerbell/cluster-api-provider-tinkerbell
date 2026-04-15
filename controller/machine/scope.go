@@ -367,32 +367,6 @@ func (scope *machineReconcileScope) patch() error {
 	return nil
 }
 
-// getReadyMachine returns valid ClusterAPI Machine object.
-//
-// If error occurs while fetching the machine, error is returned.
-//
-// If machine is not ready yet, nil is returned.
-func (scope *machineReconcileScope) getReadyMachine() (*clusterv1.Machine, error) {
-	// Continue building the context with some validation rules.
-	machine, err := util.GetOwnerMachine(scope.ctx, scope.client, scope.tinkerbellMachine.ObjectMeta)
-	if err != nil {
-		return nil, fmt.Errorf("getting Machine object: %w", err)
-	}
-
-	reason, err := isMachineReady(machine)
-	if err != nil {
-		return nil, fmt.Errorf("validating Machine object: %w", err)
-	}
-
-	if reason != "" {
-		scope.log.Info("machine is not ready yet", "reason", reason)
-
-		return nil, nil
-	}
-
-	return machine, nil
-}
-
 // isMachineReady validates that given Machine object is ready for further processing.
 //
 // If machine is not ready, string reason is returned.

@@ -210,6 +210,9 @@ func Test_Cluster_reconciliation(t *testing.T) {
 		// Requeue happens through watch of Cluster.
 		t.Run("cluster_is_paused", clusterReconciliationIsNotRequeuedWhenClusterIsPaused)
 
+		// Unpausing a previously paused cluster should resume reconciliation.
+		t.Run("cluster_is_unpaused", clusterReconciliationSetsNotPausedConditionWhenUnpaused)
+
 		// From https://cluster-api.sigs.k8s.io/developer/providers/cluster-infrastructure.html#behavior.
 		// This will be automatically requeued when the ownerRef is set.
 		t.Run("cluster_has_no_owner_set", clusterReconciliationIsNotRequeuedWhenClusterHasNoOwnerSet)
@@ -374,10 +377,19 @@ func clusterReconciliationIsNotRequeuedWhenTinkerbellClusterIsPaused(t *testing.
 		pausedTinkerbellCluster,
 	}
 
-	result, err := reconcileClusterWithClient(kubernetesClientWithObjects(t, objects), clusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Reconciling new cluster object should not fail when tinkerbellCluster is paused")
+	k8sClient := kubernetesClientWithObjects(t, objects)
 
-	g.Expect(result.IsZero()).To(BeTrue(), "Expected result to not request requeue")
+	result, err := reconcileClusterWithClient(k8sClient, clusterName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail when tinkerbellCluster is paused")
+	g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue when paused")
+
+	updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
+	g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: clusterName, Namespace: clusterNamespace}, updatedTinkerbellCluster)).To(Succeed())
+
+	pausedCondition := findCondition(updatedTinkerbellCluster.GetConditions(), clusterv1.PausedCondition)
+	g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set")
+	g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionTrue), "Expected Paused condition to be True")
+	g.Expect(pausedCondition.Reason).To(Equal(clusterv1.PausedReason), "Expected Paused reason")
 }
 
 func clusterReconciliationIsNotRequeuedWhenClusterIsPaused(t *testing.T) {
@@ -392,8 +404,52 @@ func clusterReconciliationIsNotRequeuedWhenClusterIsPaused(t *testing.T) {
 		validTinkerbellCluster(clusterName, clusterNamespace),
 	}
 
-	result, err := reconcileClusterWithClient(kubernetesClientWithObjects(t, objects), clusterName, clusterNamespace)
-	g.Expect(err).NotTo(HaveOccurred(), "Reconciling new cluster object should not fail when tinkerbellCluster is paused")
+	k8sClient := kubernetesClientWithObjects(t, objects)
 
-	g.Expect(result.IsZero()).To(BeTrue(), "Expected result to not request requeue")
+	result, err := reconcileClusterWithClient(k8sClient, clusterName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail when cluster is paused")
+	g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue when paused")
+
+	updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
+	g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: clusterName, Namespace: clusterNamespace}, updatedTinkerbellCluster)).To(Succeed())
+
+	pausedCondition := findCondition(updatedTinkerbellCluster.GetConditions(), clusterv1.PausedCondition)
+	g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set")
+	g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionTrue), "Expected Paused condition to be True")
+	g.Expect(pausedCondition.Reason).To(Equal(clusterv1.PausedReason), "Expected Paused reason")
+}
+
+func clusterReconciliationSetsNotPausedConditionWhenUnpaused(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	objects := []runtime.Object{
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+	}
+
+	k8sClient := kubernetesClientWithObjects(t, objects)
+
+	result, err := reconcileClusterWithClient(k8sClient, clusterName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling should not fail when cluster is not paused")
+	g.Expect(result.IsZero()).To(BeTrue(), "Expected no requeue for normal reconciliation")
+
+	updatedTinkerbellCluster := &infrastructurev1.TinkerbellCluster{}
+	g.Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: clusterName, Namespace: clusterNamespace}, updatedTinkerbellCluster)).To(Succeed())
+
+	pausedCondition := findCondition(updatedTinkerbellCluster.GetConditions(), clusterv1.PausedCondition)
+	g.Expect(pausedCondition).NotTo(BeNil(), "Expected Paused condition to be set")
+	g.Expect(pausedCondition.Status).To(Equal(metav1.ConditionFalse), "Expected Paused condition to be False")
+	g.Expect(pausedCondition.Reason).To(Equal(clusterv1.NotPausedReason), "Expected NotPaused reason")
+}
+
+// findCondition returns the condition with the given type, or nil if not found.
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+
+	return nil
 }
