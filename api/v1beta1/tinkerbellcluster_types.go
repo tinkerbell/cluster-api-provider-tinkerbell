@@ -108,7 +108,7 @@ type TinkerbellClusterStatus struct {
 
 	// Conditions defines current service state of the TinkerbellCluster.
 	// +optional
-	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // TinkerbellClusterInitializationStatus provides observations of the TinkerbellCluster initialization process.
@@ -136,12 +136,12 @@ type TinkerbellCluster struct {
 }
 
 // GetConditions returns the conditions for the TinkerbellCluster.
-func (c *TinkerbellCluster) GetConditions() clusterv1.Conditions {
+func (c *TinkerbellCluster) GetConditions() []metav1.Condition {
 	return c.Status.Conditions
 }
 
 // SetConditions sets the conditions on the TinkerbellCluster.
-func (c *TinkerbellCluster) SetConditions(conditions clusterv1.Conditions) {
+func (c *TinkerbellCluster) SetConditions(conditions []metav1.Condition) {
 	c.Status.Conditions = conditions
 }
 
