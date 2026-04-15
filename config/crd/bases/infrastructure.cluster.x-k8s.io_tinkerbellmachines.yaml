@@ -60,7 +60,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+            description: |-
+              TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+              It embeds TinkerbellMachineConfig (user-intent fields from the template) and adds
+              controller-managed fields that are set at runtime during hardware selection.
+              The embedded fields flatten into the JSON spec, so the CRD schema is unchanged.
             properties:
               bootOptions:
                 description: BootOptions are options that control the booting of Hardware.
@@ -400,12 +404,17 @@ spec:
                 type: object
               hardwareName:
                 description: |-
-                  Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
-                  we put them in spec instead of status.
+                  HardwareName is the name of the Hardware resource selected for this machine.
+                  Set by the controller during hardware selection — not user-configurable.
+                  Immutable once set (enforced by webhook).
                 type: string
               providerID:
-                description: providerID must match the provider ID as seen on the
-                  node object corresponding to this machine.
+                description: |-
+                  ProviderID is the unique identifier for this machine instance.
+                  Format: tinkerbell://<namespace>/<hardware-name>
+                  Set by the controller during hardware selection — not user-configurable.
+                  Immutable once set (enforced by webhook).
+                  Part of the CAPI InfrastructureMachine contract (must be in spec).
                 maxLength: 512
                 minLength: 1
                 type: string
