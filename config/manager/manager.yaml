@@ -16,10 +16,7 @@ spec:
         control-plane: controller-manager
     spec:
       containers:
-      - env:
-          - name: TINKERBELL_IP
-            value: ${TINKERBELL_IP:=''}
-        args:
+      - args:
         - --leader-elect
         image: tinkerbell-controller
         imagePullPolicy: IfNotPresent
