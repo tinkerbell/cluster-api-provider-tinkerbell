@@ -18,15 +18,9 @@ package v1beta1
 
 import (
 	"context"
-	"strings"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-)
-
-const (
-	osUbuntu             = "ubuntu"
-	defaultUbuntuVersion = "20.04"
 )
 
 var (
@@ -57,23 +51,7 @@ func (c *TinkerbellCluster) ValidateDelete(_ context.Context, _ *TinkerbellClust
 	return nil, nil
 }
 
-func defaultVersionForOSDistro(distro string) string {
-	if strings.ToLower(distro) == osUbuntu {
-		return defaultUbuntuVersion
-	}
-
-	return ""
-}
-
 // Default implements admission.Defaulter so a webhook will be registered for the type.
-func (c *TinkerbellCluster) Default(_ context.Context, cluster *TinkerbellCluster) error {
-	if cluster.Spec.ImageLookupFormat == "" {
-		cluster.Spec.ImageLookupFormat = "{{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz"
-	}
-
-	if cluster.Spec.ImageLookupOSVersion == "" {
-		cluster.Spec.ImageLookupOSVersion = defaultVersionForOSDistro(cluster.Spec.ImageLookupOSDistro)
-	}
-
+func (c *TinkerbellCluster) Default(_ context.Context, _ *TinkerbellCluster) error {
 	return nil
 }

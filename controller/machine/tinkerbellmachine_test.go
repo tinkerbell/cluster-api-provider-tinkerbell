@@ -134,6 +134,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 				Host: hardwareIP,
 				Port: 6443,
 			},
+			TemplateOverride: "version: \"0.1\"\nname: test\nglobal_timeout: 6000\ntasks:\n  - name: \"test\"\n    worker: \"{{.device_1}}\"\n    actions:\n      - name: \"stream image\"\n        image: quay.io/tinkerbell/actions/oci2disk\n        timeout: 600\n        environment:\n          IMG_URL: https://example.com/image.gz\n          DEST_DISK: /dev/sda\n          COMPRESSED: true\n",
 		},
 		Status: infrastructurev1.TinkerbellClusterStatus{
 			Ready: true,
@@ -142,8 +143,6 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 			},
 		},
 	}
-
-	_ = tinkCluster.Default(context.TODO(), tinkCluster)
 
 	return tinkCluster
 }
@@ -1615,6 +1614,7 @@ tasks:
 	}
 
 	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.TemplateOverride = "" // Clear so TemplateOverrideRef takes effect.
 	tinkCluster.Spec.TemplateOverrideRef = &infrastructurev1.ObjectRef{
 		Name:      "my-shared-template",
 		Namespace: clusterNamespace,

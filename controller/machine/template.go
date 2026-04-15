@@ -1,13 +1,8 @@
 package machine
 
 import (
-	"bytes"
 	"cmp"
 	"fmt"
-	"os"
-	"regexp"
-	"strings"
-	"text/template"
 
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,126 +11,13 @@ import (
 )
 
 var (
-	// ErrMissingName is the error returned when the WorfklowTemplate Name is not specified.
-	ErrMissingName = fmt.Errorf("name can't be empty")
-
-	// ErrMissingImageURL is the error returned when the WorfklowTemplate ImageURL is not specified.
-	ErrMissingImageURL = fmt.Errorf("imageURL can't be empty")
-
 	// ErrTemplateOverrideRefNoData is returned when a Template referenced by TemplateOverrideRef has no spec.data.
 	ErrTemplateOverrideRefNoData = fmt.Errorf("template referenced by cluster TemplateOverrideRef has no spec.data")
+
+	// ErrNoTemplateFound is returned when no template source is configured at any level.
+	ErrNoTemplateFound = fmt.Errorf("no template found: set templateOverride on TinkerbellMachine, " +
+		"hardware annotation %q, or templateOverride/templateOverrideRef on TinkerbellCluster", HardwareTemplateOverrideAnnotation)
 )
-
-const (
-	workflowTemplate = `
-version: "0.1"
-name: {{.Name}}
-global_timeout: 6000
-tasks:
-  - name: "{{.Name}}"
-    worker: "{{.DeviceTemplateName}}"
-    volumes:
-      - /dev:/dev
-      - /dev/console:/dev/console
-      - /lib/firmware:/lib/firmware:ro
-    actions:
-      - name: "stream image"
-        image: quay.io/tinkerbell/actions/oci2disk
-        timeout: 600
-        environment:
-          IMG_URL: {{.ImageURL}}
-          DEST_DISK: {{.DestDisk}}
-          COMPRESSED: true
-      - name: "add tink cloud-init config"
-        image: quay.io/tinkerbell/actions/writefile
-        timeout: 90
-        environment:
-          DEST_DISK: {{.DestPartition}}
-          FS_TYPE: ext4
-          DEST_PATH: /etc/cloud/cloud.cfg.d/10_tinkerbell.cfg
-          UID: 0
-          GID: 0
-          MODE: 0600
-          DIRMODE: 0700
-          CONTENTS: |
-            datasource:
-              Ec2:
-                metadata_urls: ["{{.MetadataURL}}"]
-                strict_id: false
-            system_info:
-              default_user:
-                name: tink
-                groups: [wheel, adm]
-                sudo: ["ALL=(ALL) NOPASSWD:ALL"]
-                shell: /bin/bash
-            manage_etc_hosts: localhost
-            warnings:
-              dsid_missing_source: off
-      - name: "add tink cloud-init ds-config"
-        image: quay.io/tinkerbell/actions/writefile
-        timeout: 90
-        environment:
-          DEST_DISK: {{.DestPartition}}
-          FS_TYPE: ext4
-          DEST_PATH: /etc/cloud/ds-identify.cfg
-          UID: 0
-          GID: 0
-          MODE: 0600
-          DIRMODE: 0700
-          CONTENTS: |
-            datasource: Ec2
-      - name: "kexec image"
-        image: ghcr.io/jacobweinstock/waitdaemon:0.2.1
-        timeout: 90
-        pid: host
-        environment:
-          BLOCK_DEVICE: {{.DestPartition}}
-          FS_TYPE: ext4
-          IMAGE: quay.io/tinkerbell/actions/kexec
-          WAIT_SECONDS: 5
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
-`
-)
-
-// WorkflowTemplate is a helper struct for rendering CAPT Template data.
-type WorkflowTemplate struct {
-	Name               string
-	MetadataURL        string
-	ImageURL           string
-	DestDisk           string
-	DestPartition      string
-	DeviceTemplateName string
-}
-
-// Render renders workflow template for a given machine including user-data.
-func (wt *WorkflowTemplate) Render() (string, error) {
-	if wt.Name == "" {
-		return "", ErrMissingName
-	}
-
-	if wt.ImageURL == "" {
-		return "", ErrMissingImageURL
-	}
-
-	if wt.DeviceTemplateName == "" {
-		wt.DeviceTemplateName = "{{.device_1}}"
-	}
-
-	tpl, err := template.New("template").Parse(workflowTemplate)
-	if err != nil {
-		return "", fmt.Errorf("unable to parse template: %w", err)
-	}
-
-	buf := &bytes.Buffer{}
-
-	err = tpl.Execute(buf, wt)
-	if err != nil {
-		return "", fmt.Errorf("unable to execute template: %w", err)
-	}
-
-	return buf.String(), nil
-}
 
 func (scope *machineReconcileScope) templateExists() (bool, error) {
 	namespacedName := types.NamespacedName{
@@ -203,14 +85,9 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		templateData = clusterData
 	}
 
-	// If still no template, generate the default one.
+	// No template found at any level — this is an error.
 	if templateData == "" {
-		scope.log.Info("no template override found, generating default template")
-		defaultTemplate, err := scope.generateDefaultTemplate(hw)
-		if err != nil {
-			return err
-		}
-		templateData = defaultTemplate
+		return ErrNoTemplateFound
 	}
 
 	templateObject := &tinkv1.Template{
@@ -234,37 +111,6 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 	return nil
 }
 
-func (scope *machineReconcileScope) generateDefaultTemplate(hw *tinkv1.Hardware) (string, error) {
-	targetDisk := hw.Spec.Disks[0].Device
-	targetDevice := firstPartitionFromDevice(targetDisk)
-
-	imageURL, err := scope.imageURL()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate imageURL: %w", err)
-	}
-
-	metadataIP := os.Getenv("TINKERBELL_IP")
-	if metadataIP == "" {
-		metadataIP = "192.168.1.1"
-	}
-
-	metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
-
-	workflowTemplate := WorkflowTemplate{
-		Name:          scope.tinkerbellMachine.Name,
-		MetadataURL:   metadataURL,
-		ImageURL:      imageURL,
-		DestDisk:      targetDisk,
-		DestPartition: targetDevice,
-	}
-
-	templateData, err := workflowTemplate.Render()
-	if err != nil {
-		return "", fmt.Errorf("rendering template: %w", err)
-	}
-	return templateData, nil
-}
-
 func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) (string, error) {
 	templateData := ""
 	// Check if hardware has an annotation 'hardware.tinkerbell.org/capt-template-override', if so,
@@ -285,18 +131,6 @@ func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) 
 		templateData = *overrideTemplate.Spec.Data
 	}
 	return templateData, nil
-}
-
-func firstPartitionFromDevice(device string) string {
-	nvmeDevice := regexp.MustCompile(`^/dev/nvme\d+n\d+$`)
-	emmcDevice := regexp.MustCompile(`^/dev/mmcblk\d+$`)
-
-	switch {
-	case nvmeDevice.MatchString(device), emmcDevice.MatchString(device):
-		return fmt.Sprintf("%sp1", device)
-	default:
-		return fmt.Sprintf("%s1", device)
-	}
 }
 
 func (scope *machineReconcileScope) ensureTemplate(hardware *tinkv1.Hardware) error {
@@ -342,63 +176,4 @@ func (scope *machineReconcileScope) removeTemplate() error {
 	}
 
 	return nil
-}
-
-func (scope *machineReconcileScope) imageURL() (string, error) {
-	imageLookupFormat := scope.tinkerbellMachine.Spec.ImageLookupFormat
-	if imageLookupFormat == "" {
-		imageLookupFormat = scope.tinkerbellCluster.Spec.ImageLookupFormat
-	}
-
-	imageLookupBaseRegistry := scope.tinkerbellMachine.Spec.ImageLookupBaseRegistry
-	if imageLookupBaseRegistry == "" {
-		imageLookupBaseRegistry = scope.tinkerbellCluster.Spec.ImageLookupBaseRegistry
-	}
-
-	imageLookupOSDistro := scope.tinkerbellMachine.Spec.ImageLookupOSDistro
-	if imageLookupOSDistro == "" {
-		imageLookupOSDistro = scope.tinkerbellCluster.Spec.ImageLookupOSDistro
-	}
-
-	imageLookupOSVersion := scope.tinkerbellMachine.Spec.ImageLookupOSVersion
-	if imageLookupOSVersion == "" {
-		imageLookupOSVersion = scope.tinkerbellCluster.Spec.ImageLookupOSVersion
-	}
-
-	return imageURL(
-		imageLookupFormat,
-		imageLookupBaseRegistry,
-		imageLookupOSDistro,
-		imageLookupOSVersion,
-		scope.machine.Spec.Version,
-	)
-}
-
-func imageURL(imageFormat, baseRegistry, osDistro, osVersion, kubernetesVersion string) (string, error) {
-	type image struct {
-		BaseRegistry      string
-		OSDistro          string
-		OSVersion         string
-		KubernetesVersion string
-	}
-
-	imageParams := image{
-		BaseRegistry:      baseRegistry,
-		OSDistro:          strings.ToLower(osDistro),
-		OSVersion:         strings.ReplaceAll(osVersion, ".", ""),
-		KubernetesVersion: kubernetesVersion,
-	}
-
-	var buf bytes.Buffer
-
-	template, err := template.New("image").Parse(imageFormat)
-	if err != nil {
-		return "", fmt.Errorf("failed to create template from string %q: %w", imageFormat, err)
-	}
-
-	if err := template.Execute(&buf, imageParams); err != nil {
-		return "", fmt.Errorf("failed to populate template %q: %w", imageFormat, err)
-	}
-
-	return buf.String(), nil
 }
