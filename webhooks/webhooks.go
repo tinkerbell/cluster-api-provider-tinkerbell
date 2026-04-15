@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package webhooks implements admission webhooks for CAPT API types.
 package webhooks
 
 import (

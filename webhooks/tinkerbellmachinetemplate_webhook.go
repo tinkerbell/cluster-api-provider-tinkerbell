@@ -18,6 +18,7 @@ package webhooks
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,9 +35,13 @@ var _ admission.Validator[*infrastructurev1.TinkerbellMachineTemplate] = &Tinker
 
 // SetupWebhookWithManager sets up and registers the webhook with the manager.
 func (w *TinkerbellMachineTemplate) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellMachineTemplate{}).
+	if err := ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellMachineTemplate{}).
 		WithValidator(w).
-		Complete() //nolint:wrapcheck
+		Complete(); err != nil {
+		return fmt.Errorf("setting up TinkerbellMachineTemplate webhook: %w", err)
+	}
+
+	return nil
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachinetemplate,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellmachinetemplates,versions=v1beta1,name=validation.tinkerbellmachinetemplate.infrastructure.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
@@ -50,7 +55,11 @@ func (w *TinkerbellMachineTemplate) ValidateCreate(_ context.Context, _ *infrast
 }
 
 // ValidateUpdate implements admission.Validator.
-func (w *TinkerbellMachineTemplate) ValidateUpdate(_ context.Context, oldTMT *infrastructurev1.TinkerbellMachineTemplate, newTMT *infrastructurev1.TinkerbellMachineTemplate) (admission.Warnings, error) {
+func (w *TinkerbellMachineTemplate) ValidateUpdate(
+	_ context.Context,
+	oldTMT *infrastructurev1.TinkerbellMachineTemplate,
+	newTMT *infrastructurev1.TinkerbellMachineTemplate,
+) (admission.Warnings, error) {
 	if !reflect.DeepEqual(newTMT.Spec, oldTMT.Spec) {
 		return nil, apierrors.NewBadRequest("TinkerbellMachineTemplate.Spec is immutable")
 	}
