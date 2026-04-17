@@ -40,12 +40,15 @@ import (
 
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	infrastructurev1beta1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta2"
 	captctrl "github.com/tinkerbell/cluster-api-provider-tinkerbell/controller"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/build"
 	tinkcluster "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/cluster"
+	captconversion "github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/conversion"
+	tinkerbellwebhooks "github.com/tinkerbell/cluster-api-provider-tinkerbell/webhooks"
 )
 
 type config struct {
@@ -226,15 +229,24 @@ func (c *config) buildTinkerbellClient(ctx context.Context, setupLog logr.Logger
 }
 
 func setupWebhooks(mgr ctrl.Manager) error {
-	if err := (&infrastructurev1.TinkerbellCluster{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellCluster{}).
+		WithValidator(&tinkerbellwebhooks.TinkerbellCluster{}).
+		WithConverter(captconversion.NewTinkerbellClusterConverter()).
+		Complete(); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster webhook:%w", err)
 	}
 
-	if err := (&infrastructurev1.TinkerbellMachine{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellMachine{}).
+		WithValidator(&tinkerbellwebhooks.TinkerbellMachine{}).
+		WithConverter(captconversion.NewTinkerbellMachineConverter()).
+		Complete(); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachine webhook:%w", err)
 	}
 
-	if err := (&infrastructurev1.TinkerbellMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := ctrl.NewWebhookManagedBy(mgr, &infrastructurev1.TinkerbellMachineTemplate{}).
+		WithValidator(&tinkerbellwebhooks.TinkerbellMachineTemplate{}).
+		WithConverter(captconversion.NewTinkerbellMachineTemplateConverter()).
+		Complete(); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellMachineTemplate webhook:%w", err)
 	}
 
@@ -377,8 +389,11 @@ func newScheme() (*runtime.Scheme, error) {
 	if err := clientgoscheme.AddToScheme(rs); err != nil {
 		return nil, fmt.Errorf("failed to add client-go scheme: err: %w", err)
 	}
+	if err := infrastructurev1beta1.AddToScheme(rs); err != nil {
+		return nil, fmt.Errorf("failed to add infrastructure v1beta1 scheme: err: %w", err)
+	}
 	if err := infrastructurev1.AddToScheme(rs); err != nil {
-		return nil, fmt.Errorf("failed to add infrastructurev1 scheme: err: %w", err)
+		return nil, fmt.Errorf("failed to add infrastructure v1beta2 scheme: err: %w", err)
 	}
 	if err := clusterv1.AddToScheme(rs); err != nil {
 		return nil, fmt.Errorf("failed to add clusterv1 scheme: err: %w", err)

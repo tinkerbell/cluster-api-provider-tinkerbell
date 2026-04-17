@@ -1,13 +1,8 @@
 package machine
 
 import (
-	"bytes"
 	"cmp"
 	"fmt"
-	"os"
-	"regexp"
-	"strings"
-	"text/template"
 
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,125 +11,30 @@ import (
 )
 
 var (
-	// ErrMissingName is the error returned when the WorfklowTemplate Name is not specified.
-	ErrMissingName = fmt.Errorf("name can't be empty")
+	// ErrTemplateRefNoData is returned when a Template referenced by TemplateRef has no spec.data.
+	ErrTemplateRefNoData = fmt.Errorf("template referenced by TemplateRef has no spec.data")
 
-	// ErrMissingImageURL is the error returned when the WorfklowTemplate ImageURL is not specified.
-	ErrMissingImageURL = fmt.Errorf("imageURL can't be empty")
-
-	// ErrTemplateOverrideRefNoData is returned when a Template referenced by TemplateOverrideRef has no spec.data.
-	ErrTemplateOverrideRefNoData = fmt.Errorf("template referenced by cluster TemplateOverrideRef has no spec.data")
+	// ErrNoTemplateFound is returned when no template source is configured at any level.
+	ErrNoTemplateFound = fmt.Errorf("no template found: set templateInline or templateRef on TinkerbellMachine, "+
+		"hardware annotation %q, or templateInline/templateRef on TinkerbellCluster", HardwareTemplateOverrideAnnotation)
 )
 
-const (
-	workflowTemplate = `
-version: "0.1"
-name: {{.Name}}
-global_timeout: 6000
-tasks:
-  - name: "{{.Name}}"
-    worker: "{{.DeviceTemplateName}}"
-    volumes:
-      - /dev:/dev
-      - /dev/console:/dev/console
-      - /lib/firmware:/lib/firmware:ro
-    actions:
-      - name: "stream image"
-        image: quay.io/tinkerbell/actions/oci2disk
-        timeout: 600
-        environment:
-          IMG_URL: {{.ImageURL}}
-          DEST_DISK: {{.DestDisk}}
-          COMPRESSED: true
-      - name: "add tink cloud-init config"
-        image: quay.io/tinkerbell/actions/writefile
-        timeout: 90
-        environment:
-          DEST_DISK: {{.DestPartition}}
-          FS_TYPE: ext4
-          DEST_PATH: /etc/cloud/cloud.cfg.d/10_tinkerbell.cfg
-          UID: 0
-          GID: 0
-          MODE: 0600
-          DIRMODE: 0700
-          CONTENTS: |
-            datasource:
-              Ec2:
-                metadata_urls: ["{{.MetadataURL}}"]
-                strict_id: false
-            system_info:
-              default_user:
-                name: tink
-                groups: [wheel, adm]
-                sudo: ["ALL=(ALL) NOPASSWD:ALL"]
-                shell: /bin/bash
-            manage_etc_hosts: localhost
-            warnings:
-              dsid_missing_source: off
-      - name: "add tink cloud-init ds-config"
-        image: quay.io/tinkerbell/actions/writefile
-        timeout: 90
-        environment:
-          DEST_DISK: {{.DestPartition}}
-          FS_TYPE: ext4
-          DEST_PATH: /etc/cloud/ds-identify.cfg
-          UID: 0
-          GID: 0
-          MODE: 0600
-          DIRMODE: 0700
-          CONTENTS: |
-            datasource: Ec2
-      - name: "kexec image"
-        image: ghcr.io/jacobweinstock/waitdaemon:0.2.1
-        timeout: 90
-        pid: host
-        environment:
-          BLOCK_DEVICE: {{.DestPartition}}
-          FS_TYPE: ext4
-          IMAGE: quay.io/tinkerbell/actions/kexec
-          WAIT_SECONDS: 5
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
-`
-)
-
-// WorkflowTemplate is a helper struct for rendering CAPT Template data.
-type WorkflowTemplate struct {
-	Name               string
-	MetadataURL        string
-	ImageURL           string
-	DestDisk           string
-	DestPartition      string
-	DeviceTemplateName string
-}
-
-// Render renders workflow template for a given machine including user-data.
-func (wt *WorkflowTemplate) Render() (string, error) {
-	if wt.Name == "" {
-		return "", ErrMissingName
+// fetchTemplateRefData fetches a Tinkerbell Template by ObjectRef and returns its spec.data.
+// source is a human-readable label for error messages (e.g. "machine TemplateRef").
+func (scope *machineReconcileScope) fetchTemplateRefData(name, namespace, source string) (string, error) {
+	refTemplate := &tinkv1.Template{}
+	namespacedName := types.NamespacedName{
+		Name:      name,
+		Namespace: cmp.Or(namespace, scope.tinkerbellNamespace()),
+	}
+	if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
+		return "", fmt.Errorf("failed to get Template %q referenced by %s: %w", namespacedName.String(), source, err)
+	}
+	if refTemplate.Spec.Data == nil {
+		return "", fmt.Errorf("%w: %s", ErrTemplateRefNoData, namespacedName.String())
 	}
 
-	if wt.ImageURL == "" {
-		return "", ErrMissingImageURL
-	}
-
-	if wt.DeviceTemplateName == "" {
-		wt.DeviceTemplateName = "{{.device_1}}"
-	}
-
-	tpl, err := template.New("template").Parse(workflowTemplate)
-	if err != nil {
-		return "", fmt.Errorf("unable to parse template: %w", err)
-	}
-
-	buf := &bytes.Buffer{}
-
-	err = tpl.Execute(buf, wt)
-	if err != nil {
-		return "", fmt.Errorf("unable to execute template: %w", err)
-	}
-
-	return buf.String(), nil
+	return *refTemplate.Spec.Data, nil
 }
 
 func (scope *machineReconcileScope) templateExists() (bool, error) {
@@ -155,25 +55,13 @@ func (scope *machineReconcileScope) templateExists() (bool, error) {
 	return false, nil
 }
 
-func (scope *machineReconcileScope) clusterTemplateOverride() (string, error) {
+func (scope *machineReconcileScope) clusterTemplate() (string, error) {
 	switch {
-	case scope.tinkerbellCluster.Spec.TemplateOverride != "":
-		return scope.tinkerbellCluster.Spec.TemplateOverride, nil
-	case scope.tinkerbellCluster.Spec.TemplateOverrideRef != nil:
-		ref := scope.tinkerbellCluster.Spec.TemplateOverrideRef
-		refTemplate := &tinkv1.Template{}
-		namespacedName := types.NamespacedName{
-			Name:      ref.Name,
-			Namespace: cmp.Or(ref.Namespace, scope.tinkerbellNamespace()),
-		}
-		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, refTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q referenced by cluster TemplateOverrideRef: %w", namespacedName.String(), err)
-		}
-		if refTemplate.Spec.Data == nil {
-			return "", fmt.Errorf("%w: %s", ErrTemplateOverrideRefNoData, namespacedName.String())
-		}
-
-		return *refTemplate.Spec.Data, nil
+	case scope.tinkerbellCluster.Spec.TemplateInline != "":
+		return scope.tinkerbellCluster.Spec.TemplateInline, nil
+	case scope.tinkerbellCluster.Spec.TemplateRef != nil:
+		ref := scope.tinkerbellCluster.Spec.TemplateRef
+		return scope.fetchTemplateRefData(ref.Name, ref.Namespace, "cluster TemplateRef")
 	}
 
 	return "", nil
@@ -184,33 +72,13 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 		return ErrHardwareMissingDiskConfiguration
 	}
 
-	templateData := scope.tinkerbellMachine.Spec.TemplateOverride
-	if templateData == "" {
-		scope.log.Info("tinkerbellMachine.Spec.TemplateOverride is empty, trying from hardware annotation")
-		tmplFromAnnotation, err := scope.templateFromAnnotation(hw)
-		if err != nil {
-			return fmt.Errorf("failed to get template from hardware annotation: %w", err)
-		}
-		templateData = tmplFromAnnotation
+	templateData, err := scope.resolveTemplateData(hw)
+	if err != nil {
+		return err
 	}
 
-	// If still no template, try the cluster-level overrides.
 	if templateData == "" {
-		clusterData, err := scope.clusterTemplateOverride()
-		if err != nil {
-			return err
-		}
-		templateData = clusterData
-	}
-
-	// If still no template, generate the default one.
-	if templateData == "" {
-		scope.log.Info("no template override found, generating default template")
-		defaultTemplate, err := scope.generateDefaultTemplate(hw)
-		if err != nil {
-			return err
-		}
-		templateData = defaultTemplate
+		return ErrNoTemplateFound
 	}
 
 	templateObject := &tinkv1.Template{
@@ -234,69 +102,48 @@ func (scope *machineReconcileScope) createTemplate(hw *tinkv1.Hardware) error {
 	return nil
 }
 
-func (scope *machineReconcileScope) generateDefaultTemplate(hw *tinkv1.Hardware) (string, error) {
-	targetDisk := hw.Spec.Disks[0].Device
-	targetDevice := firstPartitionFromDevice(targetDisk)
-
-	imageURL, err := scope.imageURL()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate imageURL: %w", err)
+// resolveTemplateData resolves the workflow template data by checking, in order:
+// machine-level inline, machine-level ref, hardware annotation, cluster-level template.
+func (scope *machineReconcileScope) resolveTemplateData(hw *tinkv1.Hardware) (string, error) {
+	if data := scope.tinkerbellMachine.Spec.TemplateInline; data != "" {
+		return data, nil
 	}
 
-	metadataIP := os.Getenv("TINKERBELL_IP")
-	if metadataIP == "" {
-		metadataIP = "192.168.1.1"
+	if scope.tinkerbellMachine.Spec.TemplateRef != nil {
+		ref := scope.tinkerbellMachine.Spec.TemplateRef
+		return scope.fetchTemplateRefData(ref.Name, ref.Namespace, "machine TemplateRef")
 	}
 
-	metadataURL := fmt.Sprintf("http://%s:50061", metadataIP)
-
-	workflowTemplate := WorkflowTemplate{
-		Name:          scope.tinkerbellMachine.Name,
-		MetadataURL:   metadataURL,
-		ImageURL:      imageURL,
-		DestDisk:      targetDisk,
-		DestPartition: targetDevice,
+	scope.log.Info("machine template fields are empty, trying from hardware annotation")
+	if data, err := scope.templateFromAnnotation(hw); err != nil {
+		return "", err
+	} else if data != "" {
+		return data, nil
 	}
 
-	templateData, err := workflowTemplate.Render()
-	if err != nil {
-		return "", fmt.Errorf("rendering template: %w", err)
-	}
-	return templateData, nil
+	return scope.clusterTemplate()
 }
 
 func (scope *machineReconcileScope) templateFromAnnotation(hw *tinkv1.Hardware) (string, error) {
-	templateData := ""
 	// Check if hardware has an annotation 'hardware.tinkerbell.org/capt-template-override', if so,
 	// use it as the name of a Template resource in the same namespace as the Hardware, load it,
-	// and use it's spec.data as the template.
+	// and use its spec.data as the template.
 	scope.log.Info("hardware annotations", "annotations", hw.Annotations)
-	if templateName, ok := hw.Annotations[HardwareTemplateOverrideAnnotation]; ok {
-		scope.log.Info("found template override in Hardware annotation", "templateName", templateName, "namespace", hw.Namespace)
-		overrideTemplate := &tinkv1.Template{}
-		namespacedName := types.NamespacedName{
-			Name:      templateName,
-			Namespace: hw.Namespace,
-		}
-		if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, overrideTemplate); err != nil {
-			return "", fmt.Errorf("failed to get Template %q specified in hardware annotation: %w", templateName, err)
-		}
-		scope.log.V(4).Info("found template override in Hardware annotations, using it as template", "templateName", templateName)
-		templateData = *overrideTemplate.Spec.Data
+	templateName, ok := hw.Annotations[HardwareTemplateOverrideAnnotation]
+	if !ok {
+		return "", nil
 	}
-	return templateData, nil
-}
 
-func firstPartitionFromDevice(device string) string {
-	nvmeDevice := regexp.MustCompile(`^/dev/nvme\d+n\d+$`)
-	emmcDevice := regexp.MustCompile(`^/dev/mmcblk\d+$`)
+	scope.log.Info("found template override in Hardware annotation", "templateName", templateName, "namespace", hw.Namespace)
 
-	switch {
-	case nvmeDevice.MatchString(device), emmcDevice.MatchString(device):
-		return fmt.Sprintf("%sp1", device)
-	default:
-		return fmt.Sprintf("%s1", device)
+	data, err := scope.fetchTemplateRefData(templateName, hw.Namespace, "hardware annotation")
+	if err != nil {
+		return "", fmt.Errorf("failed to get template from hardware annotation: %w", err)
 	}
+
+	scope.log.V(4).Info("found template override in Hardware annotations, using it as template", "templateName", templateName)
+
+	return data, nil
 }
 
 func (scope *machineReconcileScope) ensureTemplate(hardware *tinkv1.Hardware) error {
@@ -342,63 +189,4 @@ func (scope *machineReconcileScope) removeTemplate() error {
 	}
 
 	return nil
-}
-
-func (scope *machineReconcileScope) imageURL() (string, error) {
-	imageLookupFormat := scope.tinkerbellMachine.Spec.ImageLookupFormat
-	if imageLookupFormat == "" {
-		imageLookupFormat = scope.tinkerbellCluster.Spec.ImageLookupFormat
-	}
-
-	imageLookupBaseRegistry := scope.tinkerbellMachine.Spec.ImageLookupBaseRegistry
-	if imageLookupBaseRegistry == "" {
-		imageLookupBaseRegistry = scope.tinkerbellCluster.Spec.ImageLookupBaseRegistry
-	}
-
-	imageLookupOSDistro := scope.tinkerbellMachine.Spec.ImageLookupOSDistro
-	if imageLookupOSDistro == "" {
-		imageLookupOSDistro = scope.tinkerbellCluster.Spec.ImageLookupOSDistro
-	}
-
-	imageLookupOSVersion := scope.tinkerbellMachine.Spec.ImageLookupOSVersion
-	if imageLookupOSVersion == "" {
-		imageLookupOSVersion = scope.tinkerbellCluster.Spec.ImageLookupOSVersion
-	}
-
-	return imageURL(
-		imageLookupFormat,
-		imageLookupBaseRegistry,
-		imageLookupOSDistro,
-		imageLookupOSVersion,
-		scope.machine.Spec.Version,
-	)
-}
-
-func imageURL(imageFormat, baseRegistry, osDistro, osVersion, kubernetesVersion string) (string, error) {
-	type image struct {
-		BaseRegistry      string
-		OSDistro          string
-		OSVersion         string
-		KubernetesVersion string
-	}
-
-	imageParams := image{
-		BaseRegistry:      baseRegistry,
-		OSDistro:          strings.ToLower(osDistro),
-		OSVersion:         strings.ReplaceAll(osVersion, ".", ""),
-		KubernetesVersion: kubernetesVersion,
-	}
-
-	var buf bytes.Buffer
-
-	template, err := template.New("image").Parse(imageFormat)
-	if err != nil {
-		return "", fmt.Errorf("failed to create template from string %q: %w", imageFormat, err)
-	}
-
-	if err := template.Execute(&buf, imageParams); err != nil {
-		return "", fmt.Errorf("failed to populate template %q: %w", imageFormat, err)
-	}
-
-	return buf.String(), nil
 }

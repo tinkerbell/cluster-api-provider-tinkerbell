@@ -27,7 +27,7 @@ type TinkerbellMachineTemplateSpec struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=tinkerbellmachinetemplates,scope=Namespaced,categories=cluster-api
-// +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="infrastructure.cluster.x-k8s.io/v1beta1 is deprecated; use v1beta2. v1beta1 will be removed in CAPT v0.9.0"
 
 // TinkerbellMachineTemplate is the Schema for the tinkerbellmachinetemplates API.
 type TinkerbellMachineTemplate struct {
@@ -44,9 +44,4 @@ type TinkerbellMachineTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TinkerbellMachineTemplate `json:"items"`
-}
-
-//nolint:gochecknoinits
-func init() {
-	SchemeBuilder.Register(&TinkerbellMachineTemplate{}, &TinkerbellMachineTemplateList{})
 }

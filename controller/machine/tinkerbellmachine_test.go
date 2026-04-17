@@ -36,7 +36,7 @@ import (
 
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 
-	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta2"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 )
@@ -134,6 +134,7 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 				Host: hardwareIP,
 				Port: 6443,
 			},
+			TemplateInline: "version: \"0.1\"\nname: test\nglobal_timeout: 6000\ntasks:\n  - name: \"test\"\n    worker: \"{{.device_1}}\"\n    actions:\n      - name: \"stream image\"\n        image: quay.io/tinkerbell/actions/oci2disk\n        timeout: 600\n        environment:\n          IMG_URL: https://example.com/image.gz\n          DEST_DISK: /dev/sda\n          COMPRESSED: true\n",
 		},
 		Status: infrastructurev1.TinkerbellClusterStatus{
 			Ready: true,
@@ -142,8 +143,6 @@ func validTinkerbellCluster(name, namespace string) *infrastructurev1.Tinkerbell
 			},
 		},
 	}
-
-	_ = tinkCluster.Default(context.TODO(), tinkCluster)
 
 	return tinkCluster
 }
@@ -1540,7 +1539,7 @@ func machineReconciliationHardwareAffinityHelper(t *testing.T, fooOptions testOp
 	g.Expect(bazMachine.Spec.HardwareName).To(Equal(bazHardwareName))
 }
 
-func Test_Machine_reconciliation_uses_cluster_level_template_override(t *testing.T) {
+func Test_Machine_reconciliation_uses_cluster_level_template_inline(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -1558,7 +1557,7 @@ tasks:
         timeout: 90`
 
 	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
-	tinkCluster.Spec.TemplateOverride = clusterTemplateData
+	tinkCluster.Spec.TemplateInline = clusterTemplateData
 
 	objects := []runtime.Object{
 		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
@@ -1588,7 +1587,7 @@ tasks:
 		cmp.Diff(clusterTemplateData, *template.Spec.Data))
 }
 
-func Test_Machine_reconciliation_uses_cluster_level_template_override_ref(t *testing.T) {
+func Test_Machine_reconciliation_uses_cluster_level_template_ref(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -1615,7 +1614,8 @@ tasks:
 	}
 
 	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
-	tinkCluster.Spec.TemplateOverrideRef = &infrastructurev1.ObjectRef{
+	tinkCluster.Spec.TemplateInline = "" // Clear so TemplateRef takes effect.
+	tinkCluster.Spec.TemplateRef = &infrastructurev1.ObjectRef{
 		Name:      "my-shared-template",
 		Namespace: clusterNamespace,
 	}
@@ -1647,6 +1647,198 @@ tasks:
 	g.Expect(*template.Spec.Data).To(Equal(refTemplateData),
 		"Expected template data to match referenced template, diff: %s",
 		cmp.Diff(refTemplateData, *template.Spec.Data))
+}
+
+func Test_Machine_reconciliation_uses_machine_level_template_inline(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	machineTemplateData := `version: "0.1"
+name: machine_inline
+global_timeout: 6000
+tasks:
+  - name: "machine-task"
+    worker: "{{.device_1}}"
+    actions:
+      - name: "machine-action"
+        image: machine-image
+        timeout: 90`
+
+	tinkMachine := validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID)
+	tinkMachine.Spec.TemplateInline = machineTemplateData
+
+	// Cluster also has a template — machine-level should take precedence.
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+
+	objects := []runtime.Object{
+		tinkMachine,
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster,
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+	ctx := context.Background()
+
+	template := &tinkv1.Template{}
+	g.Expect(client.Get(ctx, types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, template)).To(Succeed(), "Expected template to be created")
+
+	g.Expect(template.Spec.Data).NotTo(BeNil(), "Expected template data to be set")
+	g.Expect(*template.Spec.Data).To(Equal(machineTemplateData),
+		"Expected template data to match machine-level inline, not cluster-level, diff: %s",
+		cmp.Diff(machineTemplateData, *template.Spec.Data))
+}
+
+func Test_Machine_reconciliation_uses_machine_level_template_ref(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	refTemplateData := `version: "0.1"
+name: machine_ref
+global_timeout: 6000
+tasks:
+  - name: "machine-ref-task"
+    worker: "{{.device_1}}"
+    actions:
+      - name: "machine-ref-action"
+        image: machine-ref-image
+        timeout: 90`
+	refTemplate := &tinkv1.Template{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-machine-template",
+			Namespace: clusterNamespace,
+		},
+		Spec: tinkv1.TemplateSpec{
+			Data: &refTemplateData,
+		},
+	}
+
+	tinkMachine := validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID)
+	tinkMachine.Spec.TemplateRef = &infrastructurev1.ObjectRef{
+		Name:      "my-machine-template",
+		Namespace: clusterNamespace,
+	}
+
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.TemplateInline = "" // Clear so machine-level ref is the only source.
+
+	objects := []runtime.Object{
+		tinkMachine,
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster,
+		refTemplate,
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+	ctx := context.Background()
+
+	template := &tinkv1.Template{}
+	g.Expect(client.Get(ctx, types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, template)).To(Succeed(), "Expected template to be created")
+
+	g.Expect(template.Spec.Data).NotTo(BeNil(), "Expected template data to be set")
+	g.Expect(*template.Spec.Data).To(Equal(refTemplateData),
+		"Expected template data to match machine-level ref template, diff: %s",
+		cmp.Diff(refTemplateData, *template.Spec.Data))
+}
+
+func Test_Machine_reconciliation_fails_when_no_template_configured(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.TemplateInline = "" // No template at any level.
+
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster,
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).To(HaveOccurred(), "Expected reconciliation to fail when no template is configured")
+	g.Expect(err.Error()).To(ContainSubstring("no template found"))
+
+	// Verify no Template resource was created.
+	ctx := context.Background()
+	template := &tinkv1.Template{}
+	lookupErr := client.Get(ctx, types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, template)
+	g.Expect(lookupErr).To(HaveOccurred(), "Expected no Template to be created")
+}
+
+func Test_Machine_reconciliation_fails_when_template_ref_has_no_data(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	// Template exists but has nil spec.data.
+	refTemplate := &tinkv1.Template{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "empty-template",
+			Namespace: clusterNamespace,
+		},
+		Spec: tinkv1.TemplateSpec{
+			Data: nil,
+		},
+	}
+
+	tinkMachine := validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID)
+	tinkMachine.Spec.TemplateRef = &infrastructurev1.ObjectRef{
+		Name:      "empty-template",
+		Namespace: clusterNamespace,
+	}
+
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.TemplateInline = "" // Clear cluster-level template.
+
+	objects := []runtime.Object{
+		tinkMachine,
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster,
+		refTemplate,
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).To(HaveOccurred(), "Expected reconciliation to fail when template ref has no data")
+	g.Expect(err.Error()).To(ContainSubstring("has no spec.data"))
 }
 
 func Test_Machine_reconciliation_pausing(t *testing.T) {

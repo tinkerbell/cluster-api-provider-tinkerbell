@@ -14,22 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
-
-import (
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/validation/field"
-)
-
-func aggregateObjErrors(gk schema.GroupKind, name string, allErrs field.ErrorList) error {
-	if len(allErrs) == 0 {
-		return nil
-	}
-
-	return apierrors.NewInvalid(
-		gk,
-		name,
-		allErrs,
-	)
-}
+// Package v1beta2 contains API Schema definitions for the infrastructure v1beta2 API group.
+package v1beta2
