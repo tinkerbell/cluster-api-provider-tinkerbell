@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1beta2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +27,7 @@ type TinkerbellMachineTemplateSpec struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=tinkerbellmachinetemplates,scope=Namespaced,categories=cluster-api
-// +kubebuilder:deprecatedversion:warning="infrastructure.cluster.x-k8s.io/v1beta1 is deprecated; use v1beta2. v1beta1 will be removed in CAPT v0.9.0"
+// +kubebuilder:storageversion
 
 // TinkerbellMachineTemplate is the Schema for the tinkerbellmachinetemplates API.
 type TinkerbellMachineTemplate struct {

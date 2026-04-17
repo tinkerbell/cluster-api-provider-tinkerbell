@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1beta2
 
 import (
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
@@ -32,42 +32,26 @@ const (
 	MachineLegacyFinalizer = "tinkerbellmachine.infrastructure.cluster.x-k8s.io"
 )
 
-// TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
-type TinkerbellMachineSpec struct {
-	// ImageLookupFormat is the URL naming format to use for machine images when
-	// a machine does not specify. When set, this will be used for all cluster machines
-	// unless a machine specifies a different ImageLookupFormat. Supports substitutions
-	// for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
-	// the basse URL, OS distribution, OS version, and kubernetes version, respectively.
-	// BaseRegistry will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-	// (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
-	// OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
-	// (if known), and the kubernetes version as defined by the packages produced by
-	// kubernetes/release: v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
-	// image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz will
-	// attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/
+// TinkerbellMachineConfig contains user-configurable fields that define how a machine
+// should be provisioned. These fields are safe to set in a TinkerbellMachineTemplate
+// and will be copied into each TinkerbellMachine created from the template.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.templateInline) || !has(self.templateRef)",message="templateInline and templateRef are mutually exclusive"
+type TinkerbellMachineConfig struct {
+	// TemplateInline is an inline Tinkerbell Template definition for this machine.
+	// Takes precedence over hardware annotations and cluster-level templates.
+	// Mutually exclusive with TemplateRef.
+	//
 	// +optional
-	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
+	TemplateInline string `json:"templateInline,omitempty"`
 
-	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
-	// if not set, the default will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
+	// TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+	// be used as the template for this machine. Takes precedence over hardware annotations and
+	// cluster-level templates. Mutually exclusive with TemplateInline.
+	// When Namespace is omitted, defaults to the Hardware's namespace.
+	//
 	// +optional
-	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
-
-	// ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
-	// if not set it will default to ubuntu.
-	// +optional
-	ImageLookupOSDistro string `json:"imageLookupOSDistro,omitempty"`
-
-	// ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
-	// images. If not set it will default based on ImageLookupOSDistro.
-	// +optional
-	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
-
-	// TemplateOverride overrides the default Tinkerbell template used by CAPT.
-	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
-	// +optional
-	TemplateOverride string `json:"templateOverride,omitempty"`
+	TemplateRef *ObjectRef `json:"templateRef,omitempty"`
 
 	// HardwareAffinity allows filtering for hardware.
 	// +optional
@@ -76,12 +60,25 @@ type TinkerbellMachineSpec struct {
 	// BootOptions are options that control the booting of Hardware.
 	// +optional
 	BootOptions BootOptions `json:"bootOptions,omitempty"`
+}
 
-	// Those fields are set programmatically, but they cannot be re-constructed from "state of the world", so
-	// we put them in spec instead of status.
+// TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+// It embeds TinkerbellMachineConfig (user-intent fields from the template) and adds
+// controller-managed fields that are set at runtime during hardware selection.
+// The embedded fields flatten into the JSON spec, so the CRD schema is unchanged.
+type TinkerbellMachineSpec struct {
+	TinkerbellMachineConfig `json:",inline"`
+
+	// HardwareName is the name of the Hardware resource selected for this machine.
+	// Set by the controller during hardware selection — not user-configurable.
+	// Immutable once set (enforced by webhook).
 	HardwareName string `json:"hardwareName,omitempty"`
 
-	// providerID must match the provider ID as seen on the node object corresponding to this machine.
+	// ProviderID is the unique identifier for this machine instance.
+	// Format: tinkerbell://<namespace>/<hardware-name>
+	// Set by the controller during hardware selection — not user-configurable.
+	// Immutable once set (enforced by webhook).
+	// Part of the CAPI InfrastructureMachine contract (must be in spec).
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
@@ -161,9 +158,9 @@ type TinkerbellMachineStatus struct {
 	// Addresses contains the Tinkerbell device associated addresses.
 	Addresses []corev1.NodeAddress `json:"addresses,omitempty"`
 
-	// InstanceStatus is the status of the Tinkerbell device instance for this machine.
+	// State is the status of the Tinkerbell device instance for this machine.
 	// +optional
-	InstanceStatus *TinkerbellResourceStatus `json:"instanceStatus,omitempty"`
+	State *TinkerbellResourceStatus `json:"state,omitempty"`
 
 	// TargetNamespace is the resolved namespace where Tinkerbell resources
 	// (Template, Workflow, Job) for this machine are created.
@@ -225,9 +222,9 @@ func (m *TinkerbellMachine) SetConditions(conditions []metav1.Condition) {
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=tinkerbellmachines,scope=Namespaced,categories=cluster-api
-// +kubebuilder:deprecatedversion:warning="infrastructure.cluster.x-k8s.io/v1beta1 is deprecated; use v1beta2. v1beta1 will be removed in CAPT v0.9.0"
+// +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".metadata.labels.cluster\\.x-k8s\\.io/cluster-name",description="Cluster to which this TinkerbellMachine belongs"
-// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.instanceStatus",description="Tinkerbell instance state"
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="Tinkerbell instance state"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="Machine ready status"
 // +kubebuilder:printcolumn:name="InstanceID",type="string",JSONPath=".spec.providerID",description="Tinkerbell instance ID"
 // +kubebuilder:printcolumn:name="Machine",type="string",JSONPath=".metadata.ownerReferences[?(@.kind==\"Machine\")].name",description="Machine object which owns with this TinkerbellMachine"

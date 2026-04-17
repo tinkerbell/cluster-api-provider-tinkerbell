@@ -28,17 +28,8 @@ var (
 	TinkerbellResourceStatusSuccess = TinkerbellResourceStatus(4)
 )
 
-// TinkerbellMachineTemplateResource describes the data needed to create a TinkerbellMachine
-// from a template. It uses TinkerbellMachineConfig instead of TinkerbellMachineSpec because
-// templates must not contain controller-managed runtime fields (HardwareName, ProviderID).
-//
-// The CAPI MachineDeployment controller copies spec.template.spec from the
-// InfrastructureMachineTemplate into the new InfrastructureMachine.spec as raw JSON.
-// Because TinkerbellMachineConfig is embedded (json:",inline") in TinkerbellMachineSpec,
-// the JSON paths are identical — CAPI's copy produces a valid TinkerbellMachineSpec
-// with HardwareName and ProviderID absent (zero-valued), which is correct since
-// the controller sets them later during hardware selection.
+// TinkerbellMachineTemplateResource describes the data needed to create am TinkerbellMachine from a template.
 type TinkerbellMachineTemplateResource struct {
 	// Spec is the specification of the desired behavior of the machine.
-	Spec TinkerbellMachineConfig `json:"spec"`
+	Spec TinkerbellMachineSpec `json:"spec"`
 }
