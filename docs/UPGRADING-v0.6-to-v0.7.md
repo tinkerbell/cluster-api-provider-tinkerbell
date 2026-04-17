@@ -15,10 +15,12 @@ upgrading Cluster API Provider Tinkerbell (CAPT) from v0.6.8 to v0.7.0.
 | Go (for building) | 1.22 – 1.24 | 1.25+ |
 | Tinkerbell stack | >= v0.18 | >= v0.23 |
 
-> **Note:** CAPT v0.7.0 still uses the `infrastructure.cluster.x-k8s.io/v1beta1`
-> API group version in all CRDs and manifests. The "v1beta2" refers to the CAPI
-> **contract** — the behavioral interface CAPI expects — not the Kubernetes API
-> version. See [COMPATIBILITY.md](COMPATIBILITY.md) for details.
+> **Note:** CAPT v0.7.0 introduces `infrastructure.cluster.x-k8s.io/v1beta2` as
+> the new storage (hub) API version. The previous `v1beta1` version remains
+> served for backward compatibility — existing v1beta1 manifests and CRs are
+> automatically converted via the CRD conversion webhook. No manual migration
+> of existing resources is required. See [COMPATIBILITY.md](COMPATIBILITY.md)
+> for details.
 
 ## Upgrade Steps
 
@@ -249,7 +251,7 @@ spec:
 ### After (v0.7.0)
 
 ```yaml
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: TinkerbellCluster
 metadata:
   name: my-cluster
@@ -272,7 +274,7 @@ spec:
               DEST_DISK: {{ index .Hardware.Disks 0 }}
               COMPRESSED: true
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: TinkerbellMachineTemplate
 metadata:
   name: my-cluster-control-plane
@@ -306,7 +308,16 @@ If you import CAPT API types in Go code:
 // v0.6.8
 import infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 
-// v0.7.0 — separate module
-import infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+// v0.7.0 — new hub (storage) version
+import infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta2"
 // go.mod: require github.com/tinkerbell/cluster-api-provider-tinkerbell/api v0.7.0
+
+// The v1beta1 package is still available for backward compatibility.
+// Conversion functions are provided to convert between versions:
+import v1beta1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 ```
+
+The API module (`github.com/tinkerbell/cluster-api-provider-tinkerbell/api`) no
+longer depends on `sigs.k8s.io/controller-runtime` directly. Conversion logic
+uses plain functions (`ConvertClusterToHub`, `ConvertClusterFromHub`, etc.)
+rather than interface methods.

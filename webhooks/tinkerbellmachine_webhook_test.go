@@ -23,25 +23,25 @@ import (
 	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
+	"github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta2"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/webhooks"
 )
 
 func Test_valid_tinkerbell_machine(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	existingValidMachine := &v1beta1.TinkerbellMachine{}
+	existingValidMachine := &v1beta2.TinkerbellMachine{}
 	w := &webhooks.TinkerbellMachine{}
 
-	for _, machine := range []v1beta1.TinkerbellMachine{
+	for _, machine := range []v1beta2.TinkerbellMachine{
 		// preferred affinity weight ranges
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
-				HardwareAffinity: &v1beta1.HardwareAffinity{
-					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
+			Spec: v1beta2.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta2.TinkerbellMachineConfig{
+				HardwareAffinity: &v1beta2.HardwareAffinity{
+					Preferred: []v1beta2.WeightedHardwareAffinityTerm{
 						{
 							Weight: 1,
-							HardwareAffinityTerm: v1beta1.HardwareAffinityTerm{
+							HardwareAffinityTerm: v1beta2.HardwareAffinityTerm{
 								LabelSelector: metav1.LabelSelector{
 									MatchLabels: map[string]string{"foo": "bar"},
 								},
@@ -52,12 +52,12 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 			}},
 		},
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
-				HardwareAffinity: &v1beta1.HardwareAffinity{
-					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
+			Spec: v1beta2.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta2.TinkerbellMachineConfig{
+				HardwareAffinity: &v1beta2.HardwareAffinity{
+					Preferred: []v1beta2.WeightedHardwareAffinityTerm{
 						{
 							Weight: 50,
-							HardwareAffinityTerm: v1beta1.HardwareAffinityTerm{
+							HardwareAffinityTerm: v1beta2.HardwareAffinityTerm{
 								LabelSelector: metav1.LabelSelector{
 									MatchLabels: map[string]string{"foo": "bar"},
 								},
@@ -68,12 +68,12 @@ func Test_valid_tinkerbell_machine(t *testing.T) {
 			}},
 		},
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
-				HardwareAffinity: &v1beta1.HardwareAffinity{
-					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
+			Spec: v1beta2.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta2.TinkerbellMachineConfig{
+				HardwareAffinity: &v1beta2.HardwareAffinity{
+					Preferred: []v1beta2.WeightedHardwareAffinityTerm{
 						{
 							Weight: 100,
-							HardwareAffinityTerm: v1beta1.HardwareAffinityTerm{
+							HardwareAffinityTerm: v1beta2.HardwareAffinityTerm{
 								LabelSelector: metav1.LabelSelector{
 									MatchLabels: map[string]string{"foo": "bar"},
 								},
@@ -95,18 +95,18 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	existingValidMachine := &v1beta1.TinkerbellMachine{}
+	existingValidMachine := &v1beta2.TinkerbellMachine{}
 	w := &webhooks.TinkerbellMachine{}
 
-	for _, machine := range []v1beta1.TinkerbellMachine{
+	for _, machine := range []v1beta2.TinkerbellMachine{
 		// invalid preferred affinity weight values
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
-				HardwareAffinity: &v1beta1.HardwareAffinity{
-					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
+			Spec: v1beta2.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta2.TinkerbellMachineConfig{
+				HardwareAffinity: &v1beta2.HardwareAffinity{
+					Preferred: []v1beta2.WeightedHardwareAffinityTerm{
 						{
 							Weight: -1,
-							HardwareAffinityTerm: v1beta1.HardwareAffinityTerm{
+							HardwareAffinityTerm: v1beta2.HardwareAffinityTerm{
 								LabelSelector: metav1.LabelSelector{
 									MatchLabels: map[string]string{"foo": "bar"},
 								},
@@ -117,12 +117,12 @@ func Test_invalid_tinkerbell_machine(t *testing.T) {
 			}},
 		},
 		{
-			Spec: v1beta1.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta1.TinkerbellMachineConfig{
-				HardwareAffinity: &v1beta1.HardwareAffinity{
-					Preferred: []v1beta1.WeightedHardwareAffinityTerm{
+			Spec: v1beta2.TinkerbellMachineSpec{TinkerbellMachineConfig: v1beta2.TinkerbellMachineConfig{
+				HardwareAffinity: &v1beta2.HardwareAffinity{
+					Preferred: []v1beta2.WeightedHardwareAffinityTerm{
 						{
 							Weight: 101,
-							HardwareAffinityTerm: v1beta1.HardwareAffinityTerm{
+							HardwareAffinityTerm: v1beta2.HardwareAffinityTerm{
 								LabelSelector: metav1.LabelSelector{
 									MatchLabels: map[string]string{"foo": "bar"},
 								},
