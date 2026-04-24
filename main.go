@@ -84,12 +84,7 @@ func main() {
 	log := ctrl.Log.WithName("setup")
 
 	fs := flag.NewFlagSet("capt", flag.ExitOnError)
-	klog.InitFlags(fs)
-	// Opt into the new klog behavior so that -stderrthreshold is honored even
-	// when -logtostderr=true (the default).
-	// Ref: kubernetes/klog#212, kubernetes/klog#432
-	_ = fs.Set("legacy_stderr_threshold_behavior", "false")
-	_ = fs.Set("stderrthreshold", "INFO")
+	initKlogFlags(fs)
 
 	cfg := &config{}
 	cfg.initFlags(fs)
@@ -374,6 +369,15 @@ func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
 		"/var/run/secrets/external-tinkerbell/kubeconfig",
 		"Path to a kubeconfig file for an external Tinkerbell cluster.",
 	)
+}
+
+// initKlogFlags registers klog flags and opts into the new klog behavior so
+// that -stderrthreshold is honored even when -logtostderr=true (the default).
+// Ref: kubernetes/klog#212, kubernetes/klog#432.
+func initKlogFlags(fs *flag.FlagSet) {
+	klog.InitFlags(fs)
+	_ = fs.Set("legacy_stderr_threshold_behavior", "false")
+	_ = fs.Set("stderrthreshold", "INFO")
 }
 
 // newScheme returns a runtime.Scheme with all CAPT needed schemes added.
