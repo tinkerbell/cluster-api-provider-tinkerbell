@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.39.1
 	github.com/peterbourgon/ff/v3 v3.4.0
-	github.com/rs/zerolog v1.35.0
+	github.com/rs/zerolog v1.35.1
 	github.com/tinkerbell/tinkerbell/api v0.23.0
 	golang.org/x/sync v0.20.0
 	k8s.io/api v0.35.3
