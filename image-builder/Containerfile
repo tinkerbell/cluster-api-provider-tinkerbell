@@ -1,0 +1,59 @@
+# Containerized build environment for mkosi-based Kubernetes CAPI image builder.
+# Based on the pattern from https://github.com/tinkerbell/captain/blob/main/Dockerfile
+# Usage: docker build -t k8s-image-builder . && docker run --rm --privileged -v $(pwd):/work k8s-image-builder build
+
+FROM debian:trixie
+
+ARG MKOSI_VERSION=v26
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        apt \
+        dpkg \
+        debian-archive-keyring \
+        ubuntu-keyring \
+        cpio \
+        zstd \
+        xz-utils \
+        kmod \
+        systemd-container \
+        systemd \
+        systemd-repart \
+        udev \
+        bubblewrap \
+        squashfs-tools \
+        mtools \
+        erofs-utils \
+        dosfstools \
+        e2fsprogs \
+        btrfs-progs \
+        xfsprogs \
+        grub-common \
+        grub-efi-amd64-bin \
+        grub-pc-bin \
+        xorriso \
+        qemu-utils \
+        curl \
+        ca-certificates \
+        git \
+        coreutils \
+        tar \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --break-system-packages \
+    "git+https://github.com/systemd/mkosi.git@${MKOSI_VERSION}" \
+    pefile
+
+RUN mkosi --version
+
+# Install oras CLI
+ARG ORAS_VERSION=1.3.2
+RUN curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+    | tar -xz -C /usr/local/bin oras
+
+WORKDIR /work
+ENTRYPOINT ["mkosi"]

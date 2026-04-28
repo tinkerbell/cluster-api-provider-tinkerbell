@@ -200,7 +200,7 @@ instructions.
 
 ```bash
 clusterctl generate cluster capi-quickstart \
-  --kubernetes-version v1.35.0 \
+  --kubernetes-version v1.35.2 \
   --control-plane-machine-count=3 \
   --worker-machine-count=3 \
   --target-namespace=tink-system \
@@ -308,7 +308,7 @@ spec:
                 image: quay.io/tinkerbell/actions/oci2disk
                 timeout: 1200
                 environment:
-                  IMG_URL: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu-2404:v1.35.0.gz
+                  IMG_URL: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu:2404-v1.35.2.gz
                   DEST_DISK: {{ index .Hardware.Disks 0 }}
                   COMPRESSED: true
               - name: "add tink cloud-init config"
@@ -456,7 +456,7 @@ You should see an output is similar to this:
 
 ```bash
 NAME                            INITIALIZED   API SERVER AVAILABLE   VERSION   REPLICAS   READY   UPDATED   UNAVAILABLE
-capi-quickstart-control-plane   true                                 v1.35.0   3                  3         3
+capi-quickstart-control-plane   true                                 v1.35.2   3                  3         3
 ```
 
 **NOTE** The control plane won't be `Ready` until we install a CNI in the next step.
