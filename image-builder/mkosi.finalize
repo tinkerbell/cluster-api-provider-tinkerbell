@@ -1,0 +1,34 @@
+#!/bin/bash
+# mkosi.finalize — Seal/sysprep the image for safe provisioning.
+# This is the last step before the output image is generated.
+# Removes machine-specific state so the image can be cloned to multiple nodes.
+set -euo pipefail
+
+echo "==> Sysprep: Removing SSH host keys..."
+rm -f "$BUILDROOT"/etc/ssh/ssh_host_*
+
+echo "==> Sysprep: Truncating machine-id (cloud-init regenerates on first boot)..."
+truncate -s 0 "$BUILDROOT/etc/machine-id"
+rm -f "$BUILDROOT/var/lib/dbus/machine-id"
+
+echo "==> Sysprep: Cleaning package manager caches..."
+rm -rf "$BUILDROOT/var/cache/apt/archives"/*.deb
+rm -rf "$BUILDROOT/var/lib/apt/lists"/*
+
+echo "==> Sysprep: Cleaning log files..."
+find "$BUILDROOT/var/log" -type f -exec truncate -s 0 {} + 2>/dev/null || true
+
+echo "==> Sysprep: Resetting cloud-init state..."
+rm -rf "$BUILDROOT/var/lib/cloud"/*
+
+echo "==> Sysprep: Cleaning temporary files..."
+rm -rf "$BUILDROOT/tmp"/*
+rm -rf "$BUILDROOT/var/tmp"/*
+
+echo "==> Sysprep: Truncating shell history..."
+find "$BUILDROOT/root" "$BUILDROOT/home" -name ".bash_history" -exec truncate -s 0 {} + 2>/dev/null || true
+
+echo "==> Sysprep: Removing random-seed..."
+rm -f "$BUILDROOT/var/lib/systemd/random-seed"
+
+echo "==> Sysprep: Image sealed successfully."

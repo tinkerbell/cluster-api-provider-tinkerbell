@@ -85,7 +85,7 @@ tasks:
           CONTENTS: |
             datasource: Ec2
       - name: "kexec image"
-        image: ghcr.io/jacobweinstock/waitdaemon:0.2.1
+        image: ghcr.io/jacobweinstock/waitdaemon:latest
         timeout: 90
         pid: host
         environment:

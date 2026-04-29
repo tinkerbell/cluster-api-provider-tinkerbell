@@ -1,0 +1,80 @@
+# Containerized build environment for mkosi-based Kubernetes CAPI image builder.
+# Based on the pattern from https://github.com/tinkerbell/captain/blob/main/Dockerfile
+#
+# This image is host-arch native (no --platform on docker build/run). mkosi
+# runs natively and can cross-install a foreign target architecture via apt
+# (APT::Architecture=<target>) + qemu-user-static (registered via binfmt-misc)
+# for running postinst scripts. However, cross-arch builds are EXPERIMENTAL
+# and not CI-tested — mkosi's seccomp filters may fail under qemu-user in
+# some configurations. Production CI uses native runners per arch.
+#
+# Usage: docker build -t k8s-image-builder . && docker run --rm --privileged -v $(pwd):/work k8s-image-builder build
+
+FROM debian:trixie
+
+ARG MKOSI_VERSION=v26
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        apt \
+        dpkg \
+        debian-archive-keyring \
+        ubuntu-keyring \
+        cpio \
+        zstd \
+        xz-utils \
+        kmod \
+        systemd-container \
+        systemd \
+        systemd-repart \
+        udev \
+        bubblewrap \
+        squashfs-tools \
+        mtools \
+        erofs-utils \
+        dosfstools \
+        e2fsprogs \
+        btrfs-progs \
+        xfsprogs \
+        grub-common \
+        xorriso \
+        qemu-utils \
+        qemu-user-static \
+        binfmt-support \
+        curl \
+        ca-certificates \
+        git \
+        coreutils \
+        tar \
+    && rm -rf /var/lib/apt/lists/*
+
+# Host-arch GRUB packages are not strictly needed (mkosi installs the
+# target's GRUB into BUILDROOT via apt), but having them lets mkosi run
+# `grub-install` and friends locally for debugging without surprises.
+RUN apt-get update && \
+    HOST_ARCH="$(dpkg --print-architecture)" && \
+    case "$HOST_ARCH" in \
+        amd64) apt-get install -y --no-install-recommends grub-pc-bin grub-efi-amd64-bin ;; \
+        arm64) apt-get install -y --no-install-recommends grub-efi-arm64-bin ;; \
+        *) echo "Unsupported builder arch: $HOST_ARCH"; exit 1 ;; \
+    esac \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --break-system-packages \
+    "git+https://github.com/systemd/mkosi.git@${MKOSI_VERSION}" \
+    pefile
+
+RUN mkosi --version
+
+# Install oras CLI for the host architecture of this builder image.
+ARG ORAS_VERSION=1.3.2
+RUN ORAS_ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_${ORAS_ARCH}.tar.gz" \
+        | tar -xz -C /usr/local/bin oras
+
+WORKDIR /work
+ENTRYPOINT ["mkosi"]
