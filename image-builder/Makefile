@@ -30,6 +30,9 @@ UBUNTU_CODENAME_24.04 := noble
 # 24.10+ not supported: 24.10 is EOL, 25.04+ has systemd-repart merged into systemd (incompatible with mkosi v26)
 
 UBUNTU_RELEASE := $(UBUNTU_CODENAME_$(UBUNTU_VERSION))
+ifeq ($(UBUNTU_RELEASE),)
+$(error Unsupported UBUNTU_VERSION=$(UBUNTU_VERSION); supported: 24.04)
+endif
 
 # ── Architecture validation & mkosi mapping ───────────────────────────────────
 ifeq ($(filter $(ARCH),amd64 arm64),)
@@ -46,10 +49,9 @@ IMAGE_ID     := k8s-node-ubuntu-$(UBUNTU_SHORT)-$(ARCH)
 
 # ── Container build settings ──────────────────────────────────────────────────
 BUILDER_IMAGE     ?= k8s-image-builder
-# The builder image is host-arch native; mkosi cross-installs the target
-# arch via apt (APT::Architecture=$(ARCH)) and binfmt-misc (qemu-user-static)
-# inside the container. This avoids the seccomp incompatibility that
-# breaks mkosi when its own process runs under qemu-user emulation.
+# The builder image is host-arch native. Cross-arch builds (ARCH != host) use
+# apt foreign-arch install + qemu-user-static/binfmt for postinst scripts.
+# This is EXPERIMENTAL and not CI-tested; native runners per arch are recommended.
 CONTAINER_RUNTIME ?= docker
 
 # ── Directories ───────────────────────────────────────────────────────────────
@@ -105,7 +107,7 @@ builder-image: ## Build the containerized build environment (host-arch)
 	$(CONTAINER_RUNTIME) build -t $(BUILDER_IMAGE) -f Containerfile .
 
 .PHONY: build-containerized
-build-containerized: builder-image ## Build image inside container; cross-arch via mkosi+apt+binfmt
+build-containerized: builder-image ## Build image inside container (cross-arch experimental; native recommended)
 	$(CONTAINER_RUNTIME) run --rm --privileged \
 		-v $$(pwd):/work:z \
 		-v $$(pwd)/$(OUTPUT_DIR):/work/$(OUTPUT_DIR):z \

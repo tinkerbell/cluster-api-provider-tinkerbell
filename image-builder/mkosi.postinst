@@ -31,9 +31,11 @@ echo "==> Ensuring /etc/sysctl.d exists..."
 mkdir -p "$BUILDROOT/etc/sysctl.d"
 
 echo "==> Disabling swap..."
-# Remove any swap entries from fstab
+# Remove any swap entries from fstab. Use a POSIX character class so the
+# pattern is portable across sed implementations (GNU sed accepts \s as an
+# extension, but POSIX sed does not).
 if [[ -f "$BUILDROOT/etc/fstab" ]]; then
-    sed -i '/\sswap\s/d' "$BUILDROOT/etc/fstab"
+    sed -i '/[[:space:]]swap[[:space:]]/d' "$BUILDROOT/etc/fstab"
 fi
 
 echo "==> Creating kubelet configuration directories..."

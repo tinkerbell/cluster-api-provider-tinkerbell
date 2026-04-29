@@ -141,6 +141,12 @@ OCI tags are per-arch (no manifest index): consumers select the
 appropriate tag explicitly, e.g. `:2404-v1.35.2-amd64.gz` or
 `:2404-v1.35.2-arm64.gz`. Each push carries an
 `io.tinkerbell.image.architecture` annotation.
+
+> **Note:** Cross-arch builds (e.g. building arm64 on amd64 via
+> `ARCH=arm64` with QEMU/binfmt) are **experimental and not CI-tested**;
+> they may fail because mkosi's seccomp filters do not load reliably under
+> qemu-user emulation. Use a native runner per target architecture.
+
 ## Project Structure
 
 ```

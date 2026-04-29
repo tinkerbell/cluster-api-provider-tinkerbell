@@ -28,9 +28,6 @@ jobs:
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
-          # NOTE: cross-arch builds via QEMU/binfmt are not supported —
-          # mkosi's seccomp filters fail to load under qemu-user emulation.
-          # Use a native arm64 runner (above) or an arm64 host.
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout

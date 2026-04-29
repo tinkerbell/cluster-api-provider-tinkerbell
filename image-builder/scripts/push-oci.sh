@@ -39,13 +39,19 @@ if ! command -v oras &>/dev/null; then
     exit 1
 fi
 
-# ── Find the compressed image ─────────────────────────────────────────────────
-IMAGE_FILE="$(find "$OUTPUT_DIR" -name "${IMAGE_NAME}*.raw.gz" | head -1)"
-if [[ -z "$IMAGE_FILE" || ! -f "$IMAGE_FILE" ]]; then
+# ── Find the compressed image (require an unambiguous match) ─────────────────
+mapfile -t IMAGE_FILES < <(find "$OUTPUT_DIR" -type f -name "${IMAGE_NAME}*.raw.gz")
+if [[ "${#IMAGE_FILES[@]}" -eq 0 ]]; then
     echo "ERROR: No compressed image found for ${IMAGE_NAME} in ${OUTPUT_DIR}/"
     echo "       Run 'make build' first."
     exit 1
 fi
+if [[ "${#IMAGE_FILES[@]}" -gt 1 ]]; then
+    echo "ERROR: Multiple compressed images found for ${IMAGE_NAME} in ${OUTPUT_DIR}/; pass an exact output directory or image name:"
+    printf '  %s\n' "${IMAGE_FILES[@]}"
+    exit 1
+fi
+IMAGE_FILE="${IMAGE_FILES[0]}"
 
 IMAGE_REF="${REPOSITORY}:${TAG}"
 

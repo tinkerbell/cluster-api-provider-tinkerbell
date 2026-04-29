@@ -308,7 +308,8 @@ spec:
                 image: quay.io/tinkerbell/actions/oci2disk
                 timeout: 1200
                 environment:
-                  IMG_URL: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu:2404-v1.35.2.gz
+                  # Replace 'amd64' with the target node architecture (amd64 or arm64)
+                  IMG_URL: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell/ubuntu:2404-v1.35.2-amd64.gz
                   DEST_DISK: {{ index .Hardware.Disks 0 }}
                   COMPRESSED: true
               - name: "add tink cloud-init config"
@@ -350,12 +351,16 @@ spec:
                   CONTENTS: |
                     datasource: Ec2
               - name: "kexec image"
-                image: quay.io/tinkerbell/actions/kexec
+                image: ghcr.io/jacobweinstock/waitdaemon:latest
                 timeout: 90
                 pid: host
                 environment:
                   BLOCK_DEVICE: {{ formatPartition ( index .Hardware.Disks 0 ) 1 }}
                   FS_TYPE: vfat
+                  IMAGE: quay.io/tinkerbell/actions/kexec
+                  WAIT_SECONDS: 5
+                volumes:
+                  - /var/run/docker.sock:/var/run/docker.sock
 ```
 
 ##### Cloud-init integration

@@ -1,26 +1,30 @@
 #!/bin/bash
 # Validate a built image by checking for required Kubernetes binaries and configuration.
 # Usage: validate.sh --image-name <name> --output-dir <dir> [--arch <amd64|arm64>]
-# Backwards-compatible positional form: validate.sh <image-name> <output-dir>
 set -euo pipefail
+
+usage() {
+    echo "Usage: validate.sh --image-name <name> --output-dir <dir> [--arch <amd64|arm64>]" >&2
+}
 
 IMAGE_NAME=""
 IMAGE_DIR=""
 ARCH=""
 
-# Parse flags first; fall back to legacy positional arguments.
-if [[ "${1:-}" == --* ]]; then
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --image-name) IMAGE_NAME="$2"; shift 2 ;;
-            --output-dir) IMAGE_DIR="$2";  shift 2 ;;
-            --arch)       ARCH="$2";       shift 2 ;;
-            *) echo "Unknown argument: $1"; exit 1 ;;
-        esac
-    done
-else
-    IMAGE_NAME="${1:-k8s-node-ubuntu-2404-amd64}"
-    IMAGE_DIR="${2:-mkosi.output}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --image-name) IMAGE_NAME="$2"; shift 2 ;;
+        --output-dir) IMAGE_DIR="$2";  shift 2 ;;
+        --arch)       ARCH="$2";       shift 2 ;;
+        -h|--help)    usage; exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
+    esac
+done
+
+if [[ -z "$IMAGE_NAME" || -z "$IMAGE_DIR" ]]; then
+    echo "ERROR: --image-name and --output-dir are required" >&2
+    usage
+    exit 1
 fi
 
 echo "=== Validating ${IMAGE_NAME} image${ARCH:+ (arch=${ARCH})} ==="
@@ -75,11 +79,25 @@ ERRORS=0
 check_file() {
     local path="$1"
     local desc="$2"
-    if [[ -f "$MOUNT_DIR/$path" ]] || [[ -x "$MOUNT_DIR/$path" ]]; then
+    if [[ -f "$MOUNT_DIR/$path" ]]; then
         echo "  ✓ ${desc}: $(ls -la "$MOUNT_DIR/$path" | awk '{print $5, $NF}')"
     else
         echo "  ✗ ${desc}: MISSING ($path)"
         ERRORS=$((ERRORS + 1))
+    fi
+}
+
+check_exec() {
+    local path="$1"
+    local desc="$2"
+    if [[ ! -f "$MOUNT_DIR/$path" ]]; then
+        echo "  ✗ ${desc}: MISSING ($path)"
+        ERRORS=$((ERRORS + 1))
+    elif [[ ! -x "$MOUNT_DIR/$path" ]]; then
+        echo "  ✗ ${desc}: NOT EXECUTABLE ($path)"
+        ERRORS=$((ERRORS + 1))
+    else
+        echo "  ✓ ${desc}: $(ls -la "$MOUNT_DIR/$path" | awk '{print $5, $NF}')"
     fi
 }
 
@@ -96,23 +114,33 @@ check_dir() {
 
 echo ""
 echo "--- Kubernetes Binaries ---"
-check_file "usr/local/bin/kubelet" "kubelet"
-check_file "usr/local/bin/kubeadm" "kubeadm"
-check_file "usr/local/bin/kubectl" "kubectl"
-check_file "usr/local/bin/crictl" "crictl"
+check_exec "usr/local/bin/kubelet" "kubelet"
+check_exec "usr/local/bin/kubeadm" "kubeadm"
+check_exec "usr/local/bin/kubectl" "kubectl"
+check_exec "usr/local/bin/crictl" "crictl"
 
 echo ""
 echo "--- Container Runtime ---"
-check_file "usr/local/bin/containerd" "containerd"
-check_file "usr/local/sbin/runc" "runc"
+check_exec "usr/local/bin/containerd" "containerd"
+check_exec "usr/local/sbin/runc" "runc"
 check_file "etc/containerd/config.toml" "containerd config"
 
 echo ""
 echo "--- CNI Plugins ---"
 check_dir "opt/cni/bin" "CNI bin directory"
 if [[ -d "$MOUNT_DIR/opt/cni/bin" ]]; then
-    CNI_COUNT="$(find "$MOUNT_DIR/opt/cni/bin" -type f | wc -l)"
-    echo "  ✓ CNI plugins: ${CNI_COUNT} binaries found"
+    CNI_COUNT="$(find "$MOUNT_DIR/opt/cni/bin" -type f -executable | wc -l)"
+    echo "  ✓ CNI plugins: ${CNI_COUNT} executable binaries found"
+    # The upstream CNI plugins tarball ships non-binary files (e.g. LICENSE,
+    # README.md) alongside the binaries. Surface them for visibility but do
+    # not treat them as a validation failure.
+    CNI_NONEXEC_LIST="$(find "$MOUNT_DIR/opt/cni/bin" -type f ! -executable -printf '%P\n' | sort)"
+    if [[ -n "$CNI_NONEXEC_LIST" ]]; then
+        echo "  - CNI plugins: non-executable files in opt/cni/bin (informational):"
+        while IFS= read -r f; do
+            echo "      $f"
+        done <<< "$CNI_NONEXEC_LIST"
+    fi
 fi
 
 echo ""
@@ -169,12 +197,32 @@ else
     echo "  ✓ machine-id: empty (will be regenerated on first boot)"
 fi
 
-SSH_KEYS="$(find "$MOUNT_DIR/etc/ssh" -name 'ssh_host_*' 2>/dev/null | wc -l)"
-if [[ "$SSH_KEYS" -eq 0 ]]; then
-    echo "  ✓ SSH host keys: removed"
+if [[ -f "$MOUNT_DIR/etc/fstab" ]]; then
+    SWAP_LINES="$(awk '!/^[[:space:]]*#/ && $3 == "swap"' "$MOUNT_DIR/etc/fstab")"
+    if [[ -n "$SWAP_LINES" ]]; then
+        echo "  ✗ fstab: swap entry still present:"
+        printf '      %s\n' "$SWAP_LINES"
+        ERRORS=$((ERRORS + 1))
+    else
+        echo "  ✓ fstab: no swap entries"
+    fi
 else
-    echo "  ✗ SSH host keys: ${SSH_KEYS} keys still present"
-    ERRORS=$((ERRORS + 1))
+    echo "  - fstab: not present (skipped)"
+fi
+
+if [[ ! -d "$MOUNT_DIR/etc/ssh" ]]; then
+    echo "  ✓ SSH host keys: /etc/ssh not present (no host keys)"
+else
+    SSH_KEY_FILES=()
+    while IFS= read -r -d '' f; do
+        SSH_KEY_FILES+=("$f")
+    done < <(find "$MOUNT_DIR/etc/ssh" -name 'ssh_host_*' -print0 2>/dev/null)
+    if [[ "${#SSH_KEY_FILES[@]}" -eq 0 ]]; then
+        echo "  ✓ SSH host keys: removed"
+    else
+        echo "  ✗ SSH host keys: ${#SSH_KEY_FILES[@]} keys still present"
+        ERRORS=$((ERRORS + 1))
+    fi
 fi
 
 echo ""
