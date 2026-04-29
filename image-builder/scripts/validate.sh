@@ -25,12 +25,18 @@ fi
 
 echo "=== Validating ${IMAGE_NAME} image${ARCH:+ (arch=${ARCH})} ==="
 
-# Find the image file
-IMAGE_FILE="$(find "$IMAGE_DIR" -name "${IMAGE_NAME}*.raw" | head -1)"
-if [[ -z "$IMAGE_FILE" ]]; then
+# Find the image file and require an unambiguous match.
+mapfile -t IMAGE_FILES < <(find "$IMAGE_DIR" -type f -name "${IMAGE_NAME}*.raw")
+if [[ "${#IMAGE_FILES[@]}" -eq 0 ]]; then
     echo "ERROR: No image file found for ${IMAGE_NAME} in ${IMAGE_DIR}/"
     exit 1
 fi
+if [[ "${#IMAGE_FILES[@]}" -gt 1 ]]; then
+    echo "ERROR: Multiple image files found for ${IMAGE_NAME} in ${IMAGE_DIR}/; pass an exact output directory or image name:"
+    printf '  %s\n' "${IMAGE_FILES[@]}"
+    exit 1
+fi
+IMAGE_FILE="${IMAGE_FILES[0]}"
 echo "Image file: ${IMAGE_FILE} ($(du -h "$IMAGE_FILE" | awk '{print $1}'))"
 
 # Mount the image and inspect contents
@@ -153,11 +159,14 @@ fi
 
 echo ""
 echo "--- Sysprep Checks ---"
-if [[ -z "$(cat "$MOUNT_DIR/etc/machine-id" 2>/dev/null)" ]]; then
-    echo "  ✓ machine-id: empty (will be regenerated on first boot)"
-else
+if [[ ! -f "$MOUNT_DIR/etc/machine-id" ]]; then
+    echo "  ✗ machine-id: MISSING (expected present but empty)"
+    ERRORS=$((ERRORS + 1))
+elif [[ -s "$MOUNT_DIR/etc/machine-id" ]]; then
     echo "  ✗ machine-id: NOT empty"
     ERRORS=$((ERRORS + 1))
+else
+    echo "  ✓ machine-id: empty (will be regenerated on first boot)"
 fi
 
 SSH_KEYS="$(find "$MOUNT_DIR/etc/ssh" -name 'ssh_host_*' 2>/dev/null | wc -l)"
