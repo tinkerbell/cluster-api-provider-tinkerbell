@@ -1,0 +1,25 @@
+#!/bin/bash
+# mkosi.postoutput — Post-processing of built image files.
+# Generates checksums and prints metadata.
+set -euo pipefail
+
+echo "==> Post-output: Processing built images..."
+
+for img in "$OUTPUTDIR"/*.raw; do
+    [[ -f "$img" ]] || continue
+
+    echo "==> Compressing ${img} with gzip..."
+    gzip -f -k "$img"
+
+    echo "==> Generating checksums..."
+    sha256sum "$img" > "${img}.sha256"
+    sha256sum "${img}.gz" > "${img}.gz.sha256"
+
+    echo "==> Image metadata:"
+    echo "    File:       $(basename "$img")"
+    echo "    Raw size:   $(du -h "$img" | awk '{print $1}')"
+    echo "    Gzip size:  $(du -h "${img}.gz" | awk '{print $1}')"
+    echo "    SHA256:     $(awk '{print $1}' "${img}.gz.sha256")"
+done
+
+echo "==> Post-output complete."

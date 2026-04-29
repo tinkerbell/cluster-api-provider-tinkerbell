@@ -1,0 +1,11 @@
+mkosi.output/
+# mkosi caches
+mkosi.cache/
+mkosi.pkgcache/
+mkosi.builddir/
+# Local overrides
+mkosi.local.conf
+# Editor swap files
+*.swp
+*.swo
+*~

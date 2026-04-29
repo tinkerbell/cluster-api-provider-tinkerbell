@@ -1,0 +1,46 @@
+#!/bin/bash
+# mkosi.postinst — Post-installation configuration for Kubernetes node images.
+# Runs after all packages and binaries have been installed.
+set -euo pipefail
+
+: "${KUBERNETES_VERSION:?KUBERNETES_VERSION must be set}"
+
+echo "==> Writing Kubernetes version file..."
+echo "$KUBERNETES_VERSION" > "$BUILDROOT/etc/kubernetes-version"
+
+echo "==> Enabling systemd services..."
+systemctl --root="$BUILDROOT" enable containerd.service
+systemctl --root="$BUILDROOT" enable kubelet.service
+
+# Enable cloud-init services
+for svc in cloud-init-local cloud-init cloud-config cloud-final; do
+    if [[ -f "$BUILDROOT/usr/lib/systemd/system/${svc}.service" ]] || \
+       [[ -f "$BUILDROOT/lib/systemd/system/${svc}.service" ]]; then
+        systemctl --root="$BUILDROOT" enable "${svc}.service" || true
+    fi
+done
+
+# Enable SSH
+systemctl --root="$BUILDROOT" enable ssh.service
+
+echo "==> Configuring kernel modules to load at boot..."
+# The module list is dropped via mkosi.extra, but ensure the directory exists
+mkdir -p "$BUILDROOT/etc/modules-load.d"
+
+echo "==> Ensuring /etc/sysctl.d exists..."
+mkdir -p "$BUILDROOT/etc/sysctl.d"
+
+echo "==> Disabling swap..."
+# Remove any swap entries from fstab. Use a POSIX character class so the
+# pattern is portable across sed implementations (GNU sed accepts \s as an
+# extension, but POSIX sed does not).
+if [[ -f "$BUILDROOT/etc/fstab" ]]; then
+    sed -i '/[[:space:]]swap[[:space:]]/d' "$BUILDROOT/etc/fstab"
+fi
+
+echo "==> Creating kubelet configuration directories..."
+mkdir -p "$BUILDROOT/var/lib/kubelet"
+mkdir -p "$BUILDROOT/etc/kubernetes/manifests"
+mkdir -p "$BUILDROOT/etc/kubernetes/pki"
+
+echo "==> Post-installation complete."

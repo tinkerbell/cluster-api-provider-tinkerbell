@@ -1,0 +1,145 @@
+#!/bin/bash
+# mkosi.prepare — Download and install Kubernetes binaries, containerd, and dependencies.
+# Runs with network access inside the build root.
+# Called by mkosi with argument "final" for the main image.
+set -euo pipefail
+
+if [[ "${1:-}" != "final" ]]; then
+    exit 0
+fi
+
+# Use the build target architecture, not the host's. The Makefile passes
+# ARCH=amd64|arm64 via --environment; mkosi also exposes $ARCHITECTURE
+# (x86-64|arm64) as a fallback. Both are mapped to the binary release
+# naming used by Kubernetes/containerd/CNI/runc/crictl downloads.
+TARGET_ARCH="${ARCH:-${ARCHITECTURE:-$(uname -m)}}"
+case "$TARGET_ARCH" in
+    amd64|x86-64|x86_64) BIN_ARCH="amd64" ;;
+    arm64|aarch64)       BIN_ARCH="arm64" ;;
+    *) echo "Unsupported architecture: $TARGET_ARCH"; exit 1 ;;
+esac
+
+: "${KUBERNETES_VERSION:?KUBERNETES_VERSION must be set}"
+: "${CNI_VERSION:?CNI_VERSION must be set}"
+: "${CRICTL_VERSION:?CRICTL_VERSION must be set}"
+: "${CONTAINERD_VERSION:?CONTAINERD_VERSION must be set}"
+: "${RUNC_VERSION:?RUNC_VERSION must be set}"
+: "${PAUSE_IMAGE:?PAUSE_IMAGE must be set}"
+
+DOWNLOAD_DIR="$(mktemp -d)"
+trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+
+BIN_DIR="$BUILDROOT/usr/local/bin"
+OPT_CNI_DIR="$BUILDROOT/opt/cni/bin"
+
+mkdir -p "$BIN_DIR" "$OPT_CNI_DIR"
+
+echo "==> Downloading Kubernetes ${KUBERNETES_VERSION} binaries (${BIN_ARCH})..."
+for binary in kubelet kubeadm kubectl; do
+    url="https://dl.k8s.io/release/${KUBERNETES_VERSION}/bin/linux/${BIN_ARCH}/${binary}"
+    sha_url="${url}.sha256"
+
+    echo "    Downloading ${binary}..."
+    curl -fsSL -o "$DOWNLOAD_DIR/${binary}" "$url"
+    curl -fsSL -o "$DOWNLOAD_DIR/${binary}.sha256" "$sha_url"
+
+    echo "    Verifying checksum for ${binary}..."
+    expected="$(cat "$DOWNLOAD_DIR/${binary}.sha256")"
+    actual="$(sha256sum "$DOWNLOAD_DIR/${binary}" | awk '{print $1}')"
+    if [[ "$expected" != "$actual" ]]; then
+        echo "ERROR: SHA256 mismatch for ${binary}: expected=${expected} actual=${actual}"
+        exit 1
+    fi
+
+    install -m 0755 "$DOWNLOAD_DIR/${binary}" "$BIN_DIR/${binary}"
+done
+
+echo "==> Downloading CNI plugins ${CNI_VERSION}..."
+cni_tarball="cni-plugins-linux-${BIN_ARCH}-${CNI_VERSION}.tgz"
+cni_url="https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/${cni_tarball}"
+cni_sha_url="${cni_url}.sha256"
+
+curl -fsSL -o "$DOWNLOAD_DIR/${cni_tarball}" "$cni_url"
+curl -fsSL -o "$DOWNLOAD_DIR/${cni_tarball}.sha256" "$cni_sha_url"
+
+echo "    Verifying checksum..."
+expected="$(awk '{print $1}' "$DOWNLOAD_DIR/${cni_tarball}.sha256")"
+actual="$(sha256sum "$DOWNLOAD_DIR/${cni_tarball}" | awk '{print $1}')"
+if [[ "$expected" != "$actual" ]]; then
+    echo "ERROR: SHA256 mismatch for CNI plugins: expected=${expected} actual=${actual}"
+    exit 1
+fi
+tar -xzf "$DOWNLOAD_DIR/${cni_tarball}" -C "$OPT_CNI_DIR"
+
+# Verify a single artifact against its entry in a release sha256sum file.
+# Usage: verify_release_checksum <checksum_file> <artifact_name> <artifact_path>
+verify_release_checksum() {
+    local checksum_file="$1"
+    local artifact_name="$2"
+    local artifact_path="$3"
+    local checksum_line
+
+    checksum_line="$(grep -F " ${artifact_name}" "$checksum_file" || true)"
+    if [[ -z "$checksum_line" ]]; then
+        echo "ERROR: checksum entry for ${artifact_name} not found in ${checksum_file}" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "$checksum_line" | (cd "$(dirname "$artifact_path")" && sha256sum -c -)
+}
+
+echo "==> Downloading crictl ${CRICTL_VERSION}..."
+crictl_tarball="crictl-${CRICTL_VERSION}-linux-${BIN_ARCH}.tar.gz"
+crictl_url="https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/${crictl_tarball}"
+crictl_sha_url="${crictl_url}.sha256"
+
+curl -fsSL -o "$DOWNLOAD_DIR/${crictl_tarball}" "$crictl_url"
+curl -fsSL -o "$DOWNLOAD_DIR/${crictl_tarball}.sha256" "$crictl_sha_url"
+
+echo "    Verifying checksum..."
+expected="$(awk '{print $1}' "$DOWNLOAD_DIR/${crictl_tarball}.sha256")"
+actual="$(sha256sum "$DOWNLOAD_DIR/${crictl_tarball}" | awk '{print $1}')"
+if [[ "$expected" != "$actual" ]]; then
+    echo "ERROR: SHA256 mismatch for crictl: expected=${expected} actual=${actual}"
+    exit 1
+fi
+tar -xzf "$DOWNLOAD_DIR/${crictl_tarball}" -C "$BIN_DIR"
+chmod 0755 "$BIN_DIR/crictl"
+
+echo "==> Downloading containerd ${CONTAINERD_VERSION}..."
+containerd_tarball="containerd-${CONTAINERD_VERSION}-linux-${BIN_ARCH}.tar.gz"
+containerd_url="https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/${containerd_tarball}"
+containerd_checksum_url="${containerd_url}.sha256sum"
+containerd_checksum_file="$DOWNLOAD_DIR/${containerd_tarball}.sha256sum"
+curl -fsSL -o "$DOWNLOAD_DIR/${containerd_tarball}" "$containerd_url"
+curl -fsSL -o "$containerd_checksum_file" "$containerd_checksum_url"
+verify_release_checksum "$containerd_checksum_file" "$containerd_tarball" "$DOWNLOAD_DIR/${containerd_tarball}"
+tar -xzf "$DOWNLOAD_DIR/${containerd_tarball}" -C "$BUILDROOT/usr/local"
+
+echo "==> Downloading runc ${RUNC_VERSION}..."
+runc_artifact="runc.${BIN_ARCH}"
+runc_url="https://github.com/opencontainers/runc/releases/download/${RUNC_VERSION}/${runc_artifact}"
+runc_checksums_url="https://github.com/opencontainers/runc/releases/download/${RUNC_VERSION}/runc.sha256sum"
+runc_checksums_file="$DOWNLOAD_DIR/runc.sha256sum"
+curl -fsSL -o "$DOWNLOAD_DIR/${runc_artifact}" "$runc_url"
+curl -fsSL -o "$runc_checksums_file" "$runc_checksums_url"
+verify_release_checksum "$runc_checksums_file" "$runc_artifact" "$DOWNLOAD_DIR/${runc_artifact}"
+install -m 0755 "$DOWNLOAD_DIR/${runc_artifact}" "$BUILDROOT/usr/local/sbin/runc"
+
+# Render containerd config with the configured pause image.
+# Other containerd files (systemd unit, crictl.yaml) are static overlays in mkosi.extra/.
+mkdir -p "$BUILDROOT/etc/containerd"
+cat > "$BUILDROOT/etc/containerd/config.toml" << EOF
+version = 2
+
+[plugins."io.containerd.grpc.v1.cri"]
+  sandbox_image = "${PAUSE_IMAGE:-registry.k8s.io/pause:3.10}"
+  [plugins."io.containerd.grpc.v1.cri".containerd]
+    default_runtime_name = "runc"
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+        SystemdCgroup = true
+EOF
+
+echo "==> All binaries installed successfully."
