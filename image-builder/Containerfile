@@ -1,5 +1,12 @@
 # Containerized build environment for mkosi-based Kubernetes CAPI image builder.
 # Based on the pattern from https://github.com/tinkerbell/captain/blob/main/Dockerfile
+#
+# This image is host-arch native (no --platform on docker build/run). mkosi
+# runs natively and cross-installs the target architecture via apt with
+# APT::Architecture=<target> + qemu-user-static (registered via binfmt-misc).
+# Running mkosi itself under qemu-user emulation breaks because mkosi's
+# seccomp filters cannot be loaded under qemu-user.
+#
 # Usage: docker build -t k8s-image-builder . && docker run --rm --privileged -v $(pwd):/work k8s-image-builder build
 
 FROM debian:trixie
@@ -33,15 +40,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         btrfs-progs \
         xfsprogs \
         grub-common \
-        grub-efi-amd64-bin \
-        grub-pc-bin \
         xorriso \
         qemu-utils \
+        qemu-user-static \
+        binfmt-support \
         curl \
         ca-certificates \
         git \
         coreutils \
         tar \
+    && rm -rf /var/lib/apt/lists/*
+
+# Host-arch GRUB packages are not strictly needed (mkosi installs the
+# target's GRUB into BUILDROOT via apt), but having them lets mkosi run
+# `grub-install` and friends locally for debugging without surprises.
+RUN apt-get update && \
+    HOST_ARCH="$(dpkg --print-architecture)" && \
+    case "$HOST_ARCH" in \
+        amd64) apt-get install -y --no-install-recommends grub-pc-bin grub-efi-amd64-bin ;; \
+        arm64) apt-get install -y --no-install-recommends grub-efi-arm64-bin ;; \
+        *) echo "Unsupported builder arch: $HOST_ARCH"; exit 1 ;; \
+    esac \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --break-system-packages \
@@ -50,10 +69,11 @@ RUN pip3 install --break-system-packages \
 
 RUN mkosi --version
 
-# Install oras CLI
+# Install oras CLI for the host architecture of this builder image.
 ARG ORAS_VERSION=1.3.2
-RUN curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin oras
+RUN ORAS_ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_${ORAS_ARCH}.tar.gz" \
+        | tar -xz -C /usr/local/bin oras
 
 WORKDIR /work
 ENTRYPOINT ["mkosi"]

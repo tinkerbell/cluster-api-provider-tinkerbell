@@ -3,7 +3,7 @@
 #
 # Usage:
 #   make build KUBERNETES_VERSION=v1.35.2
-#   make build UBUNTU_VERSION=24.04
+#   make build UBUNTU_VERSION=24.04 ARCH=arm64
 #   make push OCI_REGISTRY=ghcr.io OCI_REPOSITORY=myorg/image-builder/ubuntu
 
 SHELL := /bin/bash
@@ -12,9 +12,11 @@ SHELL := /bin/bash
 # ── User-facing configuration ─────────────────────────────────────────────────
 KUBERNETES_VERSION ?= v1.35.2
 UBUNTU_VERSION     ?= 24.04
+# Target CPU architecture: amd64 or arm64. Defaults to the host architecture.
+ARCH               ?= $(shell uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/)
 OCI_REGISTRY       ?= ghcr.io
 OCI_REPOSITORY     ?= tinkerbell/cluster-api-provider-tinkerbell/ubuntu
-OCI_TAG            ?= $(UBUNTU_SHORT)-$(KUBERNETES_VERSION).gz
+OCI_TAG            ?= $(UBUNTU_SHORT)-$(KUBERNETES_VERSION)-$(ARCH).gz
 
 # ── Internal component versions ───────────────────────────────────────────────
 CNI_VERSION        ?= v1.7.1
@@ -29,16 +31,29 @@ UBUNTU_CODENAME_24.04 := noble
 
 UBUNTU_RELEASE := $(UBUNTU_CODENAME_$(UBUNTU_VERSION))
 
+# ── Architecture validation & mkosi mapping ───────────────────────────────────
+ifeq ($(filter $(ARCH),amd64 arm64),)
+$(error Unsupported ARCH=$(ARCH); supported values: amd64, arm64)
+endif
+# mkosi uses "x86-64" / "arm64" for --architecture
+MKOSI_ARCH_amd64 := x86-64
+MKOSI_ARCH_arm64 := arm64
+MKOSI_ARCH := $(MKOSI_ARCH_$(ARCH))
+
 # ── Derived values ────────────────────────────────────────────────────────────
 UBUNTU_SHORT := $(subst .,,$(UBUNTU_VERSION))
-IMAGE_ID     := k8s-node-ubuntu-$(UBUNTU_SHORT)
+IMAGE_ID     := k8s-node-ubuntu-$(UBUNTU_SHORT)-$(ARCH)
 
 # ── Container build settings ──────────────────────────────────────────────────
 BUILDER_IMAGE     ?= k8s-image-builder
+# The builder image is host-arch native; mkosi cross-installs the target
+# arch via apt (APT::Architecture=$(ARCH)) and binfmt-misc (qemu-user-static)
+# inside the container. This avoids the seccomp incompatibility that
+# breaks mkosi when its own process runs under qemu-user emulation.
 CONTAINER_RUNTIME ?= docker
 
 # ── Directories ───────────────────────────────────────────────────────────────
-OUTPUT_DIR  := mkosi.output/$(UBUNTU_VERSION)/$(KUBERNETES_VERSION)
+OUTPUT_DIR  := mkosi.output/$(UBUNTU_VERSION)/$(KUBERNETES_VERSION)/$(ARCH)
 CACHE_DIR   := mkosi.cache
 SCRIPTS_DIR := scripts
 
@@ -47,6 +62,7 @@ MKOSI := mkosi $(if $(FORCE),--force)
 
 MKOSI_ENV := \
 	--environment=KUBERNETES_VERSION=$(KUBERNETES_VERSION) \
+	--environment=ARCH=$(ARCH) \
 	--environment=CNI_VERSION=$(CNI_VERSION) \
 	--environment=CRICTL_VERSION=$(CRICTL_VERSION) \
 	--environment=CONTAINERD_VERSION=$(CONTAINERD_VERSION) \
@@ -54,6 +70,7 @@ MKOSI_ENV := \
 	--environment=PAUSE_IMAGE=$(PAUSE_IMAGE)
 
 MKOSI_SETTINGS := \
+	--architecture=$(MKOSI_ARCH) \
 	--release=$(UBUNTU_RELEASE) \
 	--image-id=$(IMAGE_ID) \
 	--output-directory=$(OUTPUT_DIR)
@@ -64,7 +81,6 @@ MKOSI_SETTINGS := \
 .PHONY: build
 build: ## Build Ubuntu image with containerd
 	$(MKOSI) $(MKOSI_ENV) $(MKOSI_SETTINGS) build
-	$(MAKE) fix-perms
 
 ##@ Publishing
 
@@ -73,6 +89,7 @@ push: ## Build and push image to OCI registry
 	@$(SCRIPTS_DIR)/push-oci.sh \
 		--image-name $(IMAGE_ID) \
 		--kubernetes-version $(KUBERNETES_VERSION) \
+		--arch $(ARCH) \
 		--repository $(OCI_REGISTRY)/$(OCI_REPOSITORY) \
 		--tag $(OCI_TAG) \
 		--output-dir $(OUTPUT_DIR)
@@ -84,16 +101,17 @@ login: ## Log in to OCI registry
 ##@ Containerized
 
 .PHONY: builder-image
-builder-image: ## Build the containerized build environment
+builder-image: ## Build the containerized build environment (host-arch)
 	$(CONTAINER_RUNTIME) build -t $(BUILDER_IMAGE) -f Containerfile .
 
 .PHONY: build-containerized
-build-containerized: builder-image ## Build image inside container
+build-containerized: builder-image ## Build image inside container; cross-arch via mkosi+apt+binfmt
 	$(CONTAINER_RUNTIME) run --rm --privileged \
 		-v $$(pwd):/work:z \
 		-v $$(pwd)/$(OUTPUT_DIR):/work/$(OUTPUT_DIR):z \
 		-w /work \
 		-e KUBERNETES_VERSION=$(KUBERNETES_VERSION) \
+		-e ARCH=$(ARCH) \
 		-e CNI_VERSION=$(CNI_VERSION) \
 		-e CRICTL_VERSION=$(CRICTL_VERSION) \
 		-e CONTAINERD_VERSION=$(CONTAINERD_VERSION) \
@@ -110,13 +128,20 @@ build-containerized: builder-image ## Build image inside container
 
 .PHONY: validate
 validate: ## Validate the built image
-	@$(SCRIPTS_DIR)/validate.sh $(IMAGE_ID) $(OUTPUT_DIR)
+	@$(SCRIPTS_DIR)/validate.sh --image-name $(IMAGE_ID) --output-dir $(OUTPUT_DIR) --arch $(ARCH)
 
 ##@ Permissions
 
 .PHONY: fix-perms
-fix-perms: ## Fix output file ownership to current user
-	$(CONTAINER_RUNTIME) run --rm -v $$(pwd)/$(OUTPUT_DIR):/out alpine chown -R $$(id -u):$$(id -g) /out
+fix-perms: ## Fix output file ownership to current user (no-op if already owned by $$USER)
+	@if [ ! -d "$(OUTPUT_DIR)" ]; then \
+		echo "==> fix-perms: $(OUTPUT_DIR) does not exist; skipping"; \
+	elif [ "$$(stat -c %u "$(OUTPUT_DIR)")" = "$$(id -u)" ]; then \
+		echo "==> fix-perms: $(OUTPUT_DIR) already owned by uid $$(id -u); skipping"; \
+	else \
+		echo "==> fix-perms: chowning $(OUTPUT_DIR) to $$(id -u):$$(id -g) via $(CONTAINER_RUNTIME)"; \
+		$(CONTAINER_RUNTIME) run --rm -v $$(pwd)/$(OUTPUT_DIR):/out alpine chown -R $$(id -u):$$(id -g) /out; \
+	fi
 
 ##@ Cleanup
 
@@ -143,6 +168,21 @@ versions: ## Show supported Ubuntu versions
 	@echo "  24.04     noble       k8s-node-ubuntu-2404"
 	@echo ""
 
+.PHONY: archs
+archs: ## Show supported target architectures
+	@echo ""
+	@echo "Supported target architectures (ARCH=):"
+	@echo ""
+	@echo "  ARCH    mkosi name   Boot mode      Bootloader packages"
+	@echo "  ─────   ──────────   ────────────   ──────────────────────────────────────────────"
+	@echo "  amd64   x86-64       BIOS + UEFI    grub-pc-bin, grub-efi-amd64-bin, shim-signed"
+	@echo "  arm64   arm64        UEFI only      grub-efi-arm64-bin, shim-signed"
+	@echo ""
+	@echo "  Default: host architecture (currently: $(ARCH))"
+	@echo "  Output:  mkosi.output/<UBUNTU_VERSION>/<KUBERNETES_VERSION>/<ARCH>/"
+	@echo "  OCI tag: <ubuntu-short>-<k8s-version>-<arch>.gz (e.g. 2404-v1.35.2-arm64.gz)"
+	@echo ""
+
 .PHONY: help
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m [VAR=value ...]\n"} \
@@ -152,7 +192,15 @@ help: ## Show this help
 	@echo "Variables:"
 	@echo "  KUBERNETES_VERSION  Kubernetes version to install  (default: $(KUBERNETES_VERSION))"
 	@echo "  UBUNTU_VERSION      Ubuntu version to build        (default: $(UBUNTU_VERSION))"
+	@echo "  ARCH                Target architecture            (default: $(ARCH); one of amd64, arm64; see 'make archs')"
 	@echo "  FORCE               Set to 1 to rebuild existing   (default: unset)"
+	@echo "  CNI_VERSION         CNI plugins version            (default: $(CNI_VERSION))"
+	@echo "  CRICTL_VERSION      crictl version                 (default: $(CRICTL_VERSION))"
+	@echo "  CONTAINERD_VERSION  containerd version             (default: $(CONTAINERD_VERSION))"
+	@echo "  RUNC_VERSION        runc version                   (default: $(RUNC_VERSION))"
+	@echo "  PAUSE_IMAGE         Pause container image          (default: $(PAUSE_IMAGE))"
 	@echo "  OCI_REGISTRY        OCI registry hostname          (default: $(OCI_REGISTRY))"
 	@echo "  OCI_REPOSITORY      Full OCI repository path       (default: $(OCI_REPOSITORY))"
 	@echo "  OCI_TAG             OCI image tag                  (default: $(OCI_TAG))"
+	@echo "  BUILDER_IMAGE       Local tag for the builder img  (default: $(BUILDER_IMAGE))"
+	@echo "  CONTAINER_RUNTIME   docker or podman               (default: $(CONTAINER_RUNTIME))"

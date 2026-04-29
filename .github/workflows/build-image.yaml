@@ -1,4 +1,5 @@
 name: Build and Push Kubernetes Node Image
+run-name: Build k8s ${{ inputs.kubernetesVersion || 'v1.35.2' }} (ubuntu 24.04)
 
 on:
   workflow_dispatch:
@@ -19,59 +20,88 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          # NOTE: cross-arch builds via QEMU/binfmt are not supported —
+          # mkosi's seccomp filters fail to load under qemu-user emulation.
+          # Use a native arm64 runner (above) or an arm64 host.
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: setup-mkosi
         uses: systemd/mkosi@v26
 
+      - name: Install mkosi Python dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-pefile mtools
+
       - name: Build image
+        working-directory: image-builder
         run: |
           make build \
+            ARCH=${{ matrix.arch }} \
             KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }} \
             UBUNTU_VERSION=${{ env.UBUNTU_VERSION }}
 
       - name: Validate image
+        working-directory: image-builder
         run: |
           make validate \
+            ARCH=${{ matrix.arch }} \
             UBUNTU_VERSION=${{ env.UBUNTU_VERSION }} \
             KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }}
 
       - name: Upload image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ubuntu-${{ env.UBUNTU_VERSION }}-k8s-${{ env.KUBERNETES_VERSION }}
+          name: ubuntu-${{ env.UBUNTU_VERSION }}-k8s-${{ env.KUBERNETES_VERSION }}-${{ matrix.arch }}
           path: |
-            mkosi.output/${{ env.UBUNTU_VERSION }}/${{ env.KUBERNETES_VERSION }}/*.raw.gz
-            mkosi.output/${{ env.UBUNTU_VERSION }}/${{ env.KUBERNETES_VERSION }}/*.sha256
+            image-builder/mkosi.output/${{ env.UBUNTU_VERSION }}/${{ env.KUBERNETES_VERSION }}/${{ matrix.arch }}/*.raw.gz
+            image-builder/mkosi.output/${{ env.UBUNTU_VERSION }}/${{ env.KUBERNETES_VERSION }}/${{ matrix.arch }}/*.sha256
           retention-days: 2
 
   push:
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download image artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: ubuntu-${{ env.UBUNTU_VERSION }}-k8s-${{ env.KUBERNETES_VERSION }}
-          path: mkosi.output/${{ env.UBUNTU_VERSION }}/${{ env.KUBERNETES_VERSION }}/
+          name: ubuntu-${{ env.UBUNTU_VERSION }}-k8s-${{ env.KUBERNETES_VERSION }}-${{ matrix.arch }}
+          path: image-builder/mkosi.output/${{ env.UBUNTU_VERSION }}/${{ env.KUBERNETES_VERSION }}/${{ matrix.arch }}/
 
       - name: Install oras
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Log in to container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute lowercase repository owner
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Push image to OCI registry
+        working-directory: image-builder
         run: |
           make push \
-            KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }}
+            ARCH=${{ matrix.arch }} \
+            KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }} \
+            OCI_REGISTRY=${{ env.REGISTRY }} \
+            OCI_REPOSITORY=${OWNER_LC}/cluster-api-provider-tinkerbell/ubuntu

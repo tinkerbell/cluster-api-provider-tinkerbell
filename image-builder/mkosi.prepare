@@ -8,11 +8,15 @@ if [[ "${1:-}" != "final" ]]; then
     exit 0
 fi
 
-ARCH="$(uname -m)"
-case "$ARCH" in
-    x86_64)  BIN_ARCH="amd64" ;;
-    aarch64) BIN_ARCH="arm64" ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+# Use the build target architecture, not the host's. The Makefile passes
+# ARCH=amd64|arm64 via --environment; mkosi also exposes $ARCHITECTURE
+# (x86-64|arm64) as a fallback. Both are mapped to the binary release
+# naming used by Kubernetes/containerd/CNI/runc/crictl downloads.
+TARGET_ARCH="${ARCH:-${ARCHITECTURE:-$(uname -m)}}"
+case "$TARGET_ARCH" in
+    amd64|x86-64|x86_64) BIN_ARCH="amd64" ;;
+    arm64|aarch64)       BIN_ARCH="arm64" ;;
+    *) echo "Unsupported architecture: $TARGET_ARCH"; exit 1 ;;
 esac
 
 : "${KUBERNETES_VERSION:?KUBERNETES_VERSION must be set}"
@@ -87,12 +91,18 @@ verify_release_checksum() {
 echo "==> Downloading crictl ${CRICTL_VERSION}..."
 crictl_tarball="crictl-${CRICTL_VERSION}-linux-${BIN_ARCH}.tar.gz"
 crictl_url="https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/${crictl_tarball}"
-crictl_checksums_url="https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/sha256sum.txt"
-crictl_checksums_file="$DOWNLOAD_DIR/crictl-sha256sum.txt"
+crictl_sha_url="${crictl_url}.sha256"
 
 curl -fsSL -o "$DOWNLOAD_DIR/${crictl_tarball}" "$crictl_url"
-curl -fsSL -o "$crictl_checksums_file" "$crictl_checksums_url"
-verify_release_checksum "$crictl_checksums_file" "$crictl_tarball" "$DOWNLOAD_DIR/${crictl_tarball}"
+curl -fsSL -o "$DOWNLOAD_DIR/${crictl_tarball}.sha256" "$crictl_sha_url"
+
+echo "    Verifying checksum..."
+expected="$(awk '{print $1}' "$DOWNLOAD_DIR/${crictl_tarball}.sha256")"
+actual="$(sha256sum "$DOWNLOAD_DIR/${crictl_tarball}" | awk '{print $1}')"
+if [[ "$expected" != "$actual" ]]; then
+    echo "ERROR: SHA256 mismatch for crictl: expected=${expected} actual=${actual}"
+    exit 1
+fi
 tar -xzf "$DOWNLOAD_DIR/${crictl_tarball}" -C "$BIN_DIR"
 chmod 0755 "$BIN_DIR/crictl"
 

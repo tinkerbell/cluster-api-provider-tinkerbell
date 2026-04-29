@@ -1,12 +1,29 @@
 #!/bin/bash
 # Validate a built image by checking for required Kubernetes binaries and configuration.
-# Usage: validate.sh <image-id>
+# Usage: validate.sh --image-name <name> --output-dir <dir> [--arch <amd64|arm64>]
+# Backwards-compatible positional form: validate.sh <image-name> <output-dir>
 set -euo pipefail
 
-IMAGE_NAME="${1:-k8s-node-ubuntu-2404}"
-IMAGE_DIR="${2:-mkosi.output}"
+IMAGE_NAME=""
+IMAGE_DIR=""
+ARCH=""
 
-echo "=== Validating ${IMAGE_NAME} image ==="
+# Parse flags first; fall back to legacy positional arguments.
+if [[ "${1:-}" == --* ]]; then
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --image-name) IMAGE_NAME="$2"; shift 2 ;;
+            --output-dir) IMAGE_DIR="$2";  shift 2 ;;
+            --arch)       ARCH="$2";       shift 2 ;;
+            *) echo "Unknown argument: $1"; exit 1 ;;
+        esac
+    done
+else
+    IMAGE_NAME="${1:-k8s-node-ubuntu-2404-amd64}"
+    IMAGE_DIR="${2:-mkosi.output}"
+fi
+
+echo "=== Validating ${IMAGE_NAME} image${ARCH:+ (arch=${ARCH})} ==="
 
 # Find the image file
 IMAGE_FILE="$(find "$IMAGE_DIR" -name "${IMAGE_NAME}*.raw" | head -1)"
@@ -27,8 +44,9 @@ cleanup() {
 trap cleanup EXIT
 
 # Find the root partition and mount it.
-# Layout: p1=ESP (vfat), p2=BIOS boot (no fs, 1M), p3=root (ext4).
-# Detect the ext4 partition dynamically so this keeps working if the layout changes.
+# Layout (amd64): p1=ESP (vfat), p2=BIOS boot (no fs, 1M), p3=root (ext4).
+# Layout (arm64): p1=ESP (vfat), p2=root (ext4) — no BIOS boot partition.
+# Detect the ext4 partition dynamically so this keeps working as the layout evolves.
 LOOP_DEV="$(sudo losetup --find --show --partscan "$IMAGE_FILE")"
 ROOT_PART=""
 for part in "${LOOP_DEV}"p*; do
@@ -106,6 +124,31 @@ if [[ -f "$MOUNT_DIR/etc/kubernetes-version" ]]; then
 else
     echo "  ✗ Version file missing"
     ERRORS=$((ERRORS + 1))
+fi
+
+if [[ -n "$ARCH" ]]; then
+    echo ""
+    echo "--- Binary Architecture (expected: ${ARCH}) ---"
+    case "$ARCH" in
+        amd64) EXPECTED_ELF="x86-64" ;;
+        arm64) EXPECTED_ELF="ARM aarch64" ;;
+        *) EXPECTED_ELF="" ;;
+    esac
+    if [[ -n "$EXPECTED_ELF" ]] && command -v file >/dev/null 2>&1; then
+        for bin in usr/local/bin/kubelet usr/local/bin/containerd usr/local/sbin/runc; do
+            if [[ -f "$MOUNT_DIR/$bin" ]]; then
+                FILE_INFO="$(file -b "$MOUNT_DIR/$bin")"
+                if grep -qF "$EXPECTED_ELF" <<<"$FILE_INFO"; then
+                    echo "  ✓ ${bin}: ${EXPECTED_ELF}"
+                else
+                    echo "  ✗ ${bin}: expected '${EXPECTED_ELF}', got: ${FILE_INFO}"
+                    ERRORS=$((ERRORS + 1))
+                fi
+            fi
+        done
+    else
+        echo "  - skipped (file(1) not available or unknown arch)"
+    fi
 fi
 
 echo ""
