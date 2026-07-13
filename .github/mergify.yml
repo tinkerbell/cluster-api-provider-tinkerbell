@@ -22,11 +22,9 @@ queue_rules:
       - check-success="Validate test"
       - check-success="Validate verify"
     merge_method: merge
-    commit_message_template: |
-      {{ title }} (#{{ number }})
-
-      {{ body }}
-
+    commit_message_format:
+      title: pr-title
+      body: pr-body
 pull_request_rules:
   - name: refactored queue action rule
     conditions: []
