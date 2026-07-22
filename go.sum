@@ -156,8 +156,8 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/tinkerbell/tinkerbell/api v0.23.0 h1:Au7qacPsSViZtPYU4Q0H41UhtUQYmrZse549vDpNI4M=
-github.com/tinkerbell/tinkerbell/api v0.23.0/go.mod h1:S1DVHOyJ3FjthCv9iDURC3rVrRgh4jOLbohocJUbxMU=
+github.com/tinkerbell/tinkerbell/api v0.24.0 h1:jJu89qzpLTOmxGv5G7bds23PPsSZEiIJVSXIwQLs9s4=
+github.com/tinkerbell/tinkerbell/api v0.24.0/go.mod h1:CVElzFYReaUPD2h3ncpvE/qViu2OmbW6xe8rXAZCb7o=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
