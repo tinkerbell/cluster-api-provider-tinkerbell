@@ -19,6 +19,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -192,8 +193,17 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	scope.machine = machine
 	scope.bootstrapCloudConfig = bootstrapCloudConfig
 	scope.tinkerbellCluster = tinkerbellCluster
+	if err := scope.Reconcile(); err != nil {
+		if errors.Is(err, errHardwareClaimRequeue) {
+			log.V(4).Info("Hardware claim contention, requeuing", "error", err)
 
-	return ctrl.Result{}, scope.Reconcile()
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager configures reconciler with a given manager.

@@ -25,8 +25,10 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega" //nolint:revive // one day we will remove gomega
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -293,6 +295,31 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()
 }
 
+type hardwarePatchConflictClient struct {
+	client.Client
+}
+
+func (c *hardwarePatchConflictClient) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.PatchOption,
+) error {
+	if _, ok := obj.(*tinkv1.Hardware); ok {
+		return apierrors.NewConflict(
+			schema.GroupResource{Group: tinkv1.GroupVersion.Group, Resource: "hardware"},
+			obj.GetName(),
+			fmt.Errorf("forced Hardware claim conflict"),
+		)
+	}
+
+	if err := c.Client.Patch(ctx, obj, patch, opts...); err != nil {
+		return fmt.Errorf("patching non-Hardware object: %w", err)
+	}
+
+	return nil
+}
+
 func testScheme(g Gomega) *runtime.Scheme {
 	scheme := runtime.NewScheme()
 
@@ -471,6 +498,84 @@ func Test_Machine_reconciliation_with_available_hardware(t *testing.T) {
 			t.Error(diff)
 		}
 	})
+}
+
+// Once the Hardware is claimed by the Machine, subsequent reconciles must not write it
+// again: an unnecessary write adds avoidable conflict opportunities for other writers.
+func Test_Machine_reconciliation_does_not_rewrite_already_claimed_hardware(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	client := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+	ctx := context.Background()
+
+	hardwareNamespacedName := types.NamespacedName{
+		Name:      hardwareName,
+		Namespace: clusterNamespace,
+	}
+
+	claimedHardware := &tinkv1.Hardware{}
+	g.Expect(client.Get(ctx, hardwareNamespacedName, claimedHardware)).To(Succeed())
+
+	_, err = reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+	reclaimedHardware := &tinkv1.Hardware{}
+	g.Expect(client.Get(ctx, hardwareNamespacedName, reclaimedHardware)).To(Succeed())
+
+	g.Expect(reclaimedHardware.ResourceVersion).To(Equal(claimedHardware.ResourceVersion),
+		"Expected already-claimed Hardware not to be rewritten on subsequent reconciles")
+}
+
+func Test_Machine_reconciliation_quietly_requeues_hardware_claim_conflict(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hardwareUUID := uuid.New().String()
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+		validHardware(hardwareName, hardwareUUID, hardwareIP),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+
+	managementClient := kubernetesClientWithObjects(t, objects)
+	tinkerbellClient := &hardwarePatchConflictClient{Client: managementClient}
+
+	result, err := reconcileMachineWithClients(
+		managementClient,
+		tinkerbellClient,
+		tinkerbellMachineName,
+		clusterNamespace,
+	)
+	g.Expect(err).NotTo(HaveOccurred(), "Expected Hardware claim conflict to requeue without an error")
+	g.Expect(result.RequeueAfter).To(BeNumerically(">", 0), "Expected an explicit delayed requeue")
+
+	persisted := &tinkv1.Hardware{}
+	g.Expect(managementClient.Get(
+		context.Background(),
+		types.NamespacedName{Name: hardwareName, Namespace: clusterNamespace},
+		persisted,
+	)).To(Succeed())
+	g.Expect(persisted.Labels).NotTo(HaveKey(machine.HardwareOwnerNameLabel),
+		"Expected failed claim not to persist an owner")
 }
 
 func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
@@ -782,6 +887,15 @@ func machineReconciliationPanicsWhenReconcilerHasNoClientSet(t *testing.T) {
 
 //nolint:unparam
 func reconcileMachineWithClient(client client.Client, name, namespace string) (ctrl.Result, error) {
+	return reconcileMachineWithClients(client, client, name, namespace)
+}
+
+func reconcileMachineWithClients(
+	managementClient client.Client,
+	tinkerbellClient client.Client,
+	name,
+	namespace string,
+) (ctrl.Result, error) {
 	scheme := runtime.NewScheme()
 	_ = controller.AddToSchemeTinkerbell(scheme)
 	_ = infrastructurev1.AddToScheme(scheme)
@@ -789,8 +903,8 @@ func reconcileMachineWithClient(client client.Client, name, namespace string) (c
 	_ = corev1.AddToScheme(scheme)
 
 	machineController := &machine.TinkerbellMachineReconciler{
-		Client:           client,
-		TinkerbellClient: client,
+		Client:           managementClient,
+		TinkerbellClient: tinkerbellClient,
 		Scheme:           scheme,
 	}
 
