@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: tinkerbellmachines.infrastructure.cluster.x-k8s.io
 spec:
   group: infrastructure.cluster.x-k8s.io
@@ -22,7 +22,7 @@ spec:
       name: Cluster
       type: string
     - description: Tinkerbell instance state
-      jsonPath: .status.instanceState
+      jsonPath: .status.instanceStatus
       name: State
       type: string
     - description: Machine ready status
@@ -37,6 +37,9 @@ spec:
       jsonPath: .metadata.ownerReferences[?(@.kind=="Machine")].name
       name: Machine
       type: string
+    deprecated: true
+    deprecationWarning: infrastructure.cluster.x-k8s.io/v1beta1 is deprecated; use
+      v1beta2. v1beta1 will be removed in CAPT v0.9.0
     name: v1beta1
     schema:
       openAPIV3Schema:
@@ -566,6 +569,569 @@ spec:
               ready:
                 description: Ready is true when the provider resource is ready.
                 type: boolean
+              targetNamespace:
+                description: |-
+                  TargetNamespace is the resolved namespace where Tinkerbell resources
+                  (Template, Workflow, Job) for this machine are created.
+                  It is computed once during hardware selection and persisted so that subsequent
+                  reconcile loops (including deletion when the Hardware object may be gone) always
+                  target the correct namespace without re-deriving it.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - description: Cluster to which this TinkerbellMachine belongs
+      jsonPath: .metadata.labels.cluster\.x-k8s\.io/cluster-name
+      name: Cluster
+      type: string
+    - description: Tinkerbell instance state
+      jsonPath: .status.state
+      name: State
+      type: string
+    - description: Machine ready status
+      jsonPath: .status.ready
+      name: Ready
+      type: string
+    - description: Tinkerbell instance ID
+      jsonPath: .spec.providerID
+      name: InstanceID
+      type: string
+    - description: Machine object which owns with this TinkerbellMachine
+      jsonPath: .metadata.ownerReferences[?(@.kind=="Machine")].name
+      name: Machine
+      type: string
+    name: v1beta2
+    schema:
+      openAPIV3Schema:
+        description: TinkerbellMachine is the Schema for the tinkerbellmachines API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              TinkerbellMachineSpec defines the desired state of TinkerbellMachine.
+              It embeds TinkerbellMachineConfig (user-intent fields from the template) and adds
+              controller-managed fields that are set at runtime during hardware selection.
+              The embedded fields flatten into the JSON spec, so the CRD schema is unchanged.
+            properties:
+              bootOptions:
+                description: BootOptions are options that control the booting of Hardware.
+                properties:
+                  bootMode:
+                    description: BootMode is the type of booting that will be done.
+                      One of "netboot", "isoboot", or "customboot".
+                    enum:
+                    - netboot
+                    - isoboot
+                    - iso
+                    - customboot
+                    type: string
+                  custombootConfig:
+                    description: |-
+                      CustombootConfig is the configuration for the "customboot" boot mode.
+                      This allows users to define custom BMC Actions.
+                    properties:
+                      postActions:
+                        description: |-
+                          PostActions are the BMC Actions that will be run after all Workflow Actions have completed.
+                          In most cases these Actions should get a Machine into a state where it can be powered off or rebooted and remove any mounted virtual media.
+                          These Actions will be run only if the main Workflow Actions complete successfully.
+                        items:
+                          description: |-
+                            Action represents the action to be performed.
+                            A single task can only perform one type of action.
+                            For example either PowerAction or OneTimeBootDeviceAction.
+                          maxProperties: 1
+                          properties:
+                            bootDevice:
+                              description: BootDevice is the device to set as the
+                                first boot device on the Machine.
+                              properties:
+                                device:
+                                  description: Device is the name of the device to
+                                    set as the first boot device.
+                                  type: string
+                                efiBoot:
+                                  description: EFIBoot indicates whether the boot
+                                    device should be set to efiboot mode.
+                                  type: boolean
+                                persistent:
+                                  description: Persistent indicates whether the boot
+                                    device should be set persistently as the first
+                                    boot device.
+                                  type: boolean
+                              type: object
+                            oneTimeBootDeviceAction:
+                              description: |-
+                                OneTimeBootDeviceAction represents a baseboard management one time set boot device operation.
+
+                                Deprecated: This field is deprecated and will be removed in a future release. Use bootDevice instead.
+                              properties:
+                                device:
+                                  description: |-
+                                    Devices represents the boot devices, in order for setting one time boot.
+                                    Currently only the first device in the slice is used to set one time boot.
+                                  items:
+                                    description: BootDevice represents boot device
+                                      of the Machine.
+                                    type: string
+                                  type: array
+                                efiBoot:
+                                  description: EFIBoot instructs the machine to use
+                                    EFI boot.
+                                  type: boolean
+                              required:
+                              - device
+                              type: object
+                            powerAction:
+                              description: PowerAction represents a baseboard management
+                                power operation.
+                              enum:
+                              - "on"
+                              - "off"
+                              - soft
+                              - status
+                              - cycle
+                              - reset
+                              type: string
+                            virtualMediaAction:
+                              description: VirtualMediaAction represents a baseboard
+                                management virtual media insert/eject.
+                              properties:
+                                kind:
+                                  description: Kind represents the kind of virtual
+                                    media.
+                                  type: string
+                                mediaURL:
+                                  description: mediaURL represents the URL of the
+                                    image to be inserted into the virtual media, or
+                                    empty to eject media.
+                                  type: string
+                              required:
+                              - kind
+                              type: object
+                          type: object
+                        type: array
+                      preparingActions:
+                        description: |-
+                          PreparingActions are the BMC Actions that will be run before any Workflow Actions.
+                          In most cases these Actions should get a Machine into a state where a Tink Agent is running.
+                        items:
+                          description: |-
+                            Action represents the action to be performed.
+                            A single task can only perform one type of action.
+                            For example either PowerAction or OneTimeBootDeviceAction.
+                          maxProperties: 1
+                          properties:
+                            bootDevice:
+                              description: BootDevice is the device to set as the
+                                first boot device on the Machine.
+                              properties:
+                                device:
+                                  description: Device is the name of the device to
+                                    set as the first boot device.
+                                  type: string
+                                efiBoot:
+                                  description: EFIBoot indicates whether the boot
+                                    device should be set to efiboot mode.
+                                  type: boolean
+                                persistent:
+                                  description: Persistent indicates whether the boot
+                                    device should be set persistently as the first
+                                    boot device.
+                                  type: boolean
+                              type: object
+                            oneTimeBootDeviceAction:
+                              description: |-
+                                OneTimeBootDeviceAction represents a baseboard management one time set boot device operation.
+
+                                Deprecated: This field is deprecated and will be removed in a future release. Use bootDevice instead.
+                              properties:
+                                device:
+                                  description: |-
+                                    Devices represents the boot devices, in order for setting one time boot.
+                                    Currently only the first device in the slice is used to set one time boot.
+                                  items:
+                                    description: BootDevice represents boot device
+                                      of the Machine.
+                                    type: string
+                                  type: array
+                                efiBoot:
+                                  description: EFIBoot instructs the machine to use
+                                    EFI boot.
+                                  type: boolean
+                              required:
+                              - device
+                              type: object
+                            powerAction:
+                              description: PowerAction represents a baseboard management
+                                power operation.
+                              enum:
+                              - "on"
+                              - "off"
+                              - soft
+                              - status
+                              - cycle
+                              - reset
+                              type: string
+                            virtualMediaAction:
+                              description: VirtualMediaAction represents a baseboard
+                                management virtual media insert/eject.
+                              properties:
+                                kind:
+                                  description: Kind represents the kind of virtual
+                                    media.
+                                  type: string
+                                mediaURL:
+                                  description: mediaURL represents the URL of the
+                                    image to be inserted into the virtual media, or
+                                    empty to eject media.
+                                  type: string
+                              required:
+                              - kind
+                              type: object
+                          type: object
+                        type: array
+                    type: object
+                  isoURL:
+                    description: |-
+                      ISOURL is the URL of the ISO that will be one-time booted.
+                      A HardwareRef that contains a spec.BmcRef must be provided.
+
+                      The format of the ISOURL must be http://$IP:$Port/iso/hook.iso
+                      The name of the ISO file must have the .iso extension, but the name can be anything.
+                      The $IP and $Port should generally point to the IP and Port of the Smee server
+                      as this is where the ISO patching endpoint lives.
+                      The controller will append the MAC address of the hardware in the ISO URL
+                      right before the iso file name in the URL.
+                      MAC address is then used to retrieve hardware specific information such as
+                      IPAM info, custom kernel cmd line args and populate the worker ID for the tink worker/agent.
+                      For ex. the above format would be replaced to http://$IP:$Port/iso/<macAddress>/hook.iso
+
+                      BootMode must be set to "isoboot".
+                    format: uri
+                    type: string
+                type: object
+              hardwareAffinity:
+                description: HardwareAffinity allows filtering for hardware.
+                properties:
+                  preferred:
+                    description: |-
+                      Preferred are the preferred hardware affinity terms. Hardware matching these terms are preferred according to the
+                      weights provided, but are not required.
+                    items:
+                      description: |-
+                        WeightedHardwareAffinityTerm is a HardwareAffinityTerm with an associated weight.  The weights of all the matched
+                        WeightedHardwareAffinityTerm fields are added per-hardware to find the most preferred hardware.
+                      properties:
+                        hardwareAffinityTerm:
+                          description: HardwareAffinityTerm is the term associated
+                            with the corresponding weight.
+                          properties:
+                            labelSelector:
+                              description: LabelSelector is used to select for particular
+                                hardware by label.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - labelSelector
+                          type: object
+                        weight:
+                          description: Weight associated with matching the corresponding
+                            hardwareAffinityTerm, in the range 1-100.
+                          format: int32
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                      required:
+                      - hardwareAffinityTerm
+                      - weight
+                      type: object
+                    type: array
+                  required:
+                    description: |-
+                      Required are the required hardware affinity terms.  The terms are OR'd together, hardware must match one term to
+                      be considered.
+                    items:
+                      description: HardwareAffinityTerm is used to select for a particular
+                        existing hardware resource.
+                      properties:
+                        labelSelector:
+                          description: LabelSelector is used to select for particular
+                            hardware by label.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      required:
+                      - labelSelector
+                      type: object
+                    type: array
+                type: object
+              hardwareName:
+                description: |-
+                  HardwareName is the name of the Hardware resource selected for this machine.
+                  Set by the controller during hardware selection — not user-configurable.
+                  Immutable once set (enforced by webhook).
+                type: string
+              providerID:
+                description: |-
+                  ProviderID is the unique identifier for this machine instance.
+                  Format: tinkerbell://<namespace>/<hardware-name>
+                  Set by the controller during hardware selection — not user-configurable.
+                  Immutable once set (enforced by webhook).
+                  Part of the CAPI InfrastructureMachine contract (must be in spec).
+                maxLength: 512
+                minLength: 1
+                type: string
+              templateInline:
+                description: |-
+                  TemplateInline is an inline Tinkerbell Template definition for this machine.
+                  Takes precedence over hardware annotations and cluster-level templates.
+                  Mutually exclusive with TemplateRef.
+                type: string
+              templateRef:
+                description: |-
+                  TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+                  be used as the template for this machine. Takes precedence over hardware annotations and
+                  cluster-level templates. Mutually exclusive with TemplateInline.
+                  When Namespace is omitted, defaults to the Hardware's namespace.
+                properties:
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
+                required:
+                - name
+                type: object
+            type: object
+            x-kubernetes-validations:
+            - message: templateInline and templateRef are mutually exclusive
+              rule: '!has(self.templateInline) || !has(self.templateRef)'
+          status:
+            description: TinkerbellMachineStatus defines the observed state of TinkerbellMachine.
+            properties:
+              addresses:
+                description: Addresses contains the Tinkerbell device associated addresses.
+                items:
+                  description: NodeAddress contains information for the node's address.
+                  properties:
+                    address:
+                      description: The node address.
+                      type: string
+                    type:
+                      description: Node address type, one of Hostname, ExternalIP
+                        or InternalIP.
+                      type: string
+                  required:
+                  - address
+                  - type
+                  type: object
+                type: array
+              conditions:
+                description: Conditions defines current service state of the TinkerbellMachine.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              errorMessage:
+                description: |-
+                  ErrorMessage will be set in the event that there is a terminal problem
+                  reconciling the Machine and will contain a more verbose string suitable
+                  for logging and human consumption.
+
+                  This field should not be set for transitive errors that a controller
+                  faces that are expected to be fixed automatically over
+                  time (like service outages), but instead indicate that something is
+                  fundamentally wrong with the Machine's spec or the configuration of
+                  the controller, and that manual intervention is required. Examples
+                  of terminal errors would be invalid combinations of settings in the
+                  spec, values that are unsupported by the controller, or the
+                  responsible controller itself being critically misconfigured.
+
+                  Any transient errors that occur during the reconciliation of Machines
+                  can be added as events to the Machine object and/or logged in the
+                  controller's output.
+                type: string
+              errorReason:
+                description: |-
+                  Any transient errors that occur during the reconciliation of Machines
+                  can be added as events to the Machine object and/or logged in the
+                  controller's output.
+                type: string
+              initialization:
+                description: |-
+                  Initialization provides observations of the TinkerbellMachine initialization process.
+                  NOTE: Fields in this struct are part of the Cluster API contract and are used to orchestrate initial Machine provisioning.
+                minProperties: 1
+                properties:
+                  provisioned:
+                    description: |-
+                      provisioned is true when the infrastructure provider reports that the Machine's infrastructure is fully provisioned.
+                      NOTE: this field is part of the Cluster API contract, and it is used to orchestrate initial Machine provisioning.
+                    type: boolean
+                type: object
+              ready:
+                description: Ready is true when the provider resource is ready.
+                type: boolean
+              state:
+                description: State is the status of the Tinkerbell device instance
+                  for this machine.
+                type: integer
               targetNamespace:
                 description: |-
                   TargetNamespace is the resolved namespace where Tinkerbell resources

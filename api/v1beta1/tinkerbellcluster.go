@@ -1,0 +1,156 @@
+/*
+Copyright 2022 The Tinkerbell Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1beta1
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+)
+
+// ObjectRef is a reference to a Kubernetes object by name and namespace.
+type ObjectRef struct {
+	// Name is the name of the object.
+	Name string `json:"name"`
+	// Namespace is the namespace of the object.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+const (
+	// ClusterFinalizer allows ReconcileTinkerbellCluster to clean up Tinkerbell resources before
+	// removing it from the apiserver.
+	ClusterFinalizer = "tinkerbellcluster.infrastructure.cluster.x-k8s.io"
+)
+
+// TinkerbellClusterSpec defines the desired state of TinkerbellCluster.
+// +kubebuilder:validation:XValidation:rule="!has(self.templateOverride) || !has(self.templateOverrideRef)",message="templateOverride and templateOverrideRef are mutually exclusive"
+type TinkerbellClusterSpec struct {
+	// ControlPlaneEndpoint is the address of the cluster control plane.
+	// When not set, it is populated from the owning Cluster's spec.
+	//
+	// See https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
+	// for more details.
+	//
+	// +optional
+	ControlPlaneEndpoint *clusterv1.APIEndpoint `json:"controlPlaneEndpoint,omitempty,omitzero"`
+
+	// ImageLookupFormat is the URL naming format to use for machine images when
+	// a machine does not specify. When set, this will be used for all cluster machines
+	// unless a machine specifies a different ImageLookupFormat. Supports substitutions
+	// for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
+	// the basse URL, OS distribution, OS version, and kubernetes version, respectively.
+	// BaseRegistry will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
+	// (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
+	// OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
+	// (if known), and the kubernetes version as defined by the packages produced by
+	// kubernetes/release: v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
+	// image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz will
+	// attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/
+	// +optional
+	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
+
+	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
+	// if not set, the default will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
+	// +optional
+	// +kubebuilder:default=ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
+	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
+
+	// ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
+	// if not set it will default to ubuntu.
+	// +optional
+	// +kubebuilder:default=ubuntu
+	ImageLookupOSDistro string `json:"imageLookupOSDistro,omitempty"`
+
+	// ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
+	// images. If not set it will default based on ImageLookupOSDistro.
+	// +optional
+	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
+
+	// TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
+	// in this cluster. This is used when no machine-level or hardware annotation override is set.
+	// Mutually exclusive with TemplateOverrideRef.
+	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
+	// +optional
+	TemplateOverride string `json:"templateOverride,omitempty"`
+
+	// TemplateOverrideRef references an existing Tinkerbell Template object whose spec.data
+	// will be used as the default template for all machines in this cluster.
+	// This is used when no machine-level or hardware annotation override is set.
+	// Mutually exclusive with TemplateOverride.
+	// +optional
+	TemplateOverrideRef *ObjectRef `json:"templateOverrideRef,omitempty"`
+}
+
+// TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
+type TinkerbellClusterStatus struct {
+	// Ready denotes that the cluster (infrastructure) is ready.
+	// +optional
+	Ready bool `json:"ready"`
+
+	// Initialization provides observations of the TinkerbellCluster initialization process.
+	// NOTE: Fields in this struct are part of the Cluster API contract and are used to orchestrate initial Cluster provisioning.
+	// +optional
+	Initialization *TinkerbellClusterInitializationStatus `json:"initialization,omitempty"`
+
+	// Conditions defines current service state of the TinkerbellCluster.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// TinkerbellClusterInitializationStatus provides observations of the TinkerbellCluster initialization process.
+// +kubebuilder:validation:MinProperties=1
+type TinkerbellClusterInitializationStatus struct {
+	// provisioned is true when the infrastructure provider reports that the Cluster's infrastructure is fully provisioned.
+	// NOTE: this field is part of the Cluster API contract, and it is used to orchestrate initial Cluster provisioning.
+	// +optional
+	Provisioned *bool `json:"provisioned,omitempty"`
+}
+
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:path=tinkerbellclusters,scope=Namespaced,categories=cluster-api
+// +kubebuilder:object:root=true
+// +kubebuilder:deprecatedversion:warning="infrastructure.cluster.x-k8s.io/v1beta1 is deprecated; use v1beta2. v1beta1 will be removed in CAPT v0.9.0"
+// +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".metadata.labels.cluster\\.x-k8s\\.io/cluster-name",description="Cluster to which this TinkerbellCluster belongs"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="TinkerbellCluster ready status"
+
+// TinkerbellCluster is the Schema for the tinkerbellclusters API.
+type TinkerbellCluster struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   TinkerbellClusterSpec   `json:"spec,omitempty"`
+	Status TinkerbellClusterStatus `json:"status,omitempty"`
+}
+
+// GetConditions returns the conditions for the TinkerbellCluster.
+func (c *TinkerbellCluster) GetConditions() []metav1.Condition {
+	return c.Status.Conditions
+}
+
+// SetConditions sets the conditions on the TinkerbellCluster.
+func (c *TinkerbellCluster) SetConditions(conditions []metav1.Condition) {
+	c.Status.Conditions = conditions
+}
+
+// +kubebuilder:object:root=true
+
+// TinkerbellClusterList contains a list of TinkerbellCluster.
+type TinkerbellClusterList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []TinkerbellCluster `json:"items"`
+}

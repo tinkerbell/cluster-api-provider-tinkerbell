@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1beta2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +37,7 @@ const (
 )
 
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster.
-// +kubebuilder:validation:XValidation:rule="!has(self.templateOverride) || !has(self.templateOverrideRef)",message="templateOverride and templateOverrideRef are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!has(self.templateInline) || !has(self.templateRef)",message="templateInline and templateRef are mutually exclusive"
 type TinkerbellClusterSpec struct {
 	// ControlPlaneEndpoint is the address of the cluster control plane.
 	// When not set, it is populated from the owning Cluster's spec.
@@ -48,51 +48,20 @@ type TinkerbellClusterSpec struct {
 	// +optional
 	ControlPlaneEndpoint *clusterv1.APIEndpoint `json:"controlPlaneEndpoint,omitempty,omitzero"`
 
-	// ImageLookupFormat is the URL naming format to use for machine images when
-	// a machine does not specify. When set, this will be used for all cluster machines
-	// unless a machine specifies a different ImageLookupFormat. Supports substitutions
-	// for {{.BaseRegistry}}, {{.OSDistro}}, {{.OSVersion}} and {{.KubernetesVersion}} with
-	// the basse URL, OS distribution, OS version, and kubernetes version, respectively.
-	// BaseRegistry will be the value in ImageLookupBaseRegistry or ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-	// (the default), OSDistro will be the value in ImageLookupOSDistro or ubuntu (the default),
-	// OSVersion will be the value in ImageLookupOSVersion or default based on the OSDistro
-	// (if known), and the kubernetes version as defined by the packages produced by
-	// kubernetes/release: v1.13.0, v1.12.5-mybuild.1, or v1.17.3. For example, the default
-	// image format of {{.BaseRegistry}}/{{.OSDistro}}-{{.OSVersion}}:{{.KubernetesVersion}}.gz will
-	// attempt to pull the image from that location. See also: https://golang.org/pkg/text/template/
+	// TemplateInline is an inline Tinkerbell Template definition applied to all machines in the
+	// cluster. If a Machine specifies its own template, the Machine's template takes precedence.
+	// Mutually exclusive with TemplateRef.
+	//
 	// +optional
-	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
+	TemplateInline string `json:"templateInline,omitempty"`
 
-	// ImageLookupBaseRegistry is the base Registry URL that is used for pulling images,
-	// if not set, the default will be to use ghcr.io/tinkerbell/cluster-api-provider-tinkerbell.
+	// TemplateRef is a reference to an existing Tinkerbell Template object whose spec.data will
+	// be used as the template for all machines in the cluster. If a Machine specifies its own
+	// template, the Machine's template takes precedence. Mutually exclusive with TemplateInline.
+	// When Namespace is omitted, defaults to the Hardware's namespace.
+	//
 	// +optional
-	// +kubebuilder:default=ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
-	ImageLookupBaseRegistry string `json:"imageLookupBaseRegistry,omitempty"`
-
-	// ImageLookupOSDistro is the name of the OS distro to use when fetching machine images,
-	// if not set it will default to ubuntu.
-	// +optional
-	// +kubebuilder:default=ubuntu
-	ImageLookupOSDistro string `json:"imageLookupOSDistro,omitempty"`
-
-	// ImageLookupOSVersion is the version of the OS distribution to use when fetching machine
-	// images. If not set it will default based on ImageLookupOSDistro.
-	// +optional
-	ImageLookupOSVersion string `json:"imageLookupOSVersion,omitempty"`
-
-	// TemplateOverride overrides the default Tinkerbell template used by CAPT for all machines
-	// in this cluster. This is used when no machine-level or hardware annotation override is set.
-	// Mutually exclusive with TemplateOverrideRef.
-	// You can learn more about Tinkerbell templates here: https://tinkerbell.org/docs/concepts/templates/
-	// +optional
-	TemplateOverride string `json:"templateOverride,omitempty"`
-
-	// TemplateOverrideRef references an existing Tinkerbell Template object whose spec.data
-	// will be used as the default template for all machines in this cluster.
-	// This is used when no machine-level or hardware annotation override is set.
-	// Mutually exclusive with TemplateOverride.
-	// +optional
-	TemplateOverrideRef *ObjectRef `json:"templateOverrideRef,omitempty"`
+	TemplateRef *ObjectRef `json:"templateRef,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
@@ -123,6 +92,7 @@ type TinkerbellClusterInitializationStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=tinkerbellclusters,scope=Namespaced,categories=cluster-api
 // +kubebuilder:object:root=true
+// +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".metadata.labels.cluster\\.x-k8s\\.io/cluster-name",description="Cluster to which this TinkerbellCluster belongs"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="TinkerbellCluster ready status"
 
@@ -152,9 +122,4 @@ type TinkerbellClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TinkerbellCluster `json:"items"`
-}
-
-//nolint:gochecknoinits
-func init() {
-	SchemeBuilder.Register(&TinkerbellCluster{}, &TinkerbellClusterList{})
 }

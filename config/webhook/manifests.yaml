@@ -1,33 +1,5 @@
 ---
 apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
-metadata:
-  name: mutating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  - v1beta1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /mutate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster
-  failurePolicy: Fail
-  matchPolicy: Equivalent
-  name: default.tinkerbellcluster.infrastructure.cluster.x-k8s.io
-  rules:
-  - apiGroups:
-    - infrastructure.cluster.x-k8s.io
-    apiVersions:
-    - v1beta1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - tinkerbellclusters
-  sideEffects: None
----
-apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration
@@ -39,7 +11,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellcluster
+      path: /validate-infrastructure-cluster-x-k8s-io-v1beta2-tinkerbellcluster
   failurePolicy: Fail
   matchPolicy: Equivalent
   name: validation.tinkerbellcluster.infrastructure.cluster.x-k8s.io
@@ -47,7 +19,7 @@ webhooks:
   - apiGroups:
     - infrastructure.cluster.x-k8s.io
     apiVersions:
-    - v1beta1
+    - v1beta2
     operations:
     - CREATE
     - UPDATE
@@ -61,7 +33,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachine
+      path: /validate-infrastructure-cluster-x-k8s-io-v1beta2-tinkerbellmachine
   failurePolicy: Fail
   matchPolicy: Equivalent
   name: validation.tinkerbellmachine.infrastructure.cluster.x-k8s.io
@@ -69,7 +41,7 @@ webhooks:
   - apiGroups:
     - infrastructure.cluster.x-k8s.io
     apiVersions:
-    - v1beta1
+    - v1beta2
     operations:
     - CREATE
     - UPDATE
@@ -83,7 +55,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-infrastructure-cluster-x-k8s-io-v1beta1-tinkerbellmachinetemplate
+      path: /validate-infrastructure-cluster-x-k8s-io-v1beta2-tinkerbellmachinetemplate
   failurePolicy: Fail
   matchPolicy: Equivalent
   name: validation.tinkerbellmachinetemplate.infrastructure.x-k8s.io
@@ -91,7 +63,7 @@ webhooks:
   - apiGroups:
     - infrastructure.cluster.x-k8s.io
     apiVersions:
-    - v1beta1
+    - v1beta2
     operations:
     - CREATE
     - UPDATE

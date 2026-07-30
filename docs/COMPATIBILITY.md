@@ -4,18 +4,46 @@ This document describes the version compatibility between CAPT (Cluster API Prov
 
 ## Version Matrix
 
-| CAPT Version | CAPI Contract | CAPI Version | API Group Version | Kubernetes | Go  |
+| CAPT Version | CAPI Contract | CAPI Version | API Group Versions | Kubernetes | Go  |
 |---|---|---|---|---|---|
-| v0.7.x | v1beta2 | >= v1.12.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.35+ | 1.25+ |
+| v0.7.x | v1beta2 | >= v1.12.x | `v1beta2` (storage) + `v1beta1` (served) | v1.35+ | 1.25+ |
 | v0.5.x - v0.6.x | v1beta1 | v1.6.x - v1.10.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.29 - v1.34 | 1.22 - 1.24 |
 | v0.3.x - v0.4.x | v1beta1 | v1.3.x - v1.5.x | `infrastructure.cluster.x-k8s.io/v1beta1` | v1.22 - v1.28 | 1.19 - 1.21 |
 
+## API Version Conversion
+
+CAPT v0.7.x introduces `infrastructure.cluster.x-k8s.io/v1beta2` as the new
+storage (hub) API version. The previous `v1beta1` version remains served for
+backward compatibility. CRD conversion webhooks handle automatic bi-directional
+conversion between versions.
+
+- **v1beta2** — The hub (storage) version. New fields like `templateInline`,
+  `templateRef`, and `TinkerbellMachineConfig` live here. All resources are
+  stored as v1beta2 in etcd.
+- **v1beta1** — The spoke (served) version. Existing v1beta1 manifests and
+  clients continue to work. Resources are converted on the fly by the webhook.
+
+### Conversion Details
+
+| v1beta1 Field | v1beta2 Field | Notes |
+|---|---|---|
+| `templateOverride` | `templateInline` | Renamed |
+| `templateOverrideRef` | `templateRef` | Renamed, uses `ObjectRef` |
+| `status.instanceStatus` | `status.state` | Renamed, same underlying type |
+| `imageLookup*` fields | *(removed)* | Dropped during up-conversion; not round-trippable |
+| `TinkerbellMachineSpec` (in templates) | `TinkerbellMachineConfig` | `hardwareName`/`providerID` excluded from templates |
+
+The conversion functions are plain exported functions in the `api/v1beta1`
+package (e.g. `ConvertClusterToHub`, `ConvertClusterFromHub`). The conversion
+webhook registration uses controller-runtime's registry-based mechanism in the
+main module, keeping the API module free of controller-runtime dependencies.
+
 ## Contract vs API Version
 
-CAPT uses the `v1beta1` API group version (`infrastructure.cluster.x-k8s.io/v1beta1`) for all its CRDs, even when implementing the `v1beta2` CAPI contract. These are independent concepts:
+These are independent concepts:
 
 - **Contract version** (`v1beta2`): Defines the behavior and status fields CAPI expects from an infrastructure provider (e.g. `Initialization.Provisioned` status, typed webhook interfaces).
-- **API group version** (`v1beta1`): The Kubernetes API version used in CRD definitions and manifests. This is the version used in `apiVersion:` fields of YAML resources.
+- **API group version** (`v1beta2`): The Kubernetes API version used in CRD definitions and manifests. This is the version used in `apiVersion:` fields of YAML resources.
 
 The CRD labels map contract versions to API versions. For CAPT v0.7.x:
 
@@ -24,12 +52,10 @@ The CRD labels map contract versions to API versions. For CAPT v0.7.x:
 labels:
   - pairs:
       cluster.x-k8s.io/v1beta1: v1beta1
-      cluster.x-k8s.io/v1beta2: v1beta1  # v1beta2 contract → v1beta1 API version
+      cluster.x-k8s.io/v1beta2: v1beta2  # v1beta2 contract → v1beta2 API version
 ```
 
-The label **key** is the contract version, the label **value** is the CRD API version that CAPI should use when accessing this provider's resources. Since CAPT still serves `v1beta1` CRDs, the value must be `v1beta1` — not `v1beta2`.
-
-Setting this value incorrectly (e.g. `v1beta2: v1beta2`) causes CAPI to look for `infrastructure.cluster.x-k8s.io/v1beta2`, which doesn't exist, breaking all reconciliation.
+The label **key** is the contract version, the label **value** is the CRD API version that CAPI should use when accessing this provider's resources.
 
 ## What Changed in v0.7.x (v1beta2 Contract)
 
@@ -72,19 +98,25 @@ The `Initialization.Provisioned` field is part of the CAPI contract and is used 
 
 ### Manifests and Templates
 
-All YAML manifests (e.g. `templates/cluster-template.yaml`) continue to use `v1beta1` API versions:
+New manifests should use `v1beta2` API versions:
 
 ```yaml
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: TinkerbellCluster
+```
+
+Existing `v1beta1` manifests continue to work — the conversion webhook
+automatically converts them to `v1beta2` for storage:
+
+```yaml
+# Still accepted
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: TinkerbellCluster
 ```
 
-```yaml
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: Cluster
-```
-
-CAPI v1.12 automatically converts `v1beta1` resources to `v1beta2` internally. Users do not need to change their manifests.
+CAPI v1.12 uses the CRD labels to determine which API version to use. Users
+upgrading from v0.6.x do **not** need to update existing manifests, though
+new manifests should prefer `v1beta2`.
 
 ### metadata.yaml
 
