@@ -1910,3 +1910,176 @@ func findCondition(conditions []metav1.Condition, conditionType string) *metav1.
 
 	return nil
 }
+
+const failureDomainRackLabel = "topology.tinkerbell.org/rack"
+
+// failureDomainObjects builds a cluster whose Hardware spans two racks, with one
+// TinkerbellMachine whose owning Machine has been assigned to assignedDomain.
+//
+// The Hardware in "rack-a" is named so it sorts first: hardwareForMachine breaks ties by
+// name, so without a failure domain constraint "hw-a-1" is always the pick. That makes the
+// selection of a "rack-b" machine unambiguous evidence that the constraint was applied.
+func failureDomainObjects(
+	failureDomainLabel, assignedDomain string,
+	policy infrastructurev1.FailureDomainPolicy,
+) (objects []runtime.Object, rackA, rackB string) {
+	rackA, rackB = "hw-a-1", "hw-b-1"
+
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.FailureDomainLabel = failureDomainLabel
+	tinkCluster.Spec.FailureDomainPolicy = policy
+
+	machine := validMachine(machineName, clusterNamespace, clusterName)
+	machine.Spec.FailureDomain = assignedDomain
+
+	return []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, uuid.New().String()),
+		validCluster(clusterName, clusterNamespace),
+		tinkCluster,
+		machine,
+		validSecret(machineName, clusterNamespace),
+
+		validHardware(rackA, uuid.New().String(), "1.1.1.1",
+			testOptions{Labels: map[string]string{failureDomainRackLabel: "rack-a"}}),
+		validHardware(rackB, uuid.New().String(), "2.2.2.2",
+			testOptions{Labels: map[string]string{failureDomainRackLabel: "rack-b"}}),
+	}, rackA, rackB
+}
+
+func Test_Machine_reconciliation_selects_hardware_in_the_assigned_failure_domain(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	objects, _, rackB := failureDomainObjects(failureDomainRackLabel, "rack-b", "")
+
+	kubeClient := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(kubeClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling a machine with an available failure domain should succeed")
+
+	updated := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(kubeClient.Get(context.Background(), types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, updated)).To(Succeed(), "Getting the updated TinkerbellMachine should succeed")
+
+	g.Expect(updated.Spec.HardwareName).To(Equal(rackB),
+		"Expected Hardware from the failure domain Cluster API assigned, not the first by name")
+}
+
+func Test_Machine_reconciliation_fails_when_the_assigned_failure_domain_has_no_hardware(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// "rack-c" has no Hardware. Failing is the point: under the default Required policy
+	// (spelled here as an unset policy) silently placing into another rack would defeat the
+	// spread the control plane asked for. Free Hardware does exist in both other racks.
+	objects, _, _ := failureDomainObjects(failureDomainRackLabel, "rack-c", "")
+
+	kubeClient := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(kubeClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).To(HaveOccurred(), "Reconciling should fail when the assigned failure domain is exhausted")
+	g.Expect(err).To(MatchError(machine.ErrNoHardwareAvailable),
+		"Expected the exhausted pool to be reported as ErrNoHardwareAvailable")
+	g.Expect(err.Error()).To(ContainSubstring("rack-c"),
+		"Expected the error to name the failure domain that could not be satisfied")
+}
+
+func Test_Machine_reconciliation_ignores_the_failure_domain_when_the_cluster_sets_no_label(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Machine.spec.failureDomain set, but the cluster opts out of failure domains. The
+	// pre-existing behaviour must be unchanged: first Hardware by name wins.
+	objects, rackA, _ := failureDomainObjects("", "rack-b", "")
+
+	kubeClient := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(kubeClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling without a configured failure domain label should succeed")
+
+	updated := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(kubeClient.Get(context.Background(), types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, updated)).To(Succeed(), "Getting the updated TinkerbellMachine should succeed")
+
+	g.Expect(updated.Spec.HardwareName).To(Equal(rackA),
+		"Expected unconstrained selection when the cluster configures no failure domain label")
+}
+
+func Test_Machine_reconciliation_falls_back_to_any_hardware_under_the_best_effort_policy(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Same exhausted domain as the Required case, so the only difference in outcome is the
+	// policy. rackA is the first Hardware by name, which is what an unconstrained search
+	// settles on.
+	objects, rackA, _ := failureDomainObjects(
+		failureDomainRackLabel, "rack-c", infrastructurev1.FailureDomainPolicyBestEffort)
+
+	kubeClient := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(kubeClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "BestEffort should not fail when the assigned failure domain is exhausted")
+
+	updated := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(kubeClient.Get(context.Background(), types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, updated)).To(Succeed(), "Getting the updated TinkerbellMachine should succeed")
+
+	g.Expect(updated.Spec.HardwareName).To(Equal(rackA),
+		"Expected BestEffort to fall back to Hardware outside the assigned failure domain")
+}
+
+func Test_Machine_reconciliation_prefers_the_assigned_domain_under_the_best_effort_policy(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// BestEffort only widens the search once the domain is exhausted. While the domain can
+	// be satisfied it must behave exactly like Required, or the spread would be decided by
+	// Hardware naming rather than by the control plane.
+	objects, _, rackB := failureDomainObjects(
+		failureDomainRackLabel, "rack-b", infrastructurev1.FailureDomainPolicyBestEffort)
+
+	kubeClient := kubernetesClientWithObjects(t, objects)
+
+	_, err := reconcileMachineWithClient(kubeClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling a satisfiable failure domain should succeed")
+
+	updated := &infrastructurev1.TinkerbellMachine{}
+	g.Expect(kubeClient.Get(context.Background(), types.NamespacedName{
+		Name:      tinkerbellMachineName,
+		Namespace: clusterNamespace,
+	}, updated)).To(Succeed(), "Getting the updated TinkerbellMachine should succeed")
+
+	g.Expect(updated.Spec.HardwareName).To(Equal(rackB),
+		"Expected BestEffort to honour a failure domain that can be satisfied")
+}
+
+func Test_Machine_reconciliation_fails_under_best_effort_when_no_hardware_is_available_at_all(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// With the whole pool gone, BestEffort has nothing to fall back to. The error must not
+	// blame the failure domain, because the domain is not what is missing.
+	objects, _, _ := failureDomainObjects(
+		failureDomainRackLabel, "rack-c", infrastructurev1.FailureDomainPolicyBestEffort)
+
+	withoutHardware := make([]runtime.Object, 0, len(objects))
+
+	for _, object := range objects {
+		if _, isHardware := object.(*tinkv1.Hardware); !isHardware {
+			withoutHardware = append(withoutHardware, object)
+		}
+	}
+
+	kubeClient := kubernetesClientWithObjects(t, withoutHardware)
+
+	_, err := reconcileMachineWithClient(kubeClient, tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).To(MatchError(machine.ErrNoHardwareAvailable), "Expected an empty pool to be reported")
+	g.Expect(err.Error()).NotTo(ContainSubstring("failure domain"),
+		"Expected an empty pool not to be reported as a failure domain problem")
+}
