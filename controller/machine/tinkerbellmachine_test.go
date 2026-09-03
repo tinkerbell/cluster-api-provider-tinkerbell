@@ -64,6 +64,8 @@ type testOptions struct {
 	// Labels allow providing labels for the machine
 	Labels           map[string]string
 	HardwareAffinity *infrastructurev1.HardwareAffinity
+	// Annotations allow providing annotations for the machine
+	Annotations map[string]string
 }
 
 //nolint:unparam
@@ -222,6 +224,14 @@ func validHardware(name, uuid, ip string, options ...testOptions) *tinkv1.Hardwa
 			}
 
 			hw.Labels[k] = v
+		}
+
+		for k, v := range o.Annotations {
+			if hw.Annotations == nil {
+				hw.Annotations = map[string]string{}
+			}
+
+			hw.Annotations[k] = v
 		}
 	}
 
@@ -1909,4 +1919,113 @@ func findCondition(conditions []metav1.Condition, conditionType string) *metav1.
 	}
 
 	return nil
+}
+
+func Test_Machine_reconciliation_mirrors_hardware_installer_image(t *testing.T) {
+	t.Parallel()
+
+	installerImage := "factory.talos.dev/installer/376567988ad370138ad8b2698212367b0c98777a8994c8bf0eb2bdd1f4d3bd11:v1.14.0"
+
+	tests := []struct {
+		name string
+		// annotations placed on the Hardware fixture
+		hardwareAnnotations map[string]string
+		// expected status.installerImage after the first reconcile
+		wantFirst string
+		// annotations on the Hardware for the second reconcile (nil: no second reconcile)
+		hardwareAnnotationsSecond map[string]string
+		// expected status.installerImage after the second reconcile
+		wantSecond string
+	}{
+		{
+			name:                      "annotation_set_mirrors_image",
+			hardwareAnnotations:       map[string]string{machine.HardwareInstallerImageAnnotation: installerImage},
+			wantFirst:                 installerImage,
+			hardwareAnnotationsSecond: nil,
+			wantSecond:                "",
+		},
+		{
+			name:                      "annotation_absent_leaves_status_empty",
+			hardwareAnnotations:       nil,
+			wantFirst:                 "",
+			hardwareAnnotationsSecond: nil,
+			wantSecond:                "",
+		},
+		{
+			name:                      "annotation_removed_clears_status",
+			hardwareAnnotations:       map[string]string{machine.HardwareInstallerImageAnnotation: installerImage},
+			wantFirst:                 installerImage,
+			hardwareAnnotationsSecond: map[string]string{},
+			wantSecond:                "",
+		},
+		{
+			name: "annotation_changed_updates_status",
+			hardwareAnnotations: map[string]string{
+				machine.HardwareInstallerImageAnnotation: "factory.talos.dev/installer/first:v1.14.0",
+			},
+			wantFirst: "factory.talos.dev/installer/first:v1.14.0",
+			hardwareAnnotationsSecond: map[string]string{
+				machine.HardwareInstallerImageAnnotation: "factory.talos.dev/installer/second:v1.15.0",
+			},
+			wantSecond: "factory.talos.dev/installer/second:v1.15.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+
+			hardwareUUID := uuid.New().String()
+
+			hw := validHardware(hardwareName, hardwareUUID, hardwareIP, testOptions{
+				Annotations: tt.hardwareAnnotations,
+			})
+			if tt.hardwareAnnotations == nil {
+				hw.Annotations = nil
+			}
+
+			objects := []runtime.Object{
+				validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, hardwareUUID),
+				validCluster(clusterName, clusterNamespace),
+				validTinkerbellCluster(clusterName, clusterNamespace),
+				hw,
+				validMachine(machineName, clusterNamespace, clusterName),
+				validSecret(machineName, clusterNamespace),
+			}
+
+			client := kubernetesClientWithObjects(t, objects)
+
+			_, err := reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+			g.Expect(err).NotTo(HaveOccurred(), "Unexpected reconciliation error")
+
+			ctx := context.Background()
+
+			updatedMachine := &infrastructurev1.TinkerbellMachine{}
+			machineNamespacedName := types.NamespacedName{Name: tinkerbellMachineName, Namespace: clusterNamespace}
+			g.Expect(client.Get(ctx, machineNamespacedName, updatedMachine)).To(Succeed())
+			g.Expect(updatedMachine.Status.InstallerImage).To(Equal(tt.wantFirst),
+				"status.installerImage after first reconcile")
+
+			if tt.hardwareAnnotationsSecond == nil {
+				return
+			}
+
+			// Mutate the Hardware annotations and reconcile again; the mirror
+			// must track set, change, and removal on every reconcile.
+			hardwareNamespacedName := types.NamespacedName{Name: hardwareName, Namespace: clusterNamespace}
+			updatedHardware := &tinkv1.Hardware{}
+			g.Expect(client.Get(ctx, hardwareNamespacedName, updatedHardware)).To(Succeed())
+			updatedHardware.Annotations = tt.hardwareAnnotationsSecond
+			g.Expect(client.Update(ctx, updatedHardware)).To(Succeed())
+
+			_, err = reconcileMachineWithClient(client, tinkerbellMachineName, clusterNamespace)
+			g.Expect(err).NotTo(HaveOccurred(), "Unexpected second reconciliation error")
+
+			g.Expect(client.Get(ctx, machineNamespacedName, updatedMachine)).To(Succeed())
+			g.Expect(updatedMachine.Status.InstallerImage).To(Equal(tt.wantSecond),
+				"status.installerImage after second reconcile")
+		})
+	}
 }

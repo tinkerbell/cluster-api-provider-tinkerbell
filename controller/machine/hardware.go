@@ -35,6 +35,13 @@ const (
 
 	// HardwareTemplateOverrideAnnotation can be used to override the default Template used for provisioning.
 	HardwareTemplateOverrideAnnotation = "hardware.tinkerbell.org/capt-template-override"
+
+	// HardwareInstallerImageAnnotation specifies the installer image
+	// (e.g. a Talos Image Factory ref with its schematic) for the machine
+	// bound to this Hardware. When set, the TinkerbellMachine controller
+	// mirrors it into status.installerImage so bootstrap providers can
+	// consume hardware-specific image selection without a provider coupling.
+	HardwareInstallerImageAnnotation = "hardware.tinkerbell.org/installer-image"
 )
 
 var (
@@ -209,6 +216,13 @@ func (scope *machineReconcileScope) ensureHardware() (*tinkv1.Hardware, error) {
 	if scope.tinkerbellMachine.Status.TargetNamespace == "" {
 		scope.tinkerbellMachine.Status.TargetNamespace = hw.Namespace
 	}
+
+	// Mirror the Hardware's installer-image annotation into machine status
+	// on every reconcile so bootstrap providers consuming
+	// status.installerImage observe annotation set, change, and removal.
+	// An absent annotation is the normal case: the field is left empty and
+	// consumers treat that as "no override".
+	scope.tinkerbellMachine.Status.InstallerImage = hw.GetAnnotations()[HardwareInstallerImageAnnotation]
 
 	// In JIT watch mode, ensure there is a namespace-scoped informer cache
 	// watching Workflows and Jobs in the Hardware's namespace so that the

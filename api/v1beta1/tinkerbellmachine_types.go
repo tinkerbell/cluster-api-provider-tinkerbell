@@ -173,6 +173,16 @@ type TinkerbellMachineStatus struct {
 	// +optional
 	TargetNamespace string `json:"targetNamespace,omitempty"`
 
+	// InstallerImage is the installer image resolved for this machine,
+	// mirrored from the bound Hardware's annotation
+	// (hardware.tinkerbell.org/installer-image). It lets infrastructure
+	// providers publish hardware-specific image knowledge (e.g. a Talos
+	// Image Factory ref carrying the right system extensions) for bootstrap
+	// providers to consume generically. Empty when the Hardware carries no
+	// annotation; consumers must treat an empty value as "no override".
+	// +optional
+	InstallerImage string `json:"installerImage,omitempty"`
+
 	// Conditions defines current service state of the TinkerbellMachine.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
