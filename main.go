@@ -177,8 +177,10 @@ func (c *config) setupReconcilers(ctx context.Context, log logr.Logger, rs *runt
 	}
 
 	if err := (&cluster.TinkerbellClusterReconciler{
-		Client:           mgr.GetClient(),
-		WatchFilterValue: c.WatchFilterValue,
+		Client:             mgr.GetClient(),
+		TinkerbellClient:   result.Client,
+		ExternalTinkerbell: result.External,
+		WatchFilterValue:   c.WatchFilterValue,
 	}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: c.TinkerbellClusterConcurrency}, rs); err != nil {
 		return fmt.Errorf("unable to setup TinkerbellCluster controller:%w", err)
 	}

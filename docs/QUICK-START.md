@@ -246,6 +246,77 @@ spec:
                 room: 2
 ```
 
+#### Spread machines across failure domains
+
+`hardwareAffinity` decides *which* hardware a machine may land on, but it cannot spread a set
+of machines *across* topology: every replica of a `KubeadmControlPlane` or `MachineDeployment`
+is stamped from one `TinkerbellMachineTemplate`, so they all carry the same affinity terms. A
+`required` term of `rack: 1` pins the whole control plane to rack 1 rather than distributing it.
+
+Use failure domains for that. Set `failureDomainLabel` on the `TinkerbellCluster` to the
+Hardware label key that describes your physical topology:
+
+```yaml
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: TinkerbellCluster
+metadata:
+  name: capi-quickstart
+  namespace: tink-system
+spec:
+  failureDomainLabel: topology.tinkerbell.org/rack
+  failureDomainPolicy: Required  # or BestEffort; Required is the default
+```
+
+Label your Hardware with that key:
+
+```yaml
+apiVersion: tinkerbell.org/v1alpha1
+kind: Hardware
+metadata:
+  name: my-hardware
+  namespace: tink-system
+  labels:
+    topology.tinkerbell.org/rack: rack-1
+```
+
+CAPT then publishes each distinct label value as an entry in
+`TinkerbellCluster.status.failureDomains`, which Cluster API copies to
+`Cluster.status.failureDomains`. `KubeadmControlPlane` spreads replicas across those domains —
+scaling up into the domain holding the fewest machines, and scaling down from the one holding
+the most — and records its choice in `Machine.spec.failureDomain`. CAPT honours that choice as
+an additional requirement when selecting Hardware, on top of any `hardwareAffinity` terms.
+
+##### Choosing a policy
+
+`failureDomainPolicy` decides what happens when the domain Cluster API assigned to a machine
+has no Hardware available:
+
+| Policy | Behaviour when the assigned domain is exhausted | Trade-off |
+|---|---|---|
+| `Required` (default) | Provisioning fails with `no hardware available in failure domain "..."` | The spread is never silently broken, but a machine cannot be replaced while its domain is empty |
+| `BestEffort` | Falls back to any other Hardware matching the machine's `hardwareAffinity` | Provisioning keeps working through a domain outage, at the cost of a temporarily uneven spread |
+
+`BestEffort` only widens the search once the domain cannot be satisfied; while Hardware is
+available in the assigned domain it behaves exactly like `Required`.
+
+Which one you want depends on how much spare Hardware you keep. With no spares, `Required`
+turns a lost rack into a stalled rollout: `KubeadmControlPlane` scales up into the domain
+holding the fewest machines, so the empty domain keeps being chosen and the replacement never
+provisions. `BestEffort` will instead place the replacement elsewhere and leave the spread
+uneven until you rebalance.
+
+Other things worth knowing:
+
+- **Domains describe topology, not capacity.** A domain is published whenever any Hardware
+  carries the label, whether or not that Hardware is free. Dropping exhausted domains would
+  make the published list flap as machines come and go.
+- **Hardware is watched**, so racking, retiring or relabelling Hardware updates the published
+  domains promptly. The exception is a remote Tinkerbell cluster
+  (`--external-kubeconfig`), whose Hardware the manager cannot watch; there the domains are
+  refreshed by a 5 minute resync instead.
+- **Leaving `failureDomainLabel` unset disables all of this**, and Hardware selection behaves
+  exactly as it did before.
+
 #### Customize the provisioning template
 
 By default, CAPT generates a Tinkerbell Template for each machine based on the OS image settings in the

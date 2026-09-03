@@ -453,3 +453,155 @@ func findCondition(conditions []metav1.Condition, conditionType string) *metav1.
 
 	return nil
 }
+
+const rackLabel = "topology.tinkerbell.org/rack"
+
+// tinkerbellClusterWithFailureDomainLabel is validTinkerbellCluster with failure domain
+// discovery switched on.
+func tinkerbellClusterWithFailureDomainLabel() *infrastructurev1.TinkerbellCluster {
+	tinkCluster := validTinkerbellCluster(clusterName, clusterNamespace)
+	tinkCluster.Spec.FailureDomainLabel = rackLabel
+
+	return tinkCluster
+}
+
+// reconciledFailureDomains reconciles once and returns the published failure domains
+// alongside the reconcile result.
+func reconciledFailureDomains(t *testing.T, objects []runtime.Object) ([]clusterv1.FailureDomain, ctrl.Result) {
+	t.Helper()
+	g := NewWithT(t)
+
+	kubeClient := kubernetesClientWithObjects(t, objects)
+
+	result, err := reconcileClusterWithClient(kubeClient, clusterName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling a valid cluster should succeed")
+
+	updated := &infrastructurev1.TinkerbellCluster{}
+	g.Expect(kubeClient.Get(context.TODO(), types.NamespacedName{
+		Name:      clusterName,
+		Namespace: clusterNamespace,
+	}, updated)).To(Succeed(), "Getting the reconciled TinkerbellCluster should succeed")
+
+	return updated.Status.FailureDomains, result
+}
+
+func Test_Cluster_failure_domains_are_published_from_distinct_hardware_label_values(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	inRack := func(name, ip, rack string) *tinkv1.Hardware {
+		return validHardware(name, uuid.New().String(), ip, testOptions{
+			Labels: map[string]string{rackLabel: rack},
+		})
+	}
+
+	domains, result := reconciledFailureDomains(t, []runtime.Object{
+		validCluster(clusterName, clusterNamespace),
+		tinkerbellClusterWithFailureDomainLabel(),
+		// Two racks, three machines: "b" appears twice and must collapse to one domain.
+		inRack("hw-1", "1.1.1.1", "rack-b"),
+		inRack("hw-2", "2.2.2.2", "rack-a"),
+		inRack("hw-3", "3.3.3.3", "rack-b"),
+	})
+
+	g.Expect(domains).To(HaveLen(2), "Expected one failure domain per distinct label value")
+
+	// Sorted, so that the list copied into Cluster.status.failureDomains is stable and
+	// does not rewrite that status on every pass.
+	g.Expect(domains[0].Name).To(Equal("rack-a"), "Expected failure domains in sorted order")
+	g.Expect(domains[1].Name).To(Equal("rack-b"), "Expected failure domains in sorted order")
+
+	// KubeadmControlPlane discards any domain that is not marked for the control plane,
+	// so an unset ControlPlane would publish domains it will never spread across.
+	for _, domain := range domains {
+		g.Expect(domain.ControlPlane).NotTo(BeNil(), "Expected controlPlane to be set")
+		g.Expect(*domain.ControlPlane).To(BeTrue(), "Expected the domain to be usable by control plane machines")
+	}
+
+	// Local mode: a Hardware watch re-triggers the reconcile, so no resync is scheduled.
+	g.Expect(result.IsZero()).To(BeTrue(),
+		"Expected no resync in local mode, where Hardware is watched")
+}
+
+func Test_Cluster_failure_domains_are_resynced_when_tinkerbell_is_external(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// External Hardware lives in a cluster the manager's cache cannot watch, so the only
+	// way status.failureDomains tracks it is by re-reconciling on a timer.
+	kubeClient := kubernetesClientWithObjects(t, []runtime.Object{
+		validCluster(clusterName, clusterNamespace),
+		tinkerbellClusterWithFailureDomainLabel(),
+		validHardware(hardwareName, uuid.New().String(), hardwareIP, testOptions{
+			Labels: map[string]string{rackLabel: "rack-a"},
+		}),
+	})
+
+	clusterController := &cluster.TinkerbellClusterReconciler{
+		Client:             kubeClient,
+		ExternalTinkerbell: true,
+	}
+
+	result, err := clusterController.Reconcile(context.TODO(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: clusterName, Namespace: clusterNamespace},
+	})
+	g.Expect(err).NotTo(HaveOccurred(), "Reconciling in external mode should succeed")
+	g.Expect(result.RequeueAfter).To(BeNumerically(">", 0),
+		"Expected a resync to be scheduled when Hardware cannot be watched")
+}
+
+func Test_Cluster_failure_domains_are_not_published_when_label_is_unset(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	domains, result := reconciledFailureDomains(t, []runtime.Object{
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+		validHardware(hardwareName, uuid.New().String(), hardwareIP, testOptions{
+			Labels: map[string]string{rackLabel: "rack-a"},
+		}),
+	})
+
+	g.Expect(domains).To(BeEmpty(), "Expected no failure domains when the label is not configured")
+	g.Expect(result.IsZero()).To(BeTrue(), "Expected no resync when failure domains are not in use")
+}
+
+func Test_Cluster_failure_domains_ignore_hardware_without_a_label_value(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Hardware carrying the key with an empty value: label selectors match on key
+	// presence, but "" is how Machine.spec.failureDomain spells "unassigned", so it
+	// cannot name a domain anything could be placed into.
+	empty := validHardware("hw-unlabelled", uuid.New().String(), "2.2.2.2", testOptions{
+		Labels: map[string]string{rackLabel: ""},
+	})
+
+	labelled := validHardware("hw-labelled", uuid.New().String(), "3.3.3.3", testOptions{
+		Labels: map[string]string{rackLabel: "rack-a"},
+	})
+
+	domains, _ := reconciledFailureDomains(t, []runtime.Object{
+		validCluster(clusterName, clusterNamespace),
+		tinkerbellClusterWithFailureDomainLabel(),
+		empty,
+		labelled,
+	})
+
+	g.Expect(domains).To(HaveLen(1), "Expected the empty label value to be skipped")
+	g.Expect(domains[0].Name).To(Equal("rack-a"), "Expected only the labelled rack to be published")
+}
+
+func Test_Cluster_failure_domains_are_empty_when_no_hardware_carries_the_label(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	domains, _ := reconciledFailureDomains(t, []runtime.Object{
+		validCluster(clusterName, clusterNamespace),
+		tinkerbellClusterWithFailureDomainLabel(),
+		// No rack label at all.
+		validHardware(hardwareName, uuid.New().String(), hardwareIP),
+	})
+
+	g.Expect(domains).To(BeEmpty(), "Expected no failure domains when no Hardware carries the label")
+}
