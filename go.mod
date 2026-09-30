@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/zerologr v1.2.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.44.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/rs/zerolog v1.35.1
 	github.com/tinkerbell/tinkerbell/api v0.23.0
@@ -58,7 +58,7 @@ require (
 	go.opentelemetry.io/otel v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
