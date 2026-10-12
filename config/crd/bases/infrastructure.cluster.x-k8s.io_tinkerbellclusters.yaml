@@ -269,6 +269,20 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              kubeconfigSecretRef:
+                description: |-
+                  KubeconfigSecretRef is a reference to a Kubernetes Secret containing the kubeconfig for the Tinkerbell stack
+                  that will be used to create all Tinkerbell proper objects (e.g., Workflows, tasks.bmc) for this cluster.
+                properties:
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
+                required:
+                - name
+                type: object
               templateInline:
                 description: |-
                   TemplateInline is an inline Tinkerbell Template definition applied to all machines in the

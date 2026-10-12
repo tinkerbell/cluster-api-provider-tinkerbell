@@ -62,6 +62,12 @@ type TinkerbellClusterSpec struct {
 	//
 	// +optional
 	TemplateRef *ObjectRef `json:"templateRef,omitempty"`
+
+	// KubeconfigSecretRef is a reference to a Kubernetes Secret containing the kubeconfig for the Tinkerbell stack
+	// that will be used to create all Tinkerbell proper objects (e.g., Workflows, tasks.bmc) for this cluster.
+	//
+	// +optional
+	KubeconfigSecretRef *ObjectRef `json:"kubeconfigSecretRef,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
