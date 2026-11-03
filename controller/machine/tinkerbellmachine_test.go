@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -293,6 +294,15 @@ func kubernetesClientWithObjects(t *testing.T, objects []runtime.Object) client.
 	}
 
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).WithStatusSubresource(objs...).Build()
+}
+
+type hardwareListErrorClient struct {
+	client.Client
+	err error
+}
+
+func (c hardwareListErrorClient) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return c.err
 }
 
 type hardwarePatchConflictClient struct {
@@ -578,6 +588,26 @@ func Test_Machine_reconciliation_quietly_requeues_hardware_claim_conflict(t *tes
 		"Expected failed claim not to persist an owner")
 }
 
+func Test_Machine_reconciliation_returns_hardware_API_errors(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	objects := []runtime.Object{
+		validTinkerbellMachine(tinkerbellMachineName, clusterNamespace, machineName, uuid.NewString()),
+		validCluster(clusterName, clusterNamespace),
+		validTinkerbellCluster(clusterName, clusterNamespace),
+		validMachine(machineName, clusterNamespace, clusterName),
+		validSecret(machineName, clusterNamespace),
+	}
+	cl := kubernetesClientWithObjects(t, objects)
+	apiErr := apierrors.NewServiceUnavailable("hardware API unavailable")
+	result, err := reconcileMachineWithClients(
+		cl, hardwareListErrorClient{Client: cl, err: apiErr}, tinkerbellMachineName, clusterNamespace,
+	)
+	g.Expect(err).To(MatchError(apiErr))
+	g.Expect(result).To(BeZero())
+}
+
 func Test_Machine_reconciliation_workflow_complete(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -745,10 +775,10 @@ func Test_Machine_reconciliation(t *testing.T) {
 		t.Run("bootstrap_config_is_empty", machineReconciliationFailsWhenBootstrapConfigIsEmpty)
 		t.Run("bootstrap_config_has_no_value_key", machineReconciliationFailsWhenBootstrapConfigHasNoValueKey)
 
-		t.Run("there_is_no_hardware_available", machineReconciliationFailsWhenThereIsNoHardwareAvailable)
-
 		t.Run("selected_hardware_has_no_ip_address_set", machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet)
 	})
+
+	t.Run("waits_when_no_hardware_is_available", machineReconciliationWaitsWhenThereIsNoHardwareAvailable)
 
 	// Single hardware should only ever be used for a single machine.
 	t.Run("selects_unique_and_available_hardware_for_each_machine",
@@ -1147,7 +1177,7 @@ func machineReconciliationFailsWhenAssociatedTinkerbellClusterObjectDoesNotExist
 	g.Expect(err).To(MatchError(ContainSubstring("getting TinkerbellCluster object")))
 }
 
-func machineReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
+func machineReconciliationWaitsWhenThereIsNoHardwareAvailable(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -1161,8 +1191,10 @@ func machineReconciliationFailsWhenThereIsNoHardwareAvailable(t *testing.T) {
 		validSecret(machineName, clusterNamespace),
 	}
 
-	_, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
-	g.Expect(err).To(MatchError(machine.ErrNoHardwareAvailable))
+	result, err := reconcileMachineWithClient(kubernetesClientWithObjects(t, objects), tinkerbellMachineName, clusterNamespace)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(result.RequeueAfter).To(BeNumerically(">=", 30*time.Second))
+	g.Expect(result.RequeueAfter).To(BeNumerically("<", time.Minute))
 }
 
 func machineReconciliationFailsWhenSelectedHardwareHasNoIPAddressSet(t *testing.T) {

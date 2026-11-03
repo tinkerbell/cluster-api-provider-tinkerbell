@@ -26,6 +26,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/collections"
@@ -194,6 +195,11 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	scope.bootstrapCloudConfig = bootstrapCloudConfig
 	scope.tinkerbellCluster = tinkerbellCluster
 	if err := scope.Reconcile(); err != nil {
+		if errors.Is(err, ErrNoHardwareAvailable) {
+			// Avoid accumulating error backoff while waiting for capacity.
+			log.V(4).Info("Waiting for matching Hardware")
+			return ctrl.Result{RequeueAfter: wait.Jitter(30*time.Second, 1)}, nil
+		}
 		if errors.Is(err, errHardwareClaimRequeue) {
 			log.V(4).Info("Hardware claim contention, requeuing", "error", err)
 
