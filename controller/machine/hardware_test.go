@@ -276,3 +276,60 @@ func Test_takeHardwareOwnership_concurrent_claims(t *testing.T) {
 		"the persisted owner must be one of the competing Machines",
 	)
 }
+
+// Test_hardwareForMachine_sums_preferred_affinity_weights asserts that the weights of all
+// matching preferred affinity terms are added per Hardware, so Hardware matching several
+// preferred terms wins over Hardware matching a single, heavier term.
+func Test_hardwareForMachine_sums_preferred_affinity_weights(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const namespace = "myNamespace"
+
+	// Without the preferred terms, hw-a would be picked first by name.
+	rackOnly := &tinkv1.Hardware{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hw-a",
+			Namespace: namespace,
+			Labels:    map[string]string{"rack": "1"},
+		},
+	}
+	rackAndRoom := &tinkv1.Hardware{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hw-b",
+			Namespace: namespace,
+			Labels:    map[string]string{"rack": "1", "room": "2"},
+		},
+	}
+
+	scope := &machineReconcileScope{
+		ctx:              context.Background(),
+		tinkerbellClient: newHardwareTestClient(g, rackOnly, rackAndRoom),
+		tinkerbellMachine: &infrastructurev1.TinkerbellMachine{
+			ObjectMeta: metav1.ObjectMeta{Name: "myMachine", Namespace: namespace},
+			Spec: infrastructurev1.TinkerbellMachineSpec{
+				HardwareAffinity: &infrastructurev1.HardwareAffinity{
+					Preferred: []infrastructurev1.WeightedHardwareAffinityTerm{
+						{
+							Weight: 50,
+							HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+								LabelSelector: metav1.LabelSelector{MatchLabels: map[string]string{"rack": "1"}},
+							},
+						},
+						{
+							Weight: 10,
+							HardwareAffinityTerm: infrastructurev1.HardwareAffinityTerm{
+								LabelSelector: metav1.LabelSelector{MatchLabels: map[string]string{"room": "2"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	hw, err := scope.hardwareForMachine()
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(hw.Name).To(Equal(rackAndRoom.Name),
+		"expected Hardware matching both preferred terms (weight 60) to win over Hardware matching one (weight 50)")
+}
