@@ -22,8 +22,7 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    - goheader
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - importas
@@ -54,12 +53,6 @@ linters:
       lines: 90
     exhaustive:
       default-signifies-exhaustive: true
-    gomoddirectives:
-      replace-allow-list:
-        - sigs.k8s.io/cluster-api
-      replace-local: false
-      exclude-forbidden: false
-      retract-allow-no-explanation: false
     importas:
       alias:
         - pkg: k8s.io/api/core/v1
@@ -82,10 +75,6 @@ linters:
     staticcheck:
       checks:
         - all
-    tagliatelle:
-      case:
-        rules:
-          json: goCamel
     unused:
       field-writes-are-uses: true
     lll:
@@ -98,12 +87,14 @@ linters:
     rules:
       - linters:
           - lll
-          - wsl_v5
         source: '^// \+kubebuilder:'
       - linters:
           - lll
           - funlen
-        path: controller/*/(.+)_test.go
+        path: controller/.+_test\.go$
+      - linters:
+          - goconst
+        path: _test\.go$
     paths:
       - zz_generated.*\.go$
       - .*conversion.*\.go$
@@ -119,16 +110,6 @@ formatters:
     - gofumpt
     - goimports
   settings:
-    gci:
-      sections:
-        - standard
-        - default
-        - prefix(github.com/tinkerbell/cluster-api-provider-tinkerbell)
-        - blank
-        - dot
-        - alias
-        - localmodule
-      custom-order: true
     goimports:
       local-prefixes:
         - github.com/tinkerbell/cluster-api-provider-tinkerbell
