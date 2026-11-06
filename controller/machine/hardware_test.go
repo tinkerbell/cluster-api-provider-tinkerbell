@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -42,10 +41,7 @@ import (
 func hardwareTestScheme(g Gomega) *runtime.Scheme {
 	s := runtime.NewScheme()
 	g.Expect(infrastructurev1.AddToScheme(s)).To(Succeed())
-
-	sb := &scheme.Builder{GroupVersion: tinkv1.GroupVersion}
-	sb.Register(&tinkv1.Hardware{}, &tinkv1.HardwareList{})
-	g.Expect(sb.AddToScheme(s)).To(Succeed())
+	g.Expect(tinkv1.AddToScheme(s)).To(Succeed())
 
 	return s
 }

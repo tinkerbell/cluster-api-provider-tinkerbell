@@ -27,12 +27,12 @@ import (
 	"github.com/go-logr/zerologr"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/rs/zerolog"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	cgrecord "k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
-	"sigs.k8s.io/cluster-api/util/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +41,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
-	captctrl "github.com/tinkerbell/cluster-api-provider-tinkerbell/controller"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/cluster"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/controller/machine"
 	"github.com/tinkerbell/cluster-api-provider-tinkerbell/pkg/build"
@@ -104,11 +103,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Machine and cluster operations can create enough events to trigger the event recorder spam filter
-	// Setting the burst size higher ensures all events will be recorded and submitted to the API
-	broadcaster := cgrecord.NewBroadcasterWithCorrelatorOptions(cgrecord.CorrelatorOptions{
-		BurstSize: 100,
-	})
 	opts := ctrl.Options{
 		Scheme: rs,
 		Metrics: metricsserver.Options{
@@ -121,7 +115,6 @@ func main() {
 		RenewDeadline:           &cfg.LeaderElectionRenewDeadline,
 		RetryPeriod:             &cfg.LeaderElectionRetryPeriod,
 		HealthProbeBindAddress:  cfg.HealthAddr,
-		EventBroadcaster:        broadcaster,
 	}
 
 	if cfg.WatchNamespace != "" {
@@ -135,12 +128,6 @@ func main() {
 		log.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-
-	// Initialize event recorder.
-	// GetEventRecorderFor is deprecated in favor of GetEventRecorder, but
-	// record.InitFromRecorder requires the old record.EventRecorder type.
-	//nolint:staticcheck // SA1019
-	record.InitFromRecorder(mgr.GetEventRecorderFor("tinkerbell-controller"))
 
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
@@ -392,10 +379,10 @@ func newScheme() (*runtime.Scheme, error) {
 	if err := clusterv1.AddToScheme(rs); err != nil {
 		return nil, fmt.Errorf("failed to add clusterv1 scheme: err: %w", err)
 	}
-	if err := captctrl.AddToSchemeTinkerbell(rs); err != nil {
+	if err := tinkerbell.AddToScheme(rs); err != nil {
 		return nil, fmt.Errorf("failed to add Tinkerbell scheme: err: %w", err)
 	}
-	if err := captctrl.AddToSchemeBMC(rs); err != nil {
+	if err := bmc.AddToScheme(rs); err != nil {
 		return nil, fmt.Errorf("failed to add BMC scheme: err: %w", err)
 	}
 	return rs, nil

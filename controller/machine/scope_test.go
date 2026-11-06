@@ -29,7 +29,6 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
 )
@@ -171,9 +170,7 @@ func TestSetResourceOwnership(t *testing.T) {
 
 	// Register Tinkerbell types so controllerutil.SetControllerReference
 	// can resolve the TinkerbellMachine GVK.
-	sb := &scheme.Builder{GroupVersion: tinkv1.GroupVersion}
-	sb.Register(&tinkv1.Template{}, &tinkv1.TemplateList{})
-	if err := sb.AddToScheme(s); err != nil {
+	if err := tinkv1.AddToScheme(s); err != nil {
 		t.Fatal(err)
 	}
 
