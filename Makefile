@@ -30,19 +30,19 @@ export GOPROXY
 TOOLS_BIN_DIR := $(abspath bin)
 
 # Binaries.
-CONTROLLER_GEN_VER := v0.19.0
+CONTROLLER_GEN_VER := v0.23.0
 CONTROLLER_GEN_BIN := controller-gen
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
 
-GOLANGCI_LINT_VER := v2.11.3
+GOLANGCI_LINT_VER := v2.15.0
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
-KUSTOMIZE_VER := v5.7.1
+KUSTOMIZE_VER := v5.8.3
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER)
 
-GORELEASER_VER := v2.12.2
+GORELEASER_VER := v2.20.0
 GORELEASER_BIN := goreleaser
 GORELEASER := $(TOOLS_BIN_DIR)/$(GORELEASER_BIN)-$(GORELEASER_VER)
 
@@ -232,10 +232,6 @@ verify-gen: generate
 ## --------------------------------------
 ## Linting
 ## --------------------------------------
-
-# BEGIN: lint-install
-# http://github.com/tinkerbell/lint-install
-
 .PHONY: lint
 lint: _lint ## Lint codebase
 
@@ -248,7 +244,7 @@ GOLANGCI_LINT_CONFIG := $(LINT_ROOT)/.golangci.yml
 $(GOLANGCI_LINT):
 	mkdir -p $(TOOLS_BIN_DIR)
 	rm -rf $(TOOLS_BIN_DIR)/golangci-lint-*
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(TOOLS_BIN_DIR) $(GOLANGCI_LINT_VER)
 	mv $(TOOLS_BIN_DIR)/golangci-lint $@
 
 LINTERS += golangci-lint-lint
@@ -264,5 +260,3 @@ _lint: $(LINTERS)
 
 .PHONY: fix $(FIXERS)
 fix: $(FIXERS)
-
-# END: lint-install

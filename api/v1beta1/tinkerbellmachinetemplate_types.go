@@ -45,8 +45,3 @@ type TinkerbellMachineTemplateList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TinkerbellMachineTemplate `json:"items"`
 }
-
-//nolint:gochecknoinits
-func init() {
-	SchemeBuilder.Register(&TinkerbellMachineTemplate{}, &TinkerbellMachineTemplateList{})
-}

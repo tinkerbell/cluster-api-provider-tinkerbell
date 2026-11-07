@@ -153,8 +153,3 @@ type TinkerbellClusterList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TinkerbellCluster `json:"items"`
 }
-
-//nolint:gochecknoinits
-func init() {
-	SchemeBuilder.Register(&TinkerbellCluster{}, &TinkerbellClusterList{})
-}
