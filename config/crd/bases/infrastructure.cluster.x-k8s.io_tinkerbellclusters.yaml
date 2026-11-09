@@ -71,6 +71,36 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              failureDomainLabel:
+                description: |-
+                  FailureDomainLabel is the Hardware label key whose distinct values define this
+                  cluster's failure domains. When set, the controller lists Hardware carrying this
+                  label and publishes each distinct value as an entry in status.failureDomains,
+                  which Cluster API copies to Cluster.status.failureDomains. Control plane
+                  providers such as KubeadmControlPlane then spread machines across those domains
+                  and record the choice in Machine.spec.failureDomain, which CAPT honours as an
+                  additional required constraint when selecting Hardware.
+
+                  A typical value is a physical topology key such as "topology.tinkerbell.org/rack".
+                  When empty, no failure domains are published and Hardware selection is unconstrained,
+                  which is the historical behaviour.
+                maxLength: 316
+                type: string
+              failureDomainPolicy:
+                description: |-
+                  FailureDomainPolicy determines what happens when the failure domain assigned to a
+                  Machine has no Hardware available.
+
+                  Required, the default, fails provisioning rather than breaking the spread the control
+                  plane asked for. BestEffort falls back to any other Hardware matching the machine's
+                  hardware affinity, keeping provisioning working while a domain is down at the cost of
+                  a temporarily uneven spread.
+
+                  Only meaningful together with FailureDomainLabel.
+                enum:
+                - Required
+                - BestEffort
+                type: string
               imageLookupBaseRegistry:
                 default: ghcr.io/tinkerbell/cluster-api-provider-tinkerbell
                 description: |-
@@ -130,6 +160,8 @@ spec:
             x-kubernetes-validations:
             - message: templateOverride and templateOverrideRef are mutually exclusive
               rule: '!has(self.templateOverride) || !has(self.templateOverrideRef)'
+            - message: failureDomainPolicy has no effect without failureDomainLabel
+              rule: '!has(self.failureDomainPolicy) || has(self.failureDomainLabel)'
           status:
             description: TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
             properties:
@@ -190,6 +222,40 @@ spec:
                   - type
                   type: object
                 type: array
+              failureDomains:
+                description: |-
+                  FailureDomains is a list of failure domain objects synced from the distinct values
+                  of the Spec.FailureDomainLabel label across the cluster's Hardware.
+                  NOTE: this field is part of the Cluster API contract; Cluster API copies it to
+                  Cluster.status.failureDomains, where control plane providers consume it.
+                items:
+                  description: |-
+                    FailureDomain is the Schema for Cluster API failure domains.
+                    It allows controllers to understand how many failure domains a cluster can optionally span across.
+                  properties:
+                    attributes:
+                      additionalProperties:
+                        type: string
+                      description: attributes is a free form map of attributes an
+                        infrastructure provider might use or require.
+                      type: object
+                    controlPlane:
+                      description: controlPlane determines if this failure domain
+                        is suitable for use by control plane machines.
+                      type: boolean
+                    name:
+                      description: name is the name of the failure domain.
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 100
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               initialization:
                 description: |-
                   Initialization provides observations of the TinkerbellCluster initialization process.

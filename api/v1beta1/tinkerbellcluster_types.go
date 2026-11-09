@@ -36,8 +36,30 @@ const (
 	ClusterFinalizer = "tinkerbellcluster.infrastructure.cluster.x-k8s.io"
 )
 
+// FailureDomainPolicy determines how strictly the failure domain assigned to a Machine
+// constrains the Hardware chosen for it.
+// +kubebuilder:validation:Enum=Required;BestEffort
+type FailureDomainPolicy string
+
+const (
+	// FailureDomainPolicyRequired only ever selects Hardware in the failure domain assigned
+	// to the Machine. When that domain has no Hardware available, provisioning fails rather
+	// than placing the machine elsewhere. This preserves the spread the control plane asked
+	// for at the cost of blocking on an exhausted or unavailable domain.
+	//
+	// This is the default when no policy is set.
+	FailureDomainPolicyRequired FailureDomainPolicy = "Required"
+
+	// FailureDomainPolicyBestEffort prefers Hardware in the failure domain assigned to the
+	// Machine, but falls back to any other Hardware matching the machine's hardware affinity
+	// when that domain has none available. This keeps provisioning working while a domain is
+	// down, at the cost of a temporarily uneven spread.
+	FailureDomainPolicyBestEffort FailureDomainPolicy = "BestEffort"
+)
+
 // TinkerbellClusterSpec defines the desired state of TinkerbellCluster.
 // +kubebuilder:validation:XValidation:rule="!has(self.templateOverride) || !has(self.templateOverrideRef)",message="templateOverride and templateOverrideRef are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!has(self.failureDomainPolicy) || has(self.failureDomainLabel)",message="failureDomainPolicy has no effect without failureDomainLabel"
 type TinkerbellClusterSpec struct {
 	// ControlPlaneEndpoint is the address of the cluster control plane.
 	// When not set, it is populated from the owning Cluster's spec.
@@ -93,6 +115,33 @@ type TinkerbellClusterSpec struct {
 	// Mutually exclusive with TemplateOverride.
 	// +optional
 	TemplateOverrideRef *ObjectRef `json:"templateOverrideRef,omitempty"`
+
+	// FailureDomainLabel is the Hardware label key whose distinct values define this
+	// cluster's failure domains. When set, the controller lists Hardware carrying this
+	// label and publishes each distinct value as an entry in status.failureDomains,
+	// which Cluster API copies to Cluster.status.failureDomains. Control plane
+	// providers such as KubeadmControlPlane then spread machines across those domains
+	// and record the choice in Machine.spec.failureDomain, which CAPT honours as an
+	// additional required constraint when selecting Hardware.
+	//
+	// A typical value is a physical topology key such as "topology.tinkerbell.org/rack".
+	// When empty, no failure domains are published and Hardware selection is unconstrained,
+	// which is the historical behaviour.
+	// +optional
+	// +kubebuilder:validation:MaxLength=316
+	FailureDomainLabel string `json:"failureDomainLabel,omitempty"`
+
+	// FailureDomainPolicy determines what happens when the failure domain assigned to a
+	// Machine has no Hardware available.
+	//
+	// Required, the default, fails provisioning rather than breaking the spread the control
+	// plane asked for. BestEffort falls back to any other Hardware matching the machine's
+	// hardware affinity, keeping provisioning working while a domain is down at the cost of
+	// a temporarily uneven spread.
+	//
+	// Only meaningful together with FailureDomainLabel.
+	// +optional
+	FailureDomainPolicy FailureDomainPolicy `json:"failureDomainPolicy,omitempty"`
 }
 
 // TinkerbellClusterStatus defines the observed state of TinkerbellCluster.
@@ -109,6 +158,16 @@ type TinkerbellClusterStatus struct {
 	// Conditions defines current service state of the TinkerbellCluster.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// FailureDomains is a list of failure domain objects synced from the distinct values
+	// of the Spec.FailureDomainLabel label across the cluster's Hardware.
+	// NOTE: this field is part of the Cluster API contract; Cluster API copies it to
+	// Cluster.status.failureDomains, where control plane providers consume it.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=100
+	FailureDomains []clusterv1.FailureDomain `json:"failureDomains,omitempty"`
 }
 
 // TinkerbellClusterInitializationStatus provides observations of the TinkerbellCluster initialization process.

@@ -20,8 +20,11 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/go-logr/logr"
+	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -49,6 +52,15 @@ const (
 
 	// KubernetesAPIPort is a port used by Tinkerbell clusters for Kubernetes API.
 	KubernetesAPIPort = 6443
+
+	// failureDomainResyncInterval is how often a cluster with Spec.FailureDomainLabel set is
+	// re-reconciled so status.failureDomains picks up Hardware that was added, removed or
+	// relabelled.
+	//
+	// This is only used in external Tinkerbell mode (--external-kubeconfig), where Hardware
+	// lives in another cluster that the manager's cache cannot watch. In the default local
+	// mode the controller watches Hardware directly and this interval is not used.
+	failureDomainResyncInterval = 5 * time.Minute
 )
 
 var (
@@ -66,7 +78,14 @@ var (
 // TinkerbellClusterReconciler implements Reconciler interface.
 type TinkerbellClusterReconciler struct {
 	client.Client
-	WatchFilterValue string
+	// TinkerbellClient reads Tinkerbell CRDs. In local mode it is the same client as
+	// Client; in external mode it targets a separate Tinkerbell cluster. When nil, the
+	// management cluster client is used.
+	TinkerbellClient client.Client
+	// ExternalTinkerbell is true when TinkerbellClient targets a separate Tinkerbell
+	// cluster, whose Hardware the manager's cache cannot watch.
+	ExternalTinkerbell bool
+	WatchFilterValue   string
 }
 
 // validate validates if context configuration has all required fields properly populated.
@@ -95,12 +114,19 @@ func (tcr *TinkerbellClusterReconciler) newReconcileContext(ctx context.Context,
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
+	tinkerbellClient := tcr.TinkerbellClient
+	if tinkerbellClient == nil {
+		tinkerbellClient = tcr.Client
+	}
+
 	crc := &clusterReconcileContext{
-		log:               log.WithValues("tinkerbellcluster", namespacedName),
-		ctx:               ctx,
-		tinkerbellCluster: &infrastructurev1.TinkerbellCluster{},
-		client:            tcr.Client,
-		namespacedName:    namespacedName,
+		log:                log.WithValues("tinkerbellcluster", namespacedName),
+		ctx:                ctx,
+		tinkerbellCluster:  &infrastructurev1.TinkerbellCluster{},
+		client:             tcr.Client,
+		tinkerbellClient:   tinkerbellClient,
+		externalTinkerbell: tcr.ExternalTinkerbell,
+		namespacedName:     namespacedName,
 	}
 
 	if err := crc.client.Get(crc.ctx, namespacedName, crc.tinkerbellCluster); err != nil {
@@ -158,13 +184,15 @@ func findClusterOwnerByLabelAndAdopt(crc *clusterReconcileContext) (*clusterv1.C
 
 // clusterReconcileContext implements ReconcileContext by reconciling TinkerbellCluster object.
 type clusterReconcileContext struct {
-	ctx               context.Context
-	tinkerbellCluster *infrastructurev1.TinkerbellCluster
-	patchHelper       *patch.Helper
-	cluster           *clusterv1.Cluster
-	log               logr.Logger
-	client            client.Client
-	namespacedName    types.NamespacedName
+	ctx                context.Context
+	tinkerbellCluster  *infrastructurev1.TinkerbellCluster
+	patchHelper        *patch.Helper
+	cluster            *clusterv1.Cluster
+	log                logr.Logger
+	client             client.Client
+	tinkerbellClient   client.Client
+	externalTinkerbell bool
+	namespacedName     types.NamespacedName
 }
 
 func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoint, error) {
@@ -206,12 +234,62 @@ func (crc *clusterReconcileContext) controlPlaneEndpoint() (clusterv1.APIEndpoin
 	return endpoint, nil
 }
 
+// reconcileFailureDomains populates Status.FailureDomains from the distinct values of the
+// Spec.FailureDomainLabel label across the cluster's Hardware.
+//
+// Every discovered domain is marked ControlPlane, because KubeadmControlPlane ignores any
+// domain that is not (see ControlPlane.FailureDomains in the CAPI KCP internals). Domains
+// are reported whether or not they currently hold unclaimed Hardware: a failure domain
+// describes topology, not free capacity, so dropping an exhausted rack from the list would
+// make the published set flap as machines come and go.
+func (crc *clusterReconcileContext) reconcileFailureDomains() error {
+	label := crc.tinkerbellCluster.Spec.FailureDomainLabel
+	if label == "" {
+		crc.tinkerbellCluster.Status.FailureDomains = nil
+
+		return nil
+	}
+
+	hardwareList := &tinkv1.HardwareList{}
+	if err := crc.tinkerbellClient.List(crc.ctx, hardwareList, client.HasLabels{label}); err != nil {
+		return fmt.Errorf("listing Hardware for failure domains: %w", err)
+	}
+
+	seen := map[string]struct{}{}
+
+	for i := range hardwareList.Items {
+		// HasLabels matches on key presence, so an empty value reaches here. It cannot
+		// name a failure domain (Machine.spec.failureDomain of "" means "unassigned"),
+		// so skip it rather than publishing a domain nothing can be placed into.
+		if value := hardwareList.Items[i].Labels[label]; value != "" {
+			seen[value] = struct{}{}
+		}
+	}
+
+	domains := make([]clusterv1.FailureDomain, 0, len(seen))
+	for name := range seen {
+		domains = append(domains, clusterv1.FailureDomain{
+			Name:         name,
+			ControlPlane: ptr.To(true),
+		})
+	}
+
+	// Sorted for a deterministic order: this list is copied verbatim into
+	// Cluster.status.failureDomains, and an unstable order would rewrite that status on
+	// every pass and reconcile in a loop.
+	sort.Slice(domains, func(i, j int) bool { return domains[i].Name < domains[j].Name })
+
+	crc.tinkerbellCluster.Status.FailureDomains = domains
+
+	return nil
+}
+
 // Reconcile implements ReconcileContext interface by ensuring that all TinkerbellCluster object
 // fields are properly populated.
-func (crc *clusterReconcileContext) reconcile() error {
+func (crc *clusterReconcileContext) reconcile() (ctrl.Result, error) {
 	controlPlaneEndpoint, err := crc.controlPlaneEndpoint()
 	if err != nil {
-		return err
+		return ctrl.Result{}, err
 	}
 
 	// Ensure that we are setting the ControlPlaneEndpoint on the TinkerbellCluster
@@ -229,13 +307,22 @@ func (crc *clusterReconcileContext) reconcile() error {
 		Provisioned: ptr.To(true),
 	}
 
+	if err := crc.reconcileFailureDomains(); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	crc.log.Info("Setting cluster status to ready")
 
 	if err := crc.patchHelper.Patch(crc.ctx, crc.tinkerbellCluster); err != nil {
-		return fmt.Errorf("patching cluster object: %w", err)
+		return ctrl.Result{}, fmt.Errorf("patching cluster object: %w", err)
 	}
 
-	return nil
+	// In local mode a Hardware watch re-triggers this reconcile, so no resync is needed.
+	if crc.tinkerbellCluster.Spec.FailureDomainLabel == "" || !crc.externalTinkerbell {
+		return ctrl.Result{}, nil
+	}
+
+	return ctrl.Result{RequeueAfter: failureDomainResyncInterval}, nil
 }
 
 func (crc *clusterReconcileContext) reconcileDelete() error {
@@ -245,6 +332,7 @@ func (crc *clusterReconcileContext) reconcileDelete() error {
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=tinkerbellclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
+// +kubebuilder:rbac:groups=tinkerbell.org,resources=hardware;hardware/status,verbs=get;list;watch
 
 // Reconcile ensures state of Tinkerbell clusters.
 func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -278,7 +366,7 @@ func (tcr *TinkerbellClusterReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	return ctrl.Result{}, crc.reconcile()
+	return crc.reconcile()
 }
 
 // SetupWithManager configures reconciler with a given manager.
@@ -292,7 +380,7 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mg
 		&infrastructurev1.TinkerbellCluster{},
 	)
 
-	builder := ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrastructurev1.TinkerbellCluster{}).
 		WithEventFilter(predicates.ResourceHasFilterLabel(sm, log, tcr.WatchFilterValue)).
@@ -303,9 +391,56 @@ func (tcr *TinkerbellClusterReconciler) SetupWithManager(ctx context.Context, mg
 			builder.WithPredicates(predicates.ClusterPausedTransitionsOrInfrastructureProvisioned(sm, log)),
 		)
 
-	if err := builder.Complete(tcr); err != nil {
+	// Keep status.failureDomains current as Hardware is racked, retired or relabelled.
+	// Only in local mode: external Hardware lives in a cluster this manager's cache does
+	// not watch, and is picked up by the resync in reconcile() instead.
+	if !tcr.ExternalTinkerbell {
+		controllerBuilder = controllerBuilder.Watches(
+			&tinkv1.Hardware{},
+			handler.EnqueueRequestsFromMapFunc(tcr.hardwareToFailureDomainClusters),
+		)
+	}
+
+	if err := controllerBuilder.Complete(tcr); err != nil {
 		return fmt.Errorf("failed to configure controller: %w", err)
 	}
 
 	return nil
+}
+
+// hardwareToFailureDomainClusters enqueues every TinkerbellCluster that discovers failure
+// domains, whatever the Hardware that changed.
+//
+// Hardware carries no reference to a cluster, and the label the clusters key on is not
+// known here, so there is nothing to narrow on. Filtering by the changed Hardware's own
+// labels would also miss the case that matters most: a Hardware losing its topology label
+// arrives with the label already gone, and would stop mapping to the very cluster whose
+// published domains have just gone stale. The list of clusters is small and the reconcile
+// it triggers is a no-op patch when nothing moved.
+func (tcr *TinkerbellClusterReconciler) hardwareToFailureDomainClusters(ctx context.Context, _ client.Object) []ctrl.Request {
+	log := ctrl.LoggerFrom(ctx)
+
+	clusterList := &infrastructurev1.TinkerbellClusterList{}
+	if err := tcr.List(ctx, clusterList); err != nil {
+		log.Error(err, "Failed to list TinkerbellClusters for a Hardware event")
+
+		return nil
+	}
+
+	var requests []ctrl.Request
+
+	for i := range clusterList.Items {
+		if clusterList.Items[i].Spec.FailureDomainLabel == "" {
+			continue
+		}
+
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      clusterList.Items[i].Name,
+				Namespace: clusterList.Items[i].Namespace,
+			},
+		})
+	}
+
+	return requests
 }
