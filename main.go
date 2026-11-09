@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -75,13 +76,6 @@ type tinkerbellClientResult struct {
 }
 
 func main() {
-	// Set up logging before any log calls so all startup messages are visible.
-	zl := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Caller().Timestamp().Logger()
-	ctrl.SetLogger(zerologr.New(&zl))
-	klog.SetLogger(ctrl.Log)
-
-	log := ctrl.Log.WithName("setup")
-
 	fs := flag.NewFlagSet("capt", flag.ExitOnError)
 	initKlogFlags(fs)
 
@@ -92,6 +86,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	logger := newLogger(fs)
+	ctrl.SetLogger(logger)
+	klog.SetLogger(logger)
+	log := ctrl.Log.WithName("setup")
 
 	if cfg.WatchNamespace != "" {
 		log.Info("Watching cluster-api objects only in namespace for reconciliation", "namespace", cfg.WatchNamespace)
@@ -356,6 +355,14 @@ func (c *config) initFlags(fs *flag.FlagSet) { //nolint:funlen
 		"/var/run/secrets/external-tinkerbell/kubeconfig",
 		"Path to a kubeconfig file for an external Tinkerbell cluster.",
 	)
+}
+
+func newLogger(fs *flag.FlagSet) logr.Logger {
+	// klog already validated --v as an integer during flag parsing.
+	verbosity, _ := strconv.Atoi(fs.Lookup("v").Value.String())
+	zerologr.SetMaxV(verbosity)
+	zl := zerolog.New(os.Stdout).With().Caller().Timestamp().Logger()
+	return zerologr.New(&zl)
 }
 
 // initKlogFlags registers klog flags and opts into the new klog behavior so
