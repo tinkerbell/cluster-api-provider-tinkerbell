@@ -310,7 +310,7 @@ func (scope *machineReconcileScope) assignedHardware() (*tinkv1.Hardware, error)
 
 func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1.WeightedHardwareAffinityTerm) (func(i int, j int) bool, error) {
 	scores := map[client.ObjectKey]int32{}
-	// compute scores for each item based on the preferred term weights
+	// compute scores for each item by adding the weights of all matching preferred terms
 	for _, term := range preferred {
 		selector, err := metav1.LabelSelectorAsSelector(&term.HardwareAffinityTerm.LabelSelector)
 		if err != nil {
@@ -320,7 +320,7 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 		for i := range hardware {
 			hw := &hardware[i]
 			if selector.Matches(labels.Set(hw.Labels)) {
-				scores[client.ObjectKeyFromObject(hw)] = term.Weight
+				scores[client.ObjectKeyFromObject(hw)] += term.Weight
 			}
 		}
 	}
