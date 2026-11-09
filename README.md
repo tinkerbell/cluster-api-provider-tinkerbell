@@ -21,6 +21,10 @@ deployments of Kubernetes, both on-premises and off.
 
 See the [Quick Start](docs/QUICK-START.md).
 
+## Upgrades
+
+See [docs/UPGRADING.md](docs/UPGRADING.md) to learn how cluster upgrades work with CAPT.
+
 ## Kubernetes versions with published Images
 
 Pre-built images are pushed to the [GitHub Container Registry](https://github.com/orgs/tinkerbell/packages?repo_name=cluster-api-provider-tinkerbell). We currently publish images for [Ubuntu 18.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-1804) and [Ubuntu 20.04](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/pkgs/container/cluster-api-provider-tinkerbell%2Fubuntu-2004).
