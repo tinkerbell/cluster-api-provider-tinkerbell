@@ -123,6 +123,7 @@ type TinkerbellClusterInitializationStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=tinkerbellclusters,scope=Namespaced,categories=cluster-api
 // +kubebuilder:object:root=true
+// +kubebuilder:deprecatedversion:warning="infrastructure.cluster.x-k8s.io/v1beta1 is deprecated; use v1beta2. v1beta1 will be removed in CAPT v0.9.0"
 // +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".metadata.labels.cluster\\.x-k8s\\.io/cluster-name",description="Cluster to which this TinkerbellCluster belongs"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="TinkerbellCluster ready status"
 
