@@ -106,11 +106,16 @@ func (scope *machineReconcileScope) patchHardwareAnnotations(hw *tinkv1.Hardware
 	return nil
 }
 
+// hardwareOwnedByMachine reports whether hw carries this Machine's ownership labels.
+func (scope *machineReconcileScope) hardwareOwnedByMachine(hw *tinkv1.Hardware) bool {
+	return hw.Labels[HardwareOwnerNameLabel] == scope.tinkerbellMachine.Name &&
+		hw.Labels[HardwareOwnerNamespaceLabel] == scope.tinkerbellMachine.Namespace
+}
+
 // hardwareAlreadyClaimed reports whether hw already carries this Machine's ownership
 // labels and the expected finalizer state, i.e. a claim would have nothing to write.
 func (scope *machineReconcileScope) hardwareAlreadyClaimed(hw *tinkv1.Hardware) bool {
-	return hw.Labels[HardwareOwnerNameLabel] == scope.tinkerbellMachine.Name &&
-		hw.Labels[HardwareOwnerNamespaceLabel] == scope.tinkerbellMachine.Namespace &&
+	return scope.hardwareOwnedByMachine(hw) &&
 		controllerutil.ContainsFinalizer(hw, infrastructurev1.MachineFinalizer) &&
 		!controllerutil.ContainsFinalizer(hw, infrastructurev1.MachineLegacyFinalizer)
 }
@@ -345,10 +350,7 @@ func byHardwareAffinity(hardware []tinkv1.Hardware, preferred []infrastructurev1
 }
 
 func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
-	patchHelper, err := patch.NewHelper(hw, scope.tinkerbellClient)
-	if err != nil {
-		return fmt.Errorf("initializing patch helper for selected hardware: %w", err)
-	}
+	base := hw.DeepCopy()
 
 	delete(hw.Labels, HardwareOwnerNameLabel)
 	delete(hw.Labels, HardwareOwnerNamespaceLabel)
@@ -357,20 +359,31 @@ func (scope *machineReconcileScope) releaseHardware(hw *tinkv1.Hardware) error {
 	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineFinalizer)
 	controllerutil.RemoveFinalizer(hw, infrastructurev1.MachineLegacyFinalizer)
 
-	if err := patchHelper.Patch(scope.ctx, hw); err != nil {
+	// Release with an optimistic-lock merge patch, carrying the ResourceVersion of the read that
+	// found the Hardware owned by this Machine. If another Machine claimed it since, the release
+	// gets a Conflict instead of removing that Machine's ownership.
+	releasePatch := client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})
+	if err := scope.tinkerbellClient.Patch(scope.ctx, hw, releasePatch); err != nil {
 		return fmt.Errorf("patching Hardware object: %w", err)
 	}
 
 	return nil
 }
 
+// getHardwareForMachine reads the TinkerbellMachine's Hardware without the cache, so its ownership
+// labels are current. It reports Hardware not found when none was selected: the API server rejects
+// a read with an empty name.
 func (scope *machineReconcileScope) getHardwareForMachine(hardware *tinkv1.Hardware) error {
+	if scope.tinkerbellMachine.Spec.HardwareName == "" {
+		return apierrors.NewNotFound(tinkv1.GroupVersion.WithResource("hardware").GroupResource(), "")
+	}
+
 	namespacedName := types.NamespacedName{
 		Name:      scope.tinkerbellMachine.Spec.HardwareName,
 		Namespace: scope.tinkerbellNamespace(),
 	}
 
-	if err := scope.tinkerbellClient.Get(scope.ctx, namespacedName, hardware); err != nil {
+	if err := scope.tinkerbellReader.Get(scope.ctx, namespacedName, hardware); err != nil {
 		return fmt.Errorf("getting hardware: %w", err)
 	}
 

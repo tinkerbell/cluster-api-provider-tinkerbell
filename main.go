@@ -71,6 +71,7 @@ type config struct {
 
 type tinkerbellClientResult struct {
 	Client       client.Client
+	Reader       client.Reader
 	External     bool
 	WatchManager *tinkcluster.NamespaceWatchManager
 }
@@ -172,6 +173,7 @@ func (c *config) setupReconcilers(ctx context.Context, log logr.Logger, rs *runt
 	if err := (&machine.TinkerbellMachineReconciler{
 		Client:             mgr.GetClient(),
 		TinkerbellClient:   result.Client,
+		TinkerbellReader:   result.Reader,
 		ExternalTinkerbell: result.External,
 		WatchManager:       result.WatchManager,
 		Scheme:             rs,
@@ -193,7 +195,7 @@ func (c *config) buildTinkerbellClient(ctx context.Context, setupLog logr.Logger
 
 	if errors.Is(restErr, tinkcluster.NoConfigError{}) {
 		setupLog.Info("using local Tinkerbell for CRD operations", "tinkerbellClientMode", "local", "reason", restErr.Error())
-		return tinkerbellClientResult{Client: tinkClient}, nil
+		return tinkerbellClientResult{Client: tinkClient, Reader: mgr.GetAPIReader()}, nil
 	}
 
 	setupLog.Info("using external Tinkerbell with JIT per-namespace watches",
@@ -208,7 +210,7 @@ func (c *config) buildTinkerbellClient(ctx context.Context, setupLog logr.Logger
 		machine.LabelMachineName, machine.LabelMachineNamespace,
 	)
 	wm.SetContext(ctx)
-	return tinkerbellClientResult{Client: directClient, External: true, WatchManager: wm}, nil
+	return tinkerbellClientResult{Client: directClient, Reader: directClient, External: true, WatchManager: wm}, nil
 }
 
 func setupWebhooks(mgr ctrl.Manager) error {

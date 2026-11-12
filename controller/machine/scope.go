@@ -59,6 +59,10 @@ var (
 	// the required Tinkerbell client configured.
 	ErrMissingTinkerbellClient = fmt.Errorf("tinkerbell client is nil")
 
+	// ErrMissingTinkerbellReader is the error returned when TinkerbellMachineReconciler does not have
+	// the required uncached Tinkerbell reader configured.
+	ErrMissingTinkerbellReader = fmt.Errorf("tinkerbell reader is nil")
+
 	// ErrMissingScheme is the error returned when TinkerbellMachineReconciler does not have
 	// a Scheme configured.
 	ErrMissingScheme = fmt.Errorf("scheme is nil")
@@ -85,7 +89,8 @@ type machineReconcileScope struct {
 	// Tinkerbell cluster fields — in local mode tinkerbellClient == client;
 	// in external mode it targets a separate Tinkerbell cluster.
 	tinkerbellClient   client.Client
-	externalTinkerbell bool // true when tinkerbellClient targets an external cluster
+	tinkerbellReader   client.Reader // reads from the Tinkerbell API server, bypassing any cache
+	externalTinkerbell bool          // true when tinkerbellClient targets an external cluster
 	watchManager       *tinkcluster.NamespaceWatchManager
 }
 
@@ -291,7 +296,7 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //no
 	// If the Hardware is not found, we can't do any BMC operations. In this case we just remove all
 	// the other dependencies and remove the finalizer from the TinkerbellMachine object so that it can be deleted.
 	if apierrors.IsNotFound(err) {
-		scope.log.Info("Hardware not found, only template, workflow and finalizer will be removed",
+		scope.log.Info("Hardware not found, only template, workflow, BMC job and finalizer will be removed",
 			"hardwareName", scope.tinkerbellMachine.Spec.HardwareName,
 		)
 
@@ -299,11 +304,29 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //no
 			return err
 		}
 
+		if err := scope.removePowerOffJobs(); err != nil {
+			return fmt.Errorf("error removing BMC power off job: %w", err)
+		}
+
 		return scope.removeFinalizer()
 	}
 
 	if err := scope.removeDependencies(); err != nil {
 		return err
+	}
+
+	// The Hardware was released, by an earlier attempt at this delete that failed after
+	// releasing it, or was never claimed. Another TinkerbellMachine may own it now, so leave it
+	// alone: neither power it off nor release it.
+	if !scope.hardwareOwnedByMachine(hw) {
+		scope.log.Info("Hardware not owned by this machine; skipping hardware power off and release",
+			"Hardware", hw.Name)
+
+		if err := scope.removePowerOffJobs(); err != nil {
+			return fmt.Errorf("error removing BMC power off job: %w", err)
+		}
+
+		return scope.removeFinalizer()
 	}
 
 	// The hardware BMCRef is nil.
@@ -316,6 +339,11 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //no
 			return fmt.Errorf("error releasing Hardware: %w", err)
 		}
 
+		// A Job from before the BMC reference was removed would otherwise stay.
+		if err := scope.removePowerOffJobs(); err != nil {
+			return fmt.Errorf("error removing BMC power off job: %w", err)
+		}
+
 		return scope.removeFinalizer()
 	}
 
@@ -325,6 +353,11 @@ func (scope *machineReconcileScope) DeleteMachineWithDependencies() error { //no
 
 	if err := scope.releaseHardware(hw); err != nil {
 		return fmt.Errorf("error releasing Hardware: %w", err)
+	}
+
+	// Remove the Job before the finalizer: once the TinkerbellMachine is gone, nothing would.
+	if err := scope.removePowerOffJobs(); err != nil {
+		return fmt.Errorf("error removing BMC power off job: %w", err)
 	}
 
 	if err := scope.removeFinalizer(); err != nil {
