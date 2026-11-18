@@ -17,9 +17,13 @@ const (
 	// TinkerbellMachineHardwareClaimedReason surfaces that the TinkerbellMachine owns a Hardware.
 	TinkerbellMachineHardwareClaimedReason = "HardwareClaimed"
 
-	// TinkerbellMachineWaitingForHardwareReason surfaces that no Hardware matching the
-	// TinkerbellMachine is free to claim.
+	// TinkerbellMachineWaitingForHardwareReason surfaces that the TinkerbellMachine has
+	// not claimed a Hardware yet.
 	TinkerbellMachineWaitingForHardwareReason = "WaitingForHardware"
+
+	// TinkerbellMachineHardwareNotFoundReason surfaces that a provisioned
+	// TinkerbellMachine no longer owns any Hardware.
+	TinkerbellMachineHardwareNotFoundReason = "HardwareNotFound"
 
 	// TinkerbellMachineReadyReason surfaces that the TinkerbellMachine is provisioned.
 	TinkerbellMachineReadyReason = clusterv1.ReadyReason
@@ -28,12 +32,36 @@ const (
 	TinkerbellMachineNotProvisionedReason = "NotProvisioned"
 )
 
-func (scope *machineReconcileScope) setWaitingForHardwareCondition(err error) {
+// isProvisioned reports whether the TinkerbellMachine finished provisioning.
+// Machines provisioned before v0.7.0 only carry Status.Ready, and keep it until a
+// reconcile reaches the provisioned annotation and backfills Status.Initialization.
+func (scope *machineReconcileScope) isProvisioned() bool {
+	m := scope.tinkerbellMachine
+
+	return m.Status.Ready || (m.Status.Initialization != nil && ptr.Deref(m.Status.Initialization.Provisioned, false))
+}
+
+func (scope *machineReconcileScope) setNoHardwareCondition(err error) {
+	if scope.isProvisioned() {
+		conditions.Set(scope.tinkerbellMachine, metav1.Condition{
+			Type:    TinkerbellMachineHardwareClaimedCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  TinkerbellMachineHardwareNotFoundReason,
+			Message: fmt.Sprintf("Provisioned machine no longer owns Hardware %q", scope.tinkerbellMachine.Spec.HardwareName),
+		})
+
+		return
+	}
+
+	scope.setWaitingForHardwareCondition("Waiting for Hardware: " + err.Error())
+}
+
+func (scope *machineReconcileScope) setWaitingForHardwareCondition(message string) {
 	conditions.Set(scope.tinkerbellMachine, metav1.Condition{
 		Type:    TinkerbellMachineHardwareClaimedCondition,
 		Status:  metav1.ConditionFalse,
 		Reason:  TinkerbellMachineWaitingForHardwareReason,
-		Message: "Waiting for Hardware: " + err.Error(),
+		Message: message,
 	})
 }
 
@@ -54,7 +82,7 @@ func (scope *machineReconcileScope) setHardwareClaimedCondition(hw *tinkv1.Hardw
 func (scope *machineReconcileScope) setReadyCondition() {
 	m := scope.tinkerbellMachine
 
-	if m.Status.Initialization != nil && ptr.Deref(m.Status.Initialization.Provisioned, false) {
+	if scope.isProvisioned() {
 		conditions.Set(m, metav1.Condition{
 			Type:   clusterv1.ReadyCondition,
 			Status: metav1.ConditionTrue,
@@ -64,21 +92,20 @@ func (scope *machineReconcileScope) setReadyCondition() {
 		return
 	}
 
-	if c := conditions.Get(m, TinkerbellMachineHardwareClaimedCondition); c != nil && c.Status == metav1.ConditionFalse {
-		conditions.Set(m, metav1.Condition{
-			Type:    clusterv1.ReadyCondition,
-			Status:  metav1.ConditionFalse,
-			Reason:  c.Reason,
-			Message: c.Message,
-		})
+	ready := metav1.Condition{Type: clusterv1.ReadyCondition, Status: metav1.ConditionFalse}
 
-		return
+	switch claimed := conditions.Get(m, TinkerbellMachineHardwareClaimedCondition); {
+	case claimed == nil:
+		// ensureHardware failed before it could tell, for example on a Hardware API error.
+		ready.Reason = TinkerbellMachineWaitingForHardwareReason
+		ready.Message = "Waiting for Hardware"
+	case claimed.Status != metav1.ConditionTrue:
+		ready.Reason = claimed.Reason
+		ready.Message = claimed.Message
+	default:
+		ready.Reason = TinkerbellMachineNotProvisionedReason
+		ready.Message = "Hardware is not provisioned yet"
 	}
 
-	conditions.Set(m, metav1.Condition{
-		Type:    clusterv1.ReadyCondition,
-		Status:  metav1.ConditionFalse,
-		Reason:  TinkerbellMachineNotProvisionedReason,
-		Message: "Hardware is not provisioned yet",
-	})
+	conditions.Set(m, ready)
 }

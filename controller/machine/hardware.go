@@ -188,13 +188,18 @@ func (scope *machineReconcileScope) ensureHardware() (*tinkv1.Hardware, error) {
 	hw, err := scope.hardwareForMachine()
 	if err != nil {
 		if errors.Is(err, ErrNoHardwareAvailable) {
-			scope.setWaitingForHardwareCondition(err)
+			scope.setNoHardwareCondition(err)
 		}
 
 		return nil, fmt.Errorf("getting hardware: %w", err)
 	}
 
 	if err := scope.takeHardwareOwnership(hw); err != nil {
+		if errors.Is(err, errHardwareClaimRequeue) {
+			scope.setWaitingForHardwareCondition(
+				fmt.Sprintf("Waiting for Hardware: claim on %s/%s conflicted, retrying", hw.Namespace, hw.Name))
+		}
+
 		return nil, fmt.Errorf("taking Hardware ownership: %w", err)
 	}
 
