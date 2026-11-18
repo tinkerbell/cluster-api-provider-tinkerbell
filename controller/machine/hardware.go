@@ -187,12 +187,18 @@ func (scope *machineReconcileScope) ensureHardwareUserData(hw *tinkv1.Hardware, 
 func (scope *machineReconcileScope) ensureHardware() (*tinkv1.Hardware, error) {
 	hw, err := scope.hardwareForMachine()
 	if err != nil {
+		if errors.Is(err, ErrNoHardwareAvailable) {
+			scope.setWaitingForHardwareCondition(err)
+		}
+
 		return nil, fmt.Errorf("getting hardware: %w", err)
 	}
 
 	if err := scope.takeHardwareOwnership(hw); err != nil {
 		return nil, fmt.Errorf("taking Hardware ownership: %w", err)
 	}
+
+	scope.setHardwareClaimedCondition(hw)
 
 	if scope.tinkerbellMachine.Spec.HardwareName == "" {
 		scope.log.Info("Selected Hardware for machine", "Hardware name", hw.Name)

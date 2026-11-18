@@ -1930,8 +1930,6 @@ func Test_Machine_reconciliation_pausing(t *testing.T) {
 }
 
 // findCondition returns the condition with the given type, or nil if not found.
-//
-//nolint:unparam
 func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
 	for i := range conditions {
 		if conditions[i].Type == conditionType {
