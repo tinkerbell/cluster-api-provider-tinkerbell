@@ -135,6 +135,18 @@ On arm64 the ESP boots shim, which chains to Ubuntu's signed GRUB
 (`grub-efi-arm64-signed`). The GRUB image mkosi builds itself lacks the
 `gzio` module and cannot load Ubuntu's gzip-compressed arm64 kernel.
 
+Both architectures share the same partition numbers, so one provisioning
+template works for either image:
+
+| Partition | amd64              | arm64                     |
+|-----------|--------------------|---------------------------|
+| p1        | ESP (vfat)         | ESP (vfat)                |
+| p2        | BIOS boot (1M)     | reserved placeholder (1M) |
+| p3        | root (ext4)        | root (ext4)               |
+
+Root stays the last partition so it can grow to fill the disk on first
+boot. Keep these numbers stable: provisioning templates hard-code them.
+
 Output layout per build:
 
 ```
@@ -158,9 +170,10 @@ appropriate tag explicitly, e.g. `:2404-v1.35.2-amd64.gz` or
 ├── mkosi.conf.d/
 │   ├── 10-packages.conf            # Common Ubuntu package list
 │   ├── 20-amd64.conf               # amd64 drop-in (BIOS bootloader, repart)
-│   └── 20-arm64.conf               # arm64 drop-in (EFI-only bootloader)
+│   └── 20-arm64.conf               # arm64 drop-in (EFI-only bootloader, repart)
 ├── mkosi.repart/                   # Common partition layout (ESP + root)
 ├── mkosi.repart.amd64/             # amd64-only extra partitions (BIOS boot)
+├── mkosi.repart.arm64/             # arm64-only extra partitions (reserved p2)
 ├── mkosi.extra/                    # Static overlay files
 │   └── etc/, usr/lib/systemd/...   # sysctl, modules, kubelet unit
 ├── mkosi.prepare                   # Download K8s binaries + containerd
