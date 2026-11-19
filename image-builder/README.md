@@ -131,6 +131,10 @@ at build time with `ARCH=amd64|arm64`.
 | amd64 | BIOS + UEFI           | `grub-pc-bin`, `grub-efi-amd64-bin`, `shim-signed` |
 | arm64 | UEFI only             | `grub-efi-arm64-bin`, `shim-signed`           |
 
+On arm64 the ESP boots shim, which chains to Ubuntu's signed GRUB
+(`grub-efi-arm64-signed`). The GRUB image mkosi builds itself lacks the
+`gzio` module and cannot load Ubuntu's gzip-compressed arm64 kernel.
+
 Output layout per build:
 
 ```
