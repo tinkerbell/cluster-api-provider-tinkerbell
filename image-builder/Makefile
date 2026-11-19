@@ -49,9 +49,8 @@ IMAGE_ID     := k8s-node-ubuntu-$(UBUNTU_SHORT)-$(ARCH)
 
 # ── Container build settings ──────────────────────────────────────────────────
 BUILDER_IMAGE     ?= k8s-image-builder
-# The builder image is host-arch native. Cross-arch builds (ARCH != host) use
-# apt foreign-arch install + qemu-user-static/binfmt for postinst scripts.
-# This is EXPERIMENTAL and not CI-tested; native runners per arch are recommended.
+# The builder image is host-arch native. Cross-arch builds (ARCH != host) are
+# not supported. See "Architecture Support" in README.md.
 CONTAINER_RUNTIME ?= docker
 
 # ── Directories ───────────────────────────────────────────────────────────────
@@ -107,7 +106,7 @@ builder-image: ## Build the containerized build environment (host-arch)
 	$(CONTAINER_RUNTIME) build -t $(BUILDER_IMAGE) -f Containerfile .
 
 .PHONY: build-containerized
-build-containerized: builder-image ## Build image inside container (cross-arch experimental; native recommended)
+build-containerized: builder-image ## Build image inside container (native arch only; cross-arch not supported)
 	$(CONTAINER_RUNTIME) run --rm --privileged \
 		-v $$(pwd):/work:z \
 		-v $$(pwd)/$(OUTPUT_DIR):/work/$(OUTPUT_DIR):z \
