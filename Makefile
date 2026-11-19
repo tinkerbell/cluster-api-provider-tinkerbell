@@ -74,8 +74,12 @@ help:  ## Display this help
 ## --------------------------------------
 
 .PHONY: test
-test: ## Run tests
+test: test-release-scripts ## Run tests
 	go test -v ./... -coverprofile cover.out
+
+.PHONY: test-release-scripts
+test-release-scripts: ## Test the release workflow's signing and asset checks
+	./hack/test-release-scripts.sh
 
 ## --------------------------------------
 ## Tooling Binaries
