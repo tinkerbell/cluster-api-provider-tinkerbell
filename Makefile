@@ -184,7 +184,7 @@ release: clean-release
 	$(MAKE) release-templates
 
 .PHONY: release-manifests
-release-manifests: tools $(RELEASE_DIR) ## Builds the manifests to publish with a release
+release-manifests: $(KUSTOMIZE) $(RELEASE_DIR) ## Builds the manifests to publish with a release
 	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/infrastructure-components.yaml
 
 .PHONY: release-metadata
