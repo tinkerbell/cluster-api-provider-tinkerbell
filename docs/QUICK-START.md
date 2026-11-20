@@ -276,7 +276,17 @@ and uses the first one found:
 3. **`TinkerbellCluster.spec.templateOverride`** (or `templateOverrideRef`) — cluster-wide override applied to all machines that don't match a higher-priority source.
 
 Here is an example that streams an OS image to disk, configures cloud-init for the
-Tinkerbell metadata service, and kexecs into the installed OS:
+Tinkerbell metadata service, and kexecs into the installed OS.
+
+The partition numbers match the CAPT node images on both amd64 and arm64.
+Partition 1 is the EFI system partition (vfat), which holds the kernel and initrd.
+Partition 3 is the root filesystem (ext4), where `writefile` puts the cloud-init config.
+Only `IMG_URL` changes between architectures. If you use a different image,
+adjust both numbers to its layout.
+
+Older arm64 images put root on partition 2 and have no partition 3, so `writefile`
+fails on them. Those images do not boot either. If `writefile` cannot find
+partition 3 on arm64, pull the tag again to get a rebuilt image.
 
 ```yaml
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
