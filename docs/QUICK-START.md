@@ -357,6 +357,9 @@ spec:
                 environment:
                   BLOCK_DEVICE: {{ formatPartition ( index .Hardware.Disks 0 ) 1 }}
                   FS_TYPE: vfat
+                  # The node image keeps its GRUB config at /grub/grub.cfg on the ESP.
+                  # The kexec action defaults to boot/grub/grub.cfg, which does not exist.
+                  GRUBCFG_PATH: grub/grub.cfg
                   IMAGE: quay.io/tinkerbell/actions/kexec
                   WAIT_SECONDS: 5
                 volumes:
