@@ -94,7 +94,8 @@ for [hardware affinity](#select-your-hardware) matching.
 operations (netboot, ISO, custom) and for powering off the machine during
 deletion. If `spec.bmcRef` is **not** set, the `bootOptions.bootMode` setting
 on the `TinkerbellMachineTemplate` is silently ignored and no power management
-is performed.
+is performed. See [Configure BMC access](#configure-bmc-access-optional) for how to set up
+the BMC resources.
 
 An example of a valid Hardware resource:
 
@@ -132,6 +133,72 @@ spec:
 ```
 
 **NOTE:** The `metadata.name` and `spec.interfaces[0].dhcp.mac` must be unique across all Hardware objects.
+
+### Configure BMC access (optional)
+
+CAPT does not talk to a BMC itself. When a Hardware has `spec.bmcRef`, CAPT
+creates a Rufio `Job` that references the `Machine` named by `bmcRef` to power the
+hardware off when the TinkerbellMachine is deleted, and it passes the
+`bootOptions` from the TinkerbellMachine on to the Workflow, which Tinkerbell
+carries out through the same BMC. This requires the Rufio controller, which is part of the
+Tinkerbell stack, and two resources in the same namespace as the Hardware:
+
+- A `Secret` holding the BMC credentials in the `username` and `password` keys.
+- A Rufio `Machine` (`bmc.tinkerbell.org/v1alpha1`) that describes how to reach the BMC.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: node-1-bmc-credentials
+  namespace: tink-system
+type: kubernetes.io/basic-auth
+stringData:
+  username: admin
+  password: changeme
+---
+apiVersion: bmc.tinkerbell.org/v1alpha1
+kind: Machine
+metadata:
+  name: node-1-bmc
+  namespace: tink-system
+spec:
+  connection:
+    host: 192.168.1.110
+    port: 623
+    insecureTLS: true
+    authSecretRef:
+      name: node-1-bmc-credentials
+      namespace: tink-system
+```
+
+`connection.port` defaults to 623, the IPMI port. Use 443 for Redfish, and set
+`connection.providerOptions.preferredOrder` to choose which providers Rufio tries
+and in what order. Check that Rufio can reach the BMC before relying on it:
+
+```sh
+kubectl get machines.bmc.tinkerbell.org -n tink-system node-1-bmc
+kubectl get machines.bmc.tinkerbell.org -n tink-system node-1-bmc \
+  -o jsonpath='{.status.conditions}'
+```
+
+The `Contactable` condition is `True` once Rufio has connected to the BMC.
+
+Then reference the `Machine` from the Hardware:
+
+```yaml
+apiVersion: tinkerbell.org/v1alpha1
+kind: Hardware
+metadata:
+  name: node-1
+  namespace: tink-system
+spec:
+  bmcRef:
+    apiGroup: bmc.tinkerbell.org
+    kind: Machine
+    name: node-1-bmc
+  # ... disks, interfaces and metadata as above
+```
 
 ### Create your first workload cluster
 
