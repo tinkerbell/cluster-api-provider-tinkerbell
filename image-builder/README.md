@@ -34,7 +34,7 @@ make build
 # Build with a specific Kubernetes version
 make build KUBERNETES_VERSION=v1.32.0
 
-# Build for arm64 (requires arm64 host or QEMU/binfmt for cross-build)
+# Build for arm64 (requires an arm64 host)
 make build ARCH=arm64
 
 # Rebuild an existing image
@@ -54,11 +54,8 @@ make builder-image
 make build-containerized KUBERNETES_VERSION=v1.35.2
 ```
 
-> **Note:** Cross-arch builds via QEMU/binfmt are **not currently
-> supported**. mkosi installs seccomp filters that cannot be loaded under
-> qemu-user emulation (`seccomp_load: Operation canceled`). To build an
-> arm64 image, run on an arm64 host (native or `ubuntu-24.04-arm` GitHub
-> runner). The CI matrix uses native runners for this reason.
+> **Note:** Cross-arch builds are not supported. See
+> [Architecture Support](#architecture-support).
 
 ### Push to OCI Registry
 
@@ -142,10 +139,15 @@ appropriate tag explicitly, e.g. `:2404-v1.35.2-amd64.gz` or
 `:2404-v1.35.2-arm64.gz`. Each push carries an
 `io.tinkerbell.image.architecture` annotation.
 
-> **Note:** Cross-arch builds (e.g. building arm64 on amd64 via
-> `ARCH=arm64` with QEMU/binfmt) are **experimental and not CI-tested**;
-> they may fail because mkosi's seccomp filters do not load reliably under
-> qemu-user emulation. Use a native runner per target architecture.
+> **Note:** Cross-arch builds, such as building arm64 on an amd64 host
+> with `ARCH=arm64`, are **not supported**. CI builds each architecture on
+> a native runner and does not test them. Building amd64 on an arm64 host
+> fails: amd64 images boot with BIOS GRUB, and its tools (`grub-pc-bin`)
+> exist only for x86 hosts. Building arm64 on an amd64 host is untested.
+> Package scripts would run under qemu-user, and QEMU 8.2 (Ubuntu 24.04)
+> crashes on them. Build each image on a native host of the target
+> architecture, such as the `ubuntu-24.04-arm` GitHub runner that CI uses
+> for arm64.
 
 ## Project Structure
 
