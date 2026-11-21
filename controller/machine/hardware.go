@@ -239,36 +239,10 @@ func (scope *machineReconcileScope) hardwareForMachine() (*tinkv1.Hardware, erro
 	if hardwareSelector == nil {
 		hardwareSelector = &infrastructurev1.HardwareAffinity{}
 	}
-	// if no terms are specified, we create an empty one to ensure we always query for non-selected hardware
-	if len(hardwareSelector.Required) == 0 {
-		hardwareSelector.Required = append(hardwareSelector.Required, infrastructurev1.HardwareAffinityTerm{})
-	}
 
-	var matchingHardware []tinkv1.Hardware
-
-	// OR all of the required terms by selecting each individually, we could end up with duplicates in matchingHardware
-	// but it doesn't matter
-	for i := range hardwareSelector.Required {
-		var matched tinkv1.HardwareList
-
-		// add a selector for unselected hardware
-		hardwareSelector.Required[i].LabelSelector.MatchExpressions = append(
-			hardwareSelector.Required[i].LabelSelector.MatchExpressions,
-			metav1.LabelSelectorRequirement{
-				Key:      HardwareOwnerNameLabel,
-				Operator: metav1.LabelSelectorOpDoesNotExist,
-			})
-
-		selector, err := metav1.LabelSelectorAsSelector(&hardwareSelector.Required[i].LabelSelector)
-		if err != nil {
-			return nil, fmt.Errorf("converting label selector: %w", err)
-		}
-
-		if err := scope.tinkerbellClient.List(scope.ctx, &matched, &client.ListOptions{LabelSelector: selector}); err != nil {
-			return nil, fmt.Errorf("listing hardware without owner: %w", err)
-		}
-
-		matchingHardware = append(matchingHardware, matched.Items...)
+	matchingHardware, enforcedFailureDomain, err := scope.eligibleHardware(hardwareSelector.Required)
+	if err != nil {
+		return nil, err
 	}
 
 	// finally sort by our preferred affinity terms
@@ -282,8 +256,158 @@ func (scope *machineReconcileScope) hardwareForMachine() (*tinkv1.Hardware, erro
 	if len(matchingHardware) > 0 {
 		return &matchingHardware[0], nil
 	}
+
+	// Report the domain when one was enforced, so an exhausted rack is distinguishable from
+	// an empty pool without reading the controller's selector back out.
+	if enforcedFailureDomain != "" {
+		return nil, fmt.Errorf("%w in failure domain %q", ErrNoHardwareAvailable, enforcedFailureDomain)
+	}
+
 	// nothing was found
 	return nil, ErrNoHardwareAvailable
+}
+
+// eligibleHardware returns the unclaimed Hardware this Machine may be placed on, together
+// with the failure domain that was actually enforced. That domain is empty when nothing
+// constrained the search: either the cluster publishes no domains, or the BestEffort policy
+// widened the search after the assigned domain turned out to be exhausted.
+func (scope *machineReconcileScope) eligibleHardware(
+	terms []infrastructurev1.HardwareAffinityTerm,
+) ([]tinkv1.Hardware, string, error) {
+	// The failure domain Cluster API picked for this Machine, if the cluster publishes any.
+	failureDomainKey, failureDomainValue := scope.failureDomainConstraint()
+
+	matchingHardware, err := scope.availableHardware(terms, failureDomainKey, failureDomainValue)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Nothing to fall back from, or a Required policy that must not fall back.
+	if len(matchingHardware) > 0 || failureDomainKey == "" ||
+		scope.failureDomainPolicy() != infrastructurev1.FailureDomainPolicyBestEffort {
+		return matchingHardware, failureDomainValue, nil
+	}
+
+	scope.log.Info("No Hardware available in the assigned failure domain, falling back to any available Hardware",
+		"failureDomain", failureDomainValue, "failureDomainLabel", failureDomainKey)
+
+	matchingHardware, err = scope.availableHardware(terms, "", "")
+	if err != nil {
+		return nil, "", err
+	}
+
+	return matchingHardware, "", nil
+}
+
+// availableHardware returns the unclaimed Hardware matching any of the required hardware
+// affinity terms, optionally restricted to a single failure domain.
+func (scope *machineReconcileScope) availableHardware(
+	terms []infrastructurev1.HardwareAffinityTerm,
+	failureDomainKey, failureDomainValue string,
+) ([]tinkv1.Hardware, error) {
+	selectors, err := requiredHardwareSelectors(terms, failureDomainKey, failureDomainValue)
+	if err != nil {
+		return nil, err
+	}
+
+	var matchingHardware []tinkv1.Hardware
+
+	// OR all of the required terms by selecting each individually, we could end up with duplicates in matchingHardware
+	// but it doesn't matter
+	for _, selector := range selectors {
+		var matched tinkv1.HardwareList
+
+		if err := scope.tinkerbellClient.List(scope.ctx, &matched, &client.ListOptions{LabelSelector: selector}); err != nil {
+			return nil, fmt.Errorf("listing hardware without owner: %w", err)
+		}
+
+		matchingHardware = append(matchingHardware, matched.Items...)
+	}
+
+	return matchingHardware, nil
+}
+
+// requiredHardwareSelectors turns the required hardware affinity terms into one label
+// selector per term, each matching only Hardware that is free to be claimed and, when a
+// failure domain was assigned, only Hardware in that domain.
+//
+// Required terms are OR-ed by querying each of them separately, so both extra requirements
+// have to be repeated on every term. Expressing either as a term of its own would instead
+// widen the search: Hardware matching nothing but that one term would qualify.
+//
+// The terms are not modified, so a caller can build a second, differently constrained set
+// of selectors from the same terms -- which is what the BestEffort fallback does.
+func requiredHardwareSelectors(
+	terms []infrastructurev1.HardwareAffinityTerm,
+	failureDomainKey, failureDomainValue string,
+) ([]labels.Selector, error) {
+	// if no terms are specified, we create an empty one to ensure we always query for non-selected hardware
+	if len(terms) == 0 {
+		terms = []infrastructurev1.HardwareAffinityTerm{{}}
+	}
+
+	selectors := make([]labels.Selector, 0, len(terms))
+
+	for i := range terms {
+		labelSelector := terms[i].LabelSelector.DeepCopy()
+
+		// add a selector for unselected hardware
+		labelSelector.MatchExpressions = append(labelSelector.MatchExpressions,
+			metav1.LabelSelectorRequirement{
+				Key:      HardwareOwnerNameLabel,
+				Operator: metav1.LabelSelectorOpDoesNotExist,
+			})
+
+		if failureDomainKey != "" {
+			labelSelector.MatchExpressions = append(labelSelector.MatchExpressions,
+				metav1.LabelSelectorRequirement{
+					Key:      failureDomainKey,
+					Operator: metav1.LabelSelectorOpIn,
+					Values:   []string{failureDomainValue},
+				})
+		}
+
+		selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("converting label selector: %w", err)
+		}
+
+		selectors = append(selectors, selector)
+	}
+
+	return selectors, nil
+}
+
+// failureDomainConstraint returns the Hardware label key and value that Hardware must carry
+// to satisfy the failure domain Cluster API assigned to this Machine, or empty strings when
+// the cluster does not use failure domains.
+//
+// Both halves are required: the key is cluster-wide configuration on the TinkerbellCluster,
+// while the value is the per-Machine choice a control plane or MachineDeployment controller
+// recorded in Machine.spec.failureDomain when spreading replicas.
+func (scope *machineReconcileScope) failureDomainConstraint() (string, string) {
+	if scope.tinkerbellCluster == nil || scope.machine == nil {
+		return "", ""
+	}
+
+	key := scope.tinkerbellCluster.Spec.FailureDomainLabel
+	value := scope.machine.Spec.FailureDomain
+
+	if key == "" || value == "" {
+		return "", ""
+	}
+
+	return key, value
+}
+
+// failureDomainPolicy returns how strictly the assigned failure domain constrains Hardware
+// selection, defaulting to Required when the cluster does not set a policy.
+func (scope *machineReconcileScope) failureDomainPolicy() infrastructurev1.FailureDomainPolicy {
+	if scope.tinkerbellCluster == nil || scope.tinkerbellCluster.Spec.FailureDomainPolicy == "" {
+		return infrastructurev1.FailureDomainPolicyRequired
+	}
+
+	return scope.tinkerbellCluster.Spec.FailureDomainPolicy
 }
 
 // assignedHardware returns hardware that is already assigned. In the event of no hardware being assigned, it returns
