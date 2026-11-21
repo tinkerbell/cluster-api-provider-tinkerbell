@@ -37,5 +37,10 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for details on version compat
 
 See the [release docs](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/releases) for each version to find details on features and CAPI compatibility.
 
-See [docs/README.md](docs/README.md) for more information on setting up a development
+See [docs/PLAYGROUND.md](docs/PLAYGROUND.md) for more information on setting up a development
 environment.
+
+## Contributing
+
+If you are interested in contributing, see our [contributing guidelines](CONTRIBUTING.md).
+If you use AI tools to contribute, see our [AI policy](docs/AI_POLICY.md).

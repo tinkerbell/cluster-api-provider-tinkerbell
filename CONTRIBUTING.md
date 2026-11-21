@@ -15,6 +15,10 @@ Please read and understand the code of conduct found [here](https://github.com/t
 
 Please read and understand the DCO found [here](docs/DCO.md).
 
+### AI-Assisted Contributions
+
+AI tools may be used, but you must disclose their use in the PR description and be able to explain every change. Don't add AI tools as commit trailers. See the [AI Policy](docs/AI_POLICY.md).
+
 ### Environment Details
 
 [https://github.com/tinkerbell/cluster-api-provider-tinkerbell/blob/main/Makefile](https://github.com/tinkerbell/cluster-api-provider-tinkerbell/blob/main/Makefile)
