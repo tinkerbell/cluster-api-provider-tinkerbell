@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	rufiov1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 
 	infrastructurev1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/api/v1beta1"
@@ -333,6 +334,7 @@ func testScheme(g Gomega) *runtime.Scheme {
 	scheme := runtime.NewScheme()
 
 	g.Expect(tinkv1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell objects to scheme should succeed")
+	g.Expect(rufiov1.AddToScheme(scheme)).To(Succeed(), "Adding Rufio objects to scheme should succeed")
 	g.Expect(infrastructurev1.AddToScheme(scheme)).To(Succeed(), "Adding Tinkerbell CAPI objects to scheme should succeed")
 	g.Expect(clusterv1.AddToScheme(scheme)).To(Succeed(), "Adding CAPI objects to scheme should succeed")
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed(), "Adding Core V1 objects to scheme should succeed")
@@ -934,6 +936,7 @@ func reconcileMachineWithClients(
 	machineController := &machine.TinkerbellMachineReconciler{
 		Client:           managementClient,
 		TinkerbellClient: tinkerbellClient,
+		TinkerbellReader: tinkerbellClient,
 		Scheme:           scheme,
 	}
 

@@ -62,6 +62,10 @@ type TinkerbellMachineReconciler struct {
 	// TinkerbellClient is the client used for Tinkerbell CRD operations (Hardware, Template,
 	// Workflow, BMC Job). When targeting an external Tinkerbell cluster this differs from Client.
 	TinkerbellClient client.Client
+	// TinkerbellReader reads Tinkerbell CRDs from the API server, bypassing any cache. A delete
+	// decides from it whether the Hardware is still the TinkerbellMachine's: a cached copy can
+	// show Hardware as owned after an earlier attempt released it, and another machine claimed it.
+	TinkerbellReader client.Reader
 	// ExternalTinkerbell indicates whether TinkerbellClient targets an external Tinkerbell cluster.
 	ExternalTinkerbell bool
 	// WatchManager handles JIT per-namespace watches for Workflow and Job objects
@@ -78,7 +82,7 @@ type TinkerbellMachineReconciler struct {
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=hardware;hardware/status,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=templates;templates/status,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tinkerbell.org,resources=workflows;workflows/status,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=bmc.tinkerbell.org,resources=jobs,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups=bmc.tinkerbell.org,resources=jobs,verbs=get;list;watch;create;delete
 
 // Reconcile ensures that all Tinkerbell machines are aligned with a given spec.
 //
@@ -102,6 +106,7 @@ func (r *TinkerbellMachineReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		client:             r.Client,
 		scheme:             r.Scheme,
 		tinkerbellClient:   r.TinkerbellClient,
+		tinkerbellReader:   r.TinkerbellReader,
 		externalTinkerbell: r.ExternalTinkerbell,
 		watchManager:       r.WatchManager,
 	}
@@ -385,6 +390,10 @@ func (r *TinkerbellMachineReconciler) validate() error {
 
 	if r.TinkerbellClient == nil {
 		return ErrMissingTinkerbellClient
+	}
+
+	if r.TinkerbellReader == nil {
+		return ErrMissingTinkerbellReader
 	}
 
 	if r.Scheme == nil {

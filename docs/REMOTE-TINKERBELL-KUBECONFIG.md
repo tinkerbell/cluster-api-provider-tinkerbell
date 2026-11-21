@@ -15,7 +15,7 @@ CAPT performs the following operations on Tinkerbell CRDs in the external cluste
 | `hardware` | `tinkerbell.org` | get, list, patch |
 | `templates` | `tinkerbell.org` | get, create, delete |
 | `workflows` | `tinkerbell.org` | get, list, watch, create, delete |
-| `jobs` | `bmc.tinkerbell.org` | get, list, watch, create |
+| `jobs` | `bmc.tinkerbell.org` | get, list, watch, create, delete |
 
 `watch` is required on Workflow and Job because CAPT runs an informer cache that
 reacts to status changes on these objects in real time. Hardware is accessed via
@@ -95,7 +95,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "delete"]
 - apiGroups: ["bmc.tinkerbell.org"]
   resources: ["jobs"]
-  verbs: ["get", "list", "watch", "create"]
+  verbs: ["get", "list", "watch", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -163,7 +163,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "delete"]
 - apiGroups: ["bmc.tinkerbell.org"]
   resources: ["jobs"]
-  verbs: ["get", "list", "watch", "create"]
+  verbs: ["get", "list", "watch", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -199,7 +199,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "delete"]
 - apiGroups: ["bmc.tinkerbell.org"]
   resources: ["jobs"]
-  verbs: ["get", "list", "watch", "create"]
+  verbs: ["get", "list", "watch", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -242,7 +242,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "delete"]
 - apiGroups: ["bmc.tinkerbell.org"]
   resources: ["jobs"]
-  verbs: ["get", "list", "watch", "create"]
+  verbs: ["get", "list", "watch", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
