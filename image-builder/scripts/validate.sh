@@ -53,24 +53,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Find the root partition and mount it.
+# Check the partition layout, then mount root.
+# Provisioning templates hard-code these numbers: they write cloud-init config
+# to partition 3 (ext4) and read boot files from partition 1 (vfat), on both
+# architectures. Root must stay last so it can grow on first boot.
 # Layout (amd64): p1=ESP (vfat), p2=BIOS boot (no fs, 1M), p3=root (ext4).
-# Layout (arm64): p1=ESP (vfat), p2=root (ext4) — no BIOS boot partition.
-# Detect the ext4 partition dynamically so this keeps working as the layout evolves.
+# Layout (arm64): p1=ESP (vfat), p2=reserved placeholder (no fs, 1M), p3=root (ext4).
 LOOP_DEV="$(sudo losetup --find --show --partscan "$IMAGE_FILE")"
-ROOT_PART=""
-for part in "${LOOP_DEV}"p*; do
-    [[ -b "$part" ]] || continue
-    if sudo blkid -o value -s TYPE "$part" 2>/dev/null | grep -qx 'ext4'; then
-        ROOT_PART="$part"
-        break
-    fi
-done
-
-if [[ -z "$ROOT_PART" ]]; then
-    echo "ERROR: no ext4 root partition found on ${LOOP_DEV}"
+part_fstype() {
+    sudo blkid -o value -s TYPE "${LOOP_DEV}p$1" 2>/dev/null || true
+}
+ESP_FS="$(part_fstype 1)"
+ROOT_FS="$(part_fstype 3)"
+if [[ "$ESP_FS" != "vfat" || "$ROOT_FS" != "ext4" || -b "${LOOP_DEV}p4" ]]; then
+    echo "ERROR: unexpected partition layout on ${LOOP_DEV}"
+    echo "  want: p1=vfat (ESP), p3=ext4 (root, last partition)"
+    echo "  got:  p1=${ESP_FS:-none}, p3=${ROOT_FS:-none}$([[ -b "${LOOP_DEV}p4" ]] && echo ', p4 present')"
+    lsblk -o NAME,SIZE,FSTYPE,PARTLABEL "$LOOP_DEV" || true
     exit 1
 fi
+ROOT_PART="${LOOP_DEV}p3"
+echo "Partition layout: p1=vfat (ESP), p3=ext4 (root)"
 
 sudo mount -o ro "$ROOT_PART" "$MOUNT_DIR"
 
