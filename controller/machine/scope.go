@@ -179,6 +179,8 @@ func (scope *machineReconcileScope) Reconcile() error {
 			scope.log.Error(err, "error adding finalizer")
 		}
 	}()
+	// Deferred after the finalizer, so it runs first and the patch above persists it.
+	defer scope.setReadyCondition()
 
 	hw, err := scope.ensureHardware()
 	if err != nil {
