@@ -74,8 +74,12 @@ help:  ## Display this help
 ## --------------------------------------
 
 .PHONY: test
-test: ## Run tests
+test: test-release-scripts ## Run tests
 	go test -v ./... -coverprofile cover.out
+
+.PHONY: test-release-scripts
+test-release-scripts: ## Test the release workflow's signing and asset checks
+	./hack/test-release-scripts.sh
 
 ## --------------------------------------
 ## Tooling Binaries
@@ -184,7 +188,7 @@ release: clean-release
 	$(MAKE) release-templates
 
 .PHONY: release-manifests
-release-manifests: tools $(RELEASE_DIR) ## Builds the manifests to publish with a release
+release-manifests: $(KUSTOMIZE) $(RELEASE_DIR) ## Builds the manifests to publish with a release
 	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/infrastructure-components.yaml
 
 .PHONY: release-metadata
