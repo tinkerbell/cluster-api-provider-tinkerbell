@@ -27,7 +27,6 @@ labels:
 patches:
   - path: manager_image_patch.yaml
   - path: manager_webhook_patch.yaml
-  - path: webhookcainjection_patch1.yaml
   - path: webhookcainjection_patch2.yaml
 
 replacements:
@@ -36,13 +35,6 @@ replacements:
       name: serving-cert
       fieldPath: metadata.name  # Use the certificate's name
     targets:
-      - select:
-          kind: MutatingWebhookConfiguration
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          delimiter: /
-          index: 1
       - select:
           kind: ValidatingWebhookConfiguration
         fieldPaths:
@@ -55,14 +47,6 @@ replacements:
       kind: Certificate
       name: serving-cert
     targets:
-      - fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          delimiter: /
-          index: 0
-        select:
-          kind: MutatingWebhookConfiguration
-          name: mutating-webhook-configuration
       - fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:

@@ -82,7 +82,6 @@ Example steps:
 
    ```bash
    export KUBECONFIG=output/capt-playground.kubeconfig
-   export TINKERBELL_IP=172.18.10.84
    clusterctl --config output/clusterctl.yaml init --infrastructure tinkerbell
    ```
 
